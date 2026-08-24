@@ -4,6 +4,7 @@ import { weeklyPoints } from "../../../db/schema";
 
 type SavePointRequest = {
   marketId?: string;
+  marketName?: string;
   data?: {
     meetingDate?: string;
     pointName?: string;
@@ -70,14 +71,14 @@ export async function POST(request: Request) {
     const marketId = body.marketId?.trim() ?? "";
     const data = body.data;
     const meetingDate = data?.meetingDate?.trim() ?? "";
-    const pointName = data?.pointName?.trim() || "Point marché";
+    const pointName = body.marketName?.trim() || "Marché";
     const themeColor = data?.themeColor?.trim() || "mint";
 
     if (!marketId || !data || !/^\d{4}-\d{2}-\d{2}$/.test(meetingDate)) {
       return Response.json({ error: "Marché, date et contenu du point sont requis." }, { status: 400 });
     }
 
-    const payload = JSON.stringify({ ...data, pointName, themeColor });
+    const payload = JSON.stringify({ ...data, pointName: "Point marché", themeColor });
     if (payload.length > 1_500_000) {
       return Response.json({ error: "Le point est trop volumineux pour être enregistré." }, { status: 413 });
     }

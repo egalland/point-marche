@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 
 type Tone = "mint" | "violet" | "aqua" | "peach" | "red";
 type View = "edit" | "preview" | "mail";
-type Section = "general" | "dossiers" | "operations" | "tariffs" | "jira" | "versions" | "mail";
+type Section = "general" | "dossiers" | "operations" | "tariffs" | "jira" | "versions" | "markets" | "mail";
 type Dossier = { id: string; title: string; universe: string; reference: string; status: string; owner: string; action: string; deadline: string; progress: number; comment: string };
 type CommercialOperation = { id: string; name: string; month: string; state: string; summary: string; steps: [string, string][] };
 type Tariff = { id: string; code: string; supplier: string; month: string; state: string; receptionDate: string; dueDate: string; owner: string; comment: string };
@@ -12,14 +12,15 @@ type JiraTicket = { id: string; key: string; summary: string; status: string; pr
 type PointData = { pointName: string; themeColor: ThemeKey; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; tariffs: Tariff[]; jira: JiraTicket[]; mail: { to: string; cc: string; subject: string; intro: string } };
 type AlertItem = { title: string; detail: string; severity: "warning" | "danger" };
 type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
+type Market = { id: string; name: string; short: string; tone: ThemeKey; position: number };
 type PointRecord = { id: string; marketId: string; year: number; week: number; version: number; meetingDate: string; pointName: string; themeColor: ThemeKey; data: PointData; createdAt: string };
 
-const markets = [
-  { id: "revetements-menuiserie", name: "Revêtements & Menuiserie", short: "REV–MEN", tone: "mint" as Tone },
-  { id: "bois-amex", name: "Bois amont / AMEX", short: "BOIS", tone: "peach" as Tone },
-  { id: "outillage-quincaillerie", name: "Outillage & Quincaillerie", short: "OUT–QUIN", tone: "aqua" as Tone },
-  { id: "panneaux", name: "Panneaux", short: "PAN", tone: "violet" as Tone },
-] as const;
+const defaultMarkets: Market[] = [
+  { id: "revetements-menuiserie", name: "Revêtements & Menuiserie", short: "REV–MEN", tone: "mint", position: 0 },
+  { id: "bois-amex", name: "Bois amin / AMEX", short: "BOIS", tone: "peach", position: 1 },
+  { id: "outillage-quincaillerie", name: "Outillage & Quincaillerie", short: "OUT–QUIN", tone: "aqua", position: 2 },
+  { id: "panneaux", name: "Panneaux", short: "PAN", tone: "violet", position: 3 },
+];
 
 const themes: { id: ThemeKey; label: string; accent: string; soft: string }[] = [
   { id: "mint", label: "Menthe", accent: "#72f5c5", soft: "rgba(114,245,197,.12)" },
@@ -34,8 +35,8 @@ const stepOptions = ["À faire", "En attente", "En cours", "Fait", "Non applicab
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const isoToday = () => new Date().toISOString().slice(0, 10);
 
-function initialData(marketId = "revetements-menuiserie"): PointData {
-  const market = markets.find((item) => item.id === marketId) ?? markets[0];
+function initialData(marketId = "revetements-menuiserie", marketOverride?: Market): PointData {
+  const market = marketOverride ?? defaultMarkets.find((item) => item.id === marketId) ?? defaultMarkets[0];
   const common = {
     pointName: "Point marché",
     themeColor: market.tone,
@@ -75,13 +76,13 @@ function initialData(marketId = "revetements-menuiserie"): PointData {
   };
 }
 
-function normalizePointData(value: unknown, marketId: string): PointData {
-  const fallback = initialData(marketId);
+function normalizePointData(value: unknown, marketId: string, marketOverride?: Market): PointData {
+  const fallback = initialData(marketId, marketOverride);
   if (!value || typeof value !== "object") return fallback;
   const source = value as Partial<PointData> & { simulations?: CommercialOperation[] };
   const themeColor = themes.some((theme) => theme.id === source.themeColor) ? source.themeColor as ThemeKey : fallback.themeColor;
   return {
-    pointName: typeof source.pointName === "string" && source.pointName.trim() ? source.pointName : fallback.pointName,
+    pointName: "Point marché",
     themeColor,
     meetingDate: typeof source.meetingDate === "string" ? source.meetingDate : fallback.meetingDate,
     priority: typeof source.priority === "string" ? source.priority : fallback.priority,
@@ -95,11 +96,18 @@ function normalizePointData(value: unknown, marketId: string): PointData {
 
 const pointSignature = (marketId: string, data: PointData) => JSON.stringify({ marketId, data });
 
-async function fetchPointRecords(marketId: string): Promise<PointRecord[]> {
+async function fetchPointRecords(marketId: string, marketOverride?: Market): Promise<PointRecord[]> {
   const response = await fetch(`/api/points?marketId=${encodeURIComponent(marketId)}`, { cache: "no-store" });
   const payload = await response.json() as { points?: PointRecord[]; error?: string };
   if (!response.ok) throw new Error(payload.error || "Impossible de charger les sauvegardes.");
-  return (payload.points ?? []).map((record) => ({ ...record, data: normalizePointData(record.data, record.marketId) }));
+  return (payload.points ?? []).map((record) => ({ ...record, data: normalizePointData(record.data, record.marketId, marketOverride) }));
+}
+
+async function fetchMarkets(): Promise<Market[]> {
+  const response = await fetch("/api/markets", { cache: "no-store" });
+  const payload = await response.json() as { markets?: { id: string; name: string; shortCode: string; tone: ThemeKey; position: number }[]; error?: string };
+  if (!response.ok) throw new Error(payload.error || "Impossible de charger les marchés.");
+  return (payload.markets ?? []).map((market) => ({ id: market.id, name: market.name, short: market.shortCode, tone: market.tone, position: market.position }));
 }
 
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
@@ -158,14 +166,14 @@ function buildAlerts(data: PointData): AlertItem[] {
   return alerts.slice(0, 12);
 }
 
-function PreviewDashboard({ data, market }: { data: PointData; market: typeof markets[number] }) {
+function PreviewDashboard({ data, market }: { data: PointData; market: Market }) {
   const alerts = useMemo(() => buildAlerts(data), [data]);
   const activeJira = data.jira.filter((item) => !isClosed(item.status));
   const metrics = [[data.dossiers.filter((item) => !isClosed(item.status)).length, "Dossiers suivis", "folder", "mint"], [data.tariffs.length, "Évolutions", "trend", "violet"], [activeJira.length, "Tickets Jira", "ticket", "aqua"], [alerts.length, "Vigilances", "alert", "peach"]] as const;
   const groupedTariffs = Array.from(new Set(data.tariffs.map((item) => item.month || "Sans mois"))).map((month) => ({ month, items: data.tariffs.filter((item) => (item.month || "Sans mois") === month) }));
   const jiraPeople = Array.from(new Set(activeJira.map((item) => item.assignee || "Non assigné"))).map((assignee) => ({ assignee, items: activeJira.filter((item) => (item.assignee || "Non assigné") === assignee) }));
   return <div className="report-canvas"><div className="report-ambient report-ambient-one"/><div className="report-ambient report-ambient-two"/>
-    <header className="report-hero"><div><div className="market-badge"><i/> MARKET PULSE <b>/</b> {market.short}</div><h1>{data.pointName || "Point marché"}</h1><p><strong>{market.name}</strong><span>Dossiers · opérations commerciales · évolutions · Jira</span></p></div><div className="week-card"><strong>S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong><i/><div><b>{dateLabel(data.meetingDate)}</b><span>Point hebdomadaire</span></div></div></header>
+    <header className="report-hero"><div><div className="market-badge"><i/> MARKET PULSE <b>/</b> {market.short}</div><h1>Point marché</h1><p><strong>{market.name}</strong><span>Dossiers · opérations commerciales · évolutions · Jira</span></p></div><div className="week-card"><strong><small>{isoWeekYear(data.meetingDate)} ·</small>S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong><i/><div><b>{dateLabel(data.meetingDate)}</b><span>Année et semaine ISO</span></div></div></header>
     <section className="report-metrics">{metrics.map(([value, label, icon, tone], index) => <article className={`report-metric tone-${tone}`} key={label}><span>0{index + 1}</span><div className="report-metric-icon"><Icon name={icon}/></div><strong>{value}</strong><small>{label}</small></article>)}</section>
     <section className="report-priority"><span>Priorité de la semaine</span><strong>{data.priority || "Aucune priorité renseignée."}</strong></section>
     <div className="report-grid"><article className="report-focus"><div className="report-heading"><span>01</span><div><small>Dossiers</small><h2>En cours</h2></div><b>{data.dossiers.length} suivi{data.dossiers.length > 1 ? "s" : ""}</b></div>
@@ -175,11 +183,11 @@ function PreviewDashboard({ data, market }: { data: PointData; market: typeof ma
       <article className="report-dark-card"><div className="side-heading"><div><span>02</span><h2>Évolutions tarifaires</h2></div><b>{data.tariffs.length} total</b></div>{groupedTariffs.length ? groupedTariffs.map((group) => <section className="tariff-group" key={group.month}><h3>{group.month}<span>{group.items.length} fournisseur{group.items.length > 1 ? "s" : ""}</span></h3>{group.items.map((item) => <div className="tariff-line" key={item.id}><code>{item.code || "—"}</code><strong>{item.supplier || "Fournisseur"}</strong><small>{item.state}</small></div>)}</section>) : <div className="report-empty dark-empty">Aucune évolution</div>}</article>
       <article className="report-dark-card"><div className="side-heading"><div><span>03</span><h2>Jira</h2></div><b>{activeJira.length} actif{activeJira.length > 1 ? "s" : ""}</b></div>{jiraPeople.length ? <div className="jira-summary">{jiraPeople.map((person, index) => <div key={person.assignee}><i className={`tone-${(["mint", "violet", "aqua", "peach"] as Tone[])[index % 4]}`}/><p><strong>{person.assignee}</strong><small>{person.items.map((item) => item.status).join(" · ")}</small></p><b>{person.items.length}</b></div>)}</div> : <div className="report-empty dark-empty">Aucun ticket actif</div>}</article>
       <article className="report-alert-card"><div className="alert-heading"><span>04</span><h2>Vigilances</h2><b>{alerts.length}</b></div>{alerts.length ? alerts.map((item, index) => <div className="alert-line" key={`${item.title}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{item.title}</strong><small>{item.detail}</small></div></div>) : <div className="report-empty light-empty">Aucune vigilance détectée</div>}</article>
-    </aside></div><footer className="report-footer"><span>Market Pulse · {market.name}</span><span>{data.pointName || "Point marché"} du {dateLabel(data.meetingDate)}</span></footer>
+    </aside></div><footer className="report-footer"><span>Market Pulse · {market.name}</span><span>Point marché · {isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</span></footer>
   </div>;
 }
 
-function buildMailHtml(data: PointData, market: typeof markets[number]) {
+function buildMailHtml(data: PointData, market: Market) {
   const alerts = buildAlerts(data); const activeJira = data.jira.filter((item) => !isClosed(item.status)).length;
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
   const dossierRows = data.dossiers.map((item) => `<tr><td style="padding:12px 14px;border-bottom:1px solid #DDE7E3"><b style="color:#10201D">${escapeHtml(item.title || "Dossier")}</b><br><span style="color:#64736F;font-size:11px">${escapeHtml([item.universe, item.reference].filter(Boolean).join(" · "))}</span></td><td style="padding:12px 14px;border-bottom:1px solid #DDE7E3;color:#41534E;font-size:12px">${escapeHtml(item.action || item.comment || "—")}</td><td style="padding:12px 14px;border-bottom:1px solid #DDE7E3;text-align:right"><span style="display:inline-block;padding:6px 9px;border-radius:99px;background:#E7EEE9;color:#253E36;font-size:10px;font-weight:700">${escapeHtml(item.status)}</span></td></tr>`).join("");
@@ -187,15 +195,16 @@ function buildMailHtml(data: PointData, market: typeof markets[number]) {
   const jiraRows = data.jira.filter((item) => !isClosed(item.status)).map((item) => `<tr><td style="padding:8px 10px;color:#70D8FF;font-family:monospace;font-size:10px">${escapeHtml(item.key || "—")}</td><td style="padding:8px 10px;color:#FFFFFF;font-size:11px">${escapeHtml(item.summary || "Ticket")}</td><td style="padding:8px 10px;color:#AFC0C2;font-size:10px">${escapeHtml(item.assignee || "Non assigné")}</td><td style="padding:8px 10px;color:#FFB083;font-size:10px">${escapeHtml(item.status)}</td></tr>`).join("");
   const alertRows = alerts.map((item, index) => `<tr><td style="padding:9px 0;border-bottom:1px solid #E18B5E;width:34px;color:#743817;font-family:monospace;font-size:10px">${String(index + 1).padStart(2, "0")}</td><td style="padding:9px 0;border-bottom:1px solid #E18B5E"><b style="display:block;color:#23140C;font-size:11px">${escapeHtml(item.title)}</b><span style="color:#743817;font-size:10px">${escapeHtml(item.detail)}</span></td></tr>`).join("");
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${escapeHtml(data.mail.subject)}</title></head><body style="margin:0;padding:0;background:#F2F5F4;font-family:Arial,sans-serif;color:#10201D"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F2F5F4"><tr><td align="center" style="padding:26px 12px"><table role="presentation" width="1000" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:1000px;background:#071012">
-  <tr><td style="padding:28px 30px 22px;background:#071012"><span style="display:inline-block;padding:6px 10px;border:1px solid ${theme.accent};border-radius:99px;color:${theme.accent};font-size:10px;font-weight:700">MARKET PULSE / ${escapeHtml(market.short)}</span><h1 style="margin:12px 0 4px;color:#FFFFFF;font-size:38px;line-height:42px">${escapeHtml(data.pointName || "Point marché")}</h1><p style="margin:0;color:${theme.accent};font-size:16px;font-weight:700">${escapeHtml(market.name)}</p><p style="margin:15px 0 0;color:#AFC0C2;font-size:12px">Semaine ${isoWeek(data.meetingDate)} · ${escapeHtml(dateLabel(data.meetingDate))}</p></td></tr>
+  <tr><td style="padding:28px 30px 22px;background:#071012"><span style="display:inline-block;padding:6px 10px;border:1px solid ${theme.accent};border-radius:99px;color:${theme.accent};font-size:10px;font-weight:700">MARKET PULSE / ${escapeHtml(market.short)}</span><h1 style="margin:12px 0 4px;color:#FFFFFF;font-size:38px;line-height:42px">Point marché</h1><p style="margin:0;color:${theme.accent};font-size:16px;font-weight:700">${escapeHtml(market.name)}</p><p style="margin:15px 0 0;color:#AFC0C2;font-size:12px">Année ISO ${isoWeekYear(data.meetingDate)} · Semaine ${String(isoWeek(data.meetingDate)).padStart(2, "0")} · ${escapeHtml(dateLabel(data.meetingDate))}</p></td></tr>
   <tr><td style="padding:0 30px 22px;background:#071012"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>${[[data.dossiers.length,"Dossiers"],[data.tariffs.length,"Évolutions"],[activeJira,"Tickets Jira"],[alerts.length,"Vigilances"]].map(([value,label], index) => `<td width="25%" style="padding-right:${index < 3 ? "8px" : "0"}"><table role="presentation" width="100%" style="background:#102023;border:1px solid #263C40"><tr><td style="padding:13px"><b style="display:block;color:#FFFFFF;font-size:24px">${value}</b><span style="color:#AFC0C2;font-size:10px;text-transform:uppercase">${label}</span></td></tr></table></td>`).join("")}</tr></table></td></tr>
   <tr><td style="padding:0 30px 24px;background:#071012"><table role="presentation" width="100%" style="background:#132622;border-left:4px solid ${theme.accent}"><tr><td style="padding:14px 16px"><b style="display:block;color:${theme.accent};font-size:9px;text-transform:uppercase">Priorité de la semaine</b><span style="display:block;margin-top:5px;color:#FFFFFF;font-size:13px">${escapeHtml(data.priority || "Aucune priorité renseignée.")}</span></td></tr></table></td></tr>
   <tr><td style="padding:0 30px 18px;background:#071012"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td valign="top" width="65%" style="padding-right:8px"><table role="presentation" width="100%" style="background:#F5F8F6"><tr><td style="padding:17px 18px 8px;color:#55716A;font-size:10px;font-weight:700;text-transform:uppercase">Dossiers en cours</td></tr><tr><td style="padding:0 8px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${dossierRows || '<tr><td style="padding:16px;color:#64736F;font-size:12px">Aucun dossier renseigné</td></tr>'}</table></td></tr></table></td><td valign="top" width="35%" style="padding-left:8px"><table role="presentation" width="100%" style="background:#FFB083"><tr><td style="padding:16px"><b style="font-size:13px;text-transform:uppercase">Vigilances · ${alerts.length}</b><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:8px">${alertRows || '<tr><td style="padding:12px 0;color:#743817;font-size:11px">Aucune vigilance détectée</td></tr>'}</table></td></tr></table></td></tr></table></td></tr>
   <tr><td style="padding:0 30px 18px;background:#071012"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td valign="top" width="50%" style="padding-right:8px"><table role="presentation" width="100%" style="background:#102023"><tr><td style="padding:15px;color:#B39AFF;font-size:11px;font-weight:700;text-transform:uppercase">Évolutions tarifaires</td></tr><tr><td style="padding:0 6px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${tariffRows || '<tr><td style="padding:12px;color:#AFC0C2;font-size:11px">Aucune évolution</td></tr>'}</table></td></tr></table></td><td valign="top" width="50%" style="padding-left:8px"><table role="presentation" width="100%" style="background:#102023"><tr><td style="padding:15px;color:#70D8FF;font-size:11px;font-weight:700;text-transform:uppercase">Tickets Jira actifs</td></tr><tr><td style="padding:0 6px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${jiraRows || '<tr><td style="padding:12px;color:#AFC0C2;font-size:11px">Aucun ticket actif</td></tr>'}</table></td></tr></table></td></tr></table></td></tr>
-  <tr><td style="padding:18px 30px;background:#0C181B;color:#789094;font-size:9px;text-transform:uppercase">Market Pulse · ${escapeHtml(market.name)} · ${escapeHtml(data.pointName || "Point marché")} du ${escapeHtml(dateLabel(data.meetingDate))}</td></tr></table></td></tr></table></body></html>`;
+  <tr><td style="padding:18px 30px;background:#0C181B;color:#789094;font-size:9px;text-transform:uppercase">Market Pulse · ${escapeHtml(market.name)} · Point marché ${isoWeekYear(data.meetingDate)} · S${String(isoWeek(data.meetingDate)).padStart(2, "0")}</td></tr></table></td></tr></table></body></html>`;
 }
 
 export default function Home() {
+  const [marketOptions, setMarketOptions] = useState<Market[]>(defaultMarkets);
   const [marketId, setMarketId] = useState("revetements-menuiserie");
   const [data, setData] = useState<PointData>(() => initialData());
   const [view, setView] = useState<View>("edit");
@@ -207,11 +216,13 @@ export default function Home() {
   const [archiveLoading, setArchiveLoading] = useState(true);
   const [archiveError, setArchiveError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [marketSavingId, setMarketSavingId] = useState("");
+  const [creatingMarket, setCreatingMarket] = useState(false);
   const [lastSavedSignature, setLastSavedSignature] = useState("");
   const [toast, setToast] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const archiveRequest = useRef(0);
-  const market = markets.find((item) => item.id === marketId) ?? markets[0];
+  const market = marketOptions.find((item) => item.id === marketId) ?? marketOptions[0] ?? defaultMarkets[0];
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
   const themeStyle = { "--accent": theme.accent, "--accent-soft": theme.soft } as CSSProperties;
   const alerts = useMemo(() => buildAlerts(data), [data]);
@@ -221,25 +232,25 @@ export default function Home() {
   const currentWeekYear = isoWeekYear(data.meetingDate);
   const currentWeekVersions = archive.filter((item) => item.week === currentWeek && item.year === currentWeekYear);
 
-  const loadMarket = useCallback(async (nextMarket: string, loadLatest = true) => {
+  const loadMarket = useCallback(async (nextMarket: string, loadLatest = true, marketOverride?: Market) => {
     const requestId = ++archiveRequest.current;
     setMarketId(nextMarket);
     setArchiveLoading(true);
     setArchiveError("");
     try {
-      const points = await fetchPointRecords(nextMarket);
+      const points = await fetchPointRecords(nextMarket, marketOverride);
       if (requestId !== archiveRequest.current) return;
       setArchive(points);
       if (loadLatest) {
         const latest = points[0];
         if (latest) {
-          const nextData = normalizePointData(latest.data, nextMarket);
+          const nextData = normalizePointData(latest.data, nextMarket, marketOverride);
           setData(nextData);
           setActiveVersion(latest.version);
           setSavedAt(new Date(latest.createdAt.replace(" ", "T") + (latest.createdAt.includes("Z") ? "" : "Z")));
           setLastSavedSignature(pointSignature(nextMarket, nextData));
         } else {
-          setData(initialData(nextMarket));
+          setData(initialData(nextMarket, marketOverride));
           setActiveVersion(null);
           setSavedAt(null);
           setLastSavedSignature("");
@@ -250,7 +261,7 @@ export default function Home() {
       setArchive([]);
       setArchiveError(error instanceof Error ? error.message : "Impossible de charger les sauvegardes.");
       if (loadLatest) {
-        setData(initialData(nextMarket));
+        setData(initialData(nextMarket, marketOverride));
         setActiveVersion(null);
         setSavedAt(null);
         setLastSavedSignature("");
@@ -263,13 +274,27 @@ export default function Home() {
     }
   }, []);
 
-  useEffect(() => { const timer = window.setTimeout(() => { void loadMarket("revetements-menuiserie"); }, 0); return () => window.clearTimeout(timer); }, [loadMarket]);
+  const bootstrap = useCallback(async () => {
+    try {
+      const loadedMarkets = await fetchMarkets();
+      const options = loadedMarkets.length ? loadedMarkets : defaultMarkets;
+      setMarketOptions(options);
+      const firstMarket = options.find((item) => item.id === "revetements-menuiserie") ?? options[0];
+      await loadMarket(firstMarket.id, true, firstMarket);
+    } catch (error) {
+      setMarketOptions(defaultMarkets);
+      await loadMarket(defaultMarkets[0].id, true, defaultMarkets[0]);
+      setToast(error instanceof Error ? error.message : "Impossible de charger les marchés.");
+    }
+  }, [loadMarket]);
+
+  useEffect(() => { const timer = window.setTimeout(() => { void bootstrap(); }, 0); return () => window.clearTimeout(timer); }, [bootstrap]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(timer); }, [toast]);
 
   const chooseMarket = (nextMarket: string) => {
     if (nextMarket !== marketId && isDirty && !window.confirm("Changer de marché sans enregistrer ce brouillon ?")) return;
     setSection("general");
-    void loadMarket(nextMarket);
+    void loadMarket(nextMarket, true, marketOptions.find((item) => item.id === nextMarket));
   };
   const updateDossier = (id: string, patch: Partial<Dossier>) => setData((current) => ({ ...current, dossiers: current.dossiers.map((item) => item.id === id ? { ...item, ...patch } : item) }));
   const updateOperation = (id: string, patch: Partial<CommercialOperation>) => setData((current) => ({ ...current, operations: current.operations.map((item) => item.id === id ? { ...item, ...patch } : item) }));
@@ -291,26 +316,77 @@ export default function Home() {
   const download = (name: string, content: string, type: string) => { const url = URL.createObjectURL(new Blob([content], { type })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 500); };
   const exportJson = (record?: PointRecord) => {
     const exportMarket = record?.marketId ?? marketId; const exportData = record?.data ?? data; const week = record?.week ?? isoWeek(exportData.meetingDate); const year = record?.year ?? isoWeekYear(exportData.meetingDate); const version = record?.version ?? activeVersion;
-    download(`point-marche-${exportMarket}-${year}-S${String(week).padStart(2, "0")}${version ? `-V${version}` : "-brouillon"}.json`, JSON.stringify({ schemaVersion: 2, marketId: exportMarket, year, week, version, data: exportData }, null, 2), "application/json");
+    const exportMarketInfo = marketOptions.find((item) => item.id === exportMarket);
+    download(`point-marche-${exportMarket}-${year}-S${String(week).padStart(2, "0")}${version ? `-V${version}` : "-brouillon"}.json`, JSON.stringify({ schemaVersion: 3, marketId: exportMarket, market: exportMarketInfo ? { name: exportMarketInfo.name, shortCode: exportMarketInfo.short, tone: exportMarketInfo.tone } : undefined, year, week, version, data: exportData }, null, 2), "application/json");
   };
-  const importJson = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const payload = JSON.parse(String(reader.result)) as { marketId?: string; data?: unknown }; if (!payload.data) throw new Error(); const importedMarket = markets.some((item) => item.id === payload.marketId) ? payload.marketId as string : marketId; const importedData = normalizePointData(payload.data, importedMarket); setMarketId(importedMarket); setData(importedData); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); void loadMarket(importedMarket, false); setToast("JSON importé comme nouveau brouillon."); } catch { setToast("Fichier non reconnu."); } }; reader.readAsText(file); event.target.value = ""; };
-  const resetPoint = () => { if (!window.confirm("Créer un nouveau point pour ce marché ? Le brouillon actuel sera remplacé, mais les versions enregistrées resteront disponibles.")) return; const fresh = initialData(marketId); fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail; fresh.pointName = data.pointName; fresh.themeColor = data.themeColor; setData(fresh); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); setToast("Nouveau brouillon créé."); };
+  const importJson = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const payload = JSON.parse(String(reader.result)) as { marketId?: string; data?: unknown }; if (!payload.data) throw new Error(); const importedMarketInfo = marketOptions.find((item) => item.id === payload.marketId) ?? market; const importedMarket = importedMarketInfo.id; const importedData = normalizePointData(payload.data, importedMarket, importedMarketInfo); setMarketId(importedMarket); setData(importedData); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); void loadMarket(importedMarket, false, importedMarketInfo); setToast("JSON importé comme nouveau brouillon."); } catch { setToast("Fichier non reconnu."); } }; reader.readAsText(file); event.target.value = ""; };
+  const resetPoint = () => { if (!window.confirm("Créer un nouveau point pour ce marché ? Le brouillon actuel sera remplacé, mais les versions enregistrées resteront disponibles.")) return; const fresh = initialData(marketId, market); fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail; fresh.themeColor = data.themeColor; setData(fresh); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); setToast("Nouveau brouillon créé."); };
   const loadRecord = (record: PointRecord) => {
     if (isDirty && !window.confirm("Charger cette version et remplacer le brouillon non enregistré ?")) return;
-    const nextData = normalizePointData(record.data, record.marketId);
-    setMarketId(record.marketId); setData(nextData); setActiveVersion(record.version); setSavedAt(new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z"))); setLastSavedSignature(pointSignature(record.marketId, nextData)); setSection("general"); setView("edit"); setToast(`S${String(record.week).padStart(2, "0")} · V${record.version} chargée.`);
+    const recordMarket = marketOptions.find((item) => item.id === record.marketId) ?? market;
+    const nextData = normalizePointData(record.data, record.marketId, recordMarket);
+    setMarketId(record.marketId); setData(nextData); setActiveVersion(record.version); setSavedAt(new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z"))); setLastSavedSignature(pointSignature(record.marketId, nextData)); setSection("general"); setView("edit"); setToast(`${record.year} · S${String(record.week).padStart(2, "0")} · V${record.version} chargée.`);
   };
   const saveVersion = async () => {
     if (saving || !ready) return;
     setSaving(true);
     try {
-      const response = await fetch("/api/points", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ marketId, data }) });
+      const response = await fetch("/api/points", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ marketId, marketName: market.name, data }) });
       const payload = await response.json() as { point?: PointRecord; error?: string };
       if (!response.ok || !payload.point) throw new Error(payload.error || "Échec de la sauvegarde.");
-      const savedData = normalizePointData(payload.point.data, marketId); const saved = { ...payload.point, data: savedData };
-      setData(savedData); setArchive((current) => [saved, ...current].sort((a, b) => b.year - a.year || b.week - a.week || b.version - a.version)); setActiveVersion(saved.version); setSavedAt(new Date()); setLastSavedSignature(pointSignature(marketId, savedData)); setArchiveError(""); setToast(`S${String(saved.week).padStart(2, "0")} · version ${saved.version} enregistrée en ligne.`);
+      const savedData = normalizePointData(payload.point.data, marketId, market); const saved = { ...payload.point, data: savedData };
+      setData(savedData); setArchive((current) => [saved, ...current].sort((a, b) => b.year - a.year || b.week - a.week || b.version - a.version)); setActiveVersion(saved.version); setSavedAt(new Date()); setLastSavedSignature(pointSignature(marketId, savedData)); setArchiveError(""); setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} · version ${saved.version} enregistrée en ligne.`);
     } catch (error) { setToast(error instanceof Error ? error.message : "Échec de la sauvegarde en ligne."); }
     finally { setSaving(false); }
+  };
+  const updateMarketDraft = (id: string, patch: Partial<Market>) => setMarketOptions((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
+  const createMarket = async () => {
+    if (creatingMarket) return;
+    setCreatingMarket(true);
+    try {
+      const index = marketOptions.length + 1;
+      const response = await fetch("/api/markets", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: `Nouveau marché ${index}`, shortCode: `MARCHÉ-${index}`, tone: themes[index % themes.length].id }) });
+      const payload = await response.json() as { market?: { id: string; name: string; shortCode: string; tone: ThemeKey; position: number }; error?: string };
+      if (!response.ok || !payload.market) throw new Error(payload.error || "Création impossible.");
+      const created: Market = { id: payload.market.id, name: payload.market.name, short: payload.market.shortCode, tone: payload.market.tone, position: payload.market.position };
+      setMarketOptions((current) => [...current, created].sort((a, b) => a.position - b.position));
+      setToast("Marché ajouté. Tu peux maintenant modifier son nom.");
+    } catch (error) { setToast(error instanceof Error ? error.message : "Création du marché impossible."); }
+    finally { setCreatingMarket(false); }
+  };
+  const saveMarket = async (id: string) => {
+    const draft = marketOptions.find((item) => item.id === id);
+    if (!draft || marketSavingId) return;
+    setMarketSavingId(id);
+    try {
+      const response = await fetch("/api/markets", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, name: draft.name, shortCode: draft.short, tone: draft.tone }) });
+      const payload = await response.json() as { market?: { id: string; name: string; shortCode: string; tone: ThemeKey; position: number }; error?: string };
+      if (!response.ok || !payload.market) throw new Error(payload.error || "Modification impossible.");
+      const saved: Market = { id: payload.market.id, name: payload.market.name, short: payload.market.shortCode, tone: payload.market.tone, position: payload.market.position };
+      setMarketOptions((current) => current.map((item) => item.id === id ? saved : item));
+      if (id === marketId) setData((current) => ({ ...current, mail: { ...current.mail, subject: /^Point marché —/.test(current.mail.subject) ? `Point marché — ${saved.name}` : current.mail.subject } }));
+      setToast(`Marché « ${saved.name} » enregistré.`);
+    } catch (error) { setToast(error instanceof Error ? error.message : "Modification du marché impossible."); }
+    finally { setMarketSavingId(""); }
+  };
+  const deleteMarket = async (id: string) => {
+    const removed = marketOptions.find((item) => item.id === id);
+    if (!removed || marketSavingId) return;
+    if (!window.confirm(`Supprimer « ${removed.name} » de la liste active ? Les versions déjà enregistrées seront conservées.`)) return;
+    setMarketSavingId(id);
+    try {
+      const response = await fetch(`/api/markets?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const payload = await response.json() as { removedId?: string; error?: string };
+      if (!response.ok || !payload.removedId) throw new Error(payload.error || "Suppression impossible.");
+      const remaining = marketOptions.filter((item) => item.id !== id);
+      setMarketOptions(remaining);
+      if (id === marketId) {
+        const replacement = remaining[0];
+        await loadMarket(replacement.id, true, replacement);
+      }
+      setToast(`Marché « ${removed.name} » supprimé de la liste active.`);
+    } catch (error) { setToast(error instanceof Error ? error.message : "Suppression du marché impossible."); }
+    finally { setMarketSavingId(""); }
   };
   const copyMail = async () => {
     try {
@@ -326,13 +402,15 @@ export default function Home() {
   };
 
   const navItems: { id: Section; label: string; icon: string; count?: number }[] = [
-    { id: "general", label: "Cadre du point", icon: "spark" }, { id: "dossiers", label: "Dossiers en cours", icon: "folder", count: data.dossiers.length },
+    { id: "general", label: "Cadre du point", icon: "spark" }, { id: "markets", label: "Gérer les marchés", icon: "edit", count: marketOptions.length }, { id: "dossiers", label: "Dossiers en cours", icon: "folder", count: data.dossiers.length },
     { id: "operations", label: "Opérations commerciales", icon: "trend", count: data.operations.length }, { id: "tariffs", label: "Évolutions tarifaires", icon: "trend", count: data.tariffs.length },
     { id: "jira", label: "Tickets Jira", icon: "ticket", count: data.jira.length }, { id: "versions", label: "Sauvegardes & versions", icon: "download", count: archive.length }, { id: "mail", label: "Paramètres du mail", icon: "mail" },
   ];
 
   const renderEditor = () => <div className="editor-layout"><aside className="editor-nav"><div className="editor-nav-title"><span>Sommaire</span><small>Complète ton point</small></div>{navItems.map((item) => <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => setSection(item.id)}><Icon name={item.icon}/><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}<Icon name="chevron" size={15}/></button>)}<div className={`autosave-card ${isDirty ? "is-dirty" : ""}`}><span><Icon name={isDirty ? "edit" : "check"} size={14}/> {isDirty ? "Brouillon à enregistrer" : "Sauvegarde en ligne"}</span><small>{archiveLoading ? "Chargement du registre…" : activeVersion ? `Version ${activeVersion}${savedAt ? ` · ${savedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}` : "Aucune version enregistrée"}</small></div></aside><main className="editor-content">
-    {section === "general" && <section className="editor-section"><SectionTitle eyebrow="01 · Cadre" title="Préparer le point" detail="Le nom, le marché, la date et la couleur pilotent le rendu web et le mail."/><div className="surface form-grid general-grid"><TextField label="Nom du point" value={data.pointName} onChange={(pointName) => setData((current) => ({ ...current, pointName }))} placeholder="Point marché"/><label className="field"><span>Marché</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{markets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><TextField label="Date du point" type="date" value={data.meetingDate} onChange={(meetingDate) => setData((current) => ({ ...current, meetingDate }))}/><div className="week-display"><span>Semaine ISO</span><strong>S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong></div><div className="field field-wide theme-field"><span>Couleur du point</span><div className="theme-picker">{themes.map((option) => <button key={option.id} type="button" className={data.themeColor === option.id ? "active" : ""} style={{ "--swatch": option.accent } as CSSProperties} onClick={() => setData((current) => ({ ...current, themeColor: option.id }))}><i/><b>{option.label}</b></button>)}</div></div><label className="field field-wide"><span>Priorité de la semaine</span><textarea value={data.priority} onChange={(event) => setData((current) => ({ ...current, priority: event.target.value }))} placeholder="L’action principale ou le message clé à retenir…"/></label></div><div className="guidance-grid"><article><span>01</span><strong>Complète les rubriques</strong><p>Ajoute les dossiers et opérations commerciales, puis colle les tableaux extraits.</p></article><article><span>02</span><strong>Crée une version</strong><p>Chaque sauvegarde ajoute une version JSON en ligne pour la semaine choisie.</p></article><article><span>03</span><strong>Prépare le mail</strong><p>Contrôle l’aperçu puis copie le rendu Outlook prêt à l’emploi.</p></article></div></section>}
+    {section === "general" && <section className="editor-section"><SectionTitle eyebrow="01 · Cadre" title="Préparer le point" detail="Le marché, la date ISO et la couleur pilotent le rendu web et le mail."/><div className="surface form-grid general-grid"><label className="field"><span>Marché</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><TextField label="Date du point" type="date" value={data.meetingDate} onChange={(meetingDate) => setData((current) => ({ ...current, meetingDate }))}/><div className="week-display"><span>Référence ISO</span><strong>{isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong></div><div className="field field-wide theme-field"><span>Couleur de ce point</span><div className="theme-picker">{themes.map((option) => <button key={option.id} type="button" className={data.themeColor === option.id ? "active" : ""} style={{ "--swatch": option.accent } as CSSProperties} onClick={() => setData((current) => ({ ...current, themeColor: option.id }))}><i/><b>{option.label}</b></button>)}</div></div><label className="field field-wide"><span>Priorité de la semaine</span><textarea value={data.priority} onChange={(event) => setData((current) => ({ ...current, priority: event.target.value }))} placeholder="L’action principale ou le message clé à retenir…"/></label></div><div className="guidance-grid"><article><span>01</span><strong>Choisis le bon marché</strong><p>Les noms et codes sont administrables dans « Gérer les marchés ».</p></article><article><span>02</span><strong>Crée une version</strong><p>Chaque sauvegarde ajoute une version JSON liée à l’année et à la semaine ISO.</p></article><article><span>03</span><strong>Prépare le mail</strong><p>Contrôle l’aperçu puis copie le rendu Outlook prêt à l’emploi.</p></article></div></section>}
+
+    {section === "markets" && <section className="editor-section"><SectionTitle eyebrow="02 · Administration" title="Gérer les marchés" detail="Modifie le nom affiché, le code court et la couleur par défaut, ou ajoute un nouveau marché." action={<button className="primary-button" disabled={creatingMarket} onClick={createMarket}><Icon name="plus"/> {creatingMarket ? "Ajout…" : "Ajouter un marché"}</button>}/><div className="market-admin-note"><Icon name="alert"/><div><strong>Suppression sans perte d’historique</strong><span>Un marché supprimé disparaît de la liste active, mais ses anciennes versions JSON restent conservées.</span></div></div><div className="market-admin-list">{marketOptions.map((item, index) => <article className={`surface market-admin-card ${item.id === marketId ? "active" : ""}`} key={item.id}><div className="market-admin-index" style={{ "--swatch": themes.find((option) => option.id === item.tone)?.accent ?? themes[0].accent } as CSSProperties}><i/><span>{String(index + 1).padStart(2, "0")}</span></div><div className="market-admin-fields"><TextField label="Nom du marché" value={item.name} onChange={(name) => updateMarketDraft(item.id, { name })}/><TextField label="Code court" value={item.short} onChange={(short) => updateMarketDraft(item.id, { short })} placeholder="EX. BOIS"/><label className="field"><span>Couleur par défaut</span><select value={item.tone} onChange={(event) => updateMarketDraft(item.id, { tone: event.target.value as ThemeKey })}>{themes.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label></div><div className="market-admin-actions">{item.id === marketId && <span>Marché actif</span>}<button className="secondary-button" disabled={Boolean(marketSavingId)} onClick={() => saveMarket(item.id)}><Icon name="check"/> {marketSavingId === item.id ? "Enregistrement…" : "Enregistrer"}</button><button className="icon-button danger" disabled={Boolean(marketSavingId)} aria-label={`Supprimer ${item.name}`} title="Supprimer de la liste active" onClick={() => deleteMarket(item.id)}><Icon name="trash"/></button></div></article>)}</div></section>}
 
     {section === "dossiers" && <section className="editor-section"><SectionTitle eyebrow="02 · Suivi détaillé" title="Dossiers en cours" detail="La zone la plus détaillée du point : contexte, responsable, action et risque." action={<button className="primary-button" onClick={addDossier}><Icon name="plus"/> Ajouter un dossier</button>}/>{data.dossiers.length ? <div className="record-stack">{data.dossiers.map((item, index) => <article className="surface record-card" key={item.id}><div className="record-header"><span className="record-index">{String(index + 1).padStart(2, "0")}</span><div><strong>{item.title || "Nouveau dossier"}</strong><small>{item.status}</small></div><button className="icon-button danger" aria-label="Supprimer le dossier" onClick={() => setData((current) => ({ ...current, dossiers: current.dossiers.filter((row) => row.id !== item.id) }))}><Icon name="trash"/></button></div><div className="form-grid"><TextField label="Dossier" value={item.title} onChange={(title) => updateDossier(item.id, { title })} placeholder="Nom du dossier"/><TextField label="Univers" value={item.universe} onChange={(universe) => updateDossier(item.id, { universe })}/><TextField label="Référence" value={item.reference} onChange={(reference) => updateDossier(item.id, { reference })}/><SelectField label="Statut" value={item.status} onChange={(status) => updateDossier(item.id, { status })} options={statusOptions}/><TextField label="Responsable" value={item.owner} onChange={(owner) => updateDossier(item.id, { owner })}/><TextField label="Échéance" type="date" value={item.deadline} onChange={(deadline) => updateDossier(item.id, { deadline })}/><label className="field field-wide"><span>Prochaine action</span><textarea value={item.action} onChange={(event) => updateDossier(item.id, { action: event.target.value })}/></label><label className="field field-wide"><span>Commentaire / risque</span><textarea value={item.comment} onChange={(event) => updateDossier(item.id, { comment: event.target.value })}/></label><label className="field progress-field field-wide"><span><b>Avancement</b><strong>{item.progress}%</strong></span><input type="range" min="0" max="100" step="5" value={item.progress} onChange={(event) => updateDossier(item.id, { progress: Number(event.target.value) })}/></label></div></article>)}</div> : <EmptyState label="un dossier" onAdd={addDossier}/>}</section>}
 
@@ -342,14 +420,14 @@ export default function Home() {
 
     {section === "jira" && <section className="editor-section"><SectionTitle eyebrow="05 · Extraction manuelle" title="Tickets Jira" detail="Les tickets sans activité depuis plus de 10 jours remontent automatiquement en vigilance." action={<div className="title-actions"><PasteImporter kind="jira" onImport={(text) => importTable("jira", text)}/><button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter</button></div>}/><div className="surface data-table-wrap"><table className="data-table"><thead><tr><th>Clé</th><th>Résumé</th><th>Statut</th><th>Priorité</th><th>Responsable</th><th>Dernière activité</th><th>Commentaire</th><th/></tr></thead><tbody>{data.jira.map((item) => <tr key={item.id}><td><input value={item.key} onChange={(e) => updateJira(item.id, { key: e.target.value })}/></td><td><input value={item.summary} onChange={(e) => updateJira(item.id, { summary: e.target.value })}/></td><td><input value={item.status} onChange={(e) => updateJira(item.id, { status: e.target.value })}/></td><td><input value={item.priority} onChange={(e) => updateJira(item.id, { priority: e.target.value })}/></td><td><input value={item.assignee} onChange={(e) => updateJira(item.id, { assignee: e.target.value })}/></td><td><input type="date" value={item.lastActivity} onChange={(e) => updateJira(item.id, { lastActivity: e.target.value })}/></td><td><input value={item.comment} onChange={(e) => updateJira(item.id, { comment: e.target.value })}/></td><td><button className="icon-button subtle" aria-label="Supprimer" onClick={() => setData((current) => ({ ...current, jira: current.jira.filter((row) => row.id !== item.id) }))}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!data.jira.length && <div className="table-empty">Aucun ticket Jira. Colle l’extraction ou ajoute une ligne.</div>}</div></section>}
 
-    {section === "versions" && <section className="editor-section"><SectionTitle eyebrow="06 · Registre en ligne" title="Sauvegardes & versions" detail="Chaque sauvegarde crée un document JSON durable pour le marché et la semaine du point." action={<button className="primary-button" disabled={saving || !ready} onClick={saveVersion}><Icon name="check"/> {saving ? "Enregistrement…" : "Créer une nouvelle version"}</button>}/><div className="surface version-summary"><div className="version-week"><span>Semaine active</span><strong>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</strong><small>{currentWeekVersions.length ? `${currentWeekVersions.length} version${currentWeekVersions.length > 1 ? "s" : ""} déjà enregistrée${currentWeekVersions.length > 1 ? "s" : ""}` : "Aucune version enregistrée"}</small></div><div className="version-next"><span>Prochaine sauvegarde</span><strong>V{Math.max(0, ...currentWeekVersions.map((item) => item.version)) + 1}</strong><small>Une nouvelle version est ajoutée, sans écraser les précédentes.</small></div><div className="version-actions"><button className="secondary-button" onClick={() => fileInput.current?.click()}><Icon name="upload"/> Importer JSON</button><button className="secondary-button" onClick={() => exportJson()}><Icon name="download"/> Exporter le brouillon</button></div></div>{archiveError && <div className="archive-message error"><Icon name="alert"/><span>{archiveError}</span></div>}{archiveLoading ? <div className="archive-message"><span>Chargement du registre en ligne…</span></div> : archive.length ? <div className="archive-list">{archive.map((record) => <article className={`surface archive-row ${activeVersion === record.version && record.week === currentWeek && record.year === currentWeekYear && !isDirty ? "active" : ""}`} key={record.id}><div className="archive-version"><span>S{String(record.week).padStart(2, "0")}</span><strong>V{record.version}</strong><small>{record.year}</small></div><div className="archive-copy"><span>{record.pointName || "Point marché"}</span><strong>{dateLabel(record.meetingDate)}</strong><small>Enregistré le {new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z")).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</small></div><div className="archive-actions"><button className="secondary-button" onClick={() => exportJson(record)}><Icon name="download"/> JSON</button><button className="primary-button" onClick={() => loadRecord(record)}><Icon name="upload"/> Charger</button></div></article>)}</div> : !archiveError && <div className="surface archive-empty"><Icon name="download" size={28}/><strong>Aucune version en ligne</strong><span>Crée la première version de ce marché. Les versions suivantes de la même semaine seront numérotées V2, V3, etc.</span></div>}</section>}
+    {section === "versions" && <section className="editor-section"><SectionTitle eyebrow="07 · Registre en ligne" title="Sauvegardes & versions" detail="Chaque sauvegarde est identifiée par l’année ISO, la semaine et la version : par exemple 2027 · S02 · V2." action={<button className="primary-button" disabled={saving || !ready} onClick={saveVersion}><Icon name="check"/> {saving ? "Enregistrement…" : "Créer une nouvelle version"}</button>}/><div className="surface version-summary"><div className="version-week"><span>Référence active</span><strong>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</strong><small>{currentWeekVersions.length ? `${currentWeekVersions.length} version${currentWeekVersions.length > 1 ? "s" : ""} déjà enregistrée${currentWeekVersions.length > 1 ? "s" : ""}` : "Aucune version enregistrée"}</small></div><div className="version-next"><span>Prochaine sauvegarde</span><strong>V{Math.max(0, ...currentWeekVersions.map((item) => item.version)) + 1}</strong><small>Une nouvelle version est ajoutée, sans écraser les précédentes.</small></div><div className="version-actions"><button className="secondary-button" onClick={() => fileInput.current?.click()}><Icon name="upload"/> Importer JSON</button><button className="secondary-button" onClick={() => exportJson()}><Icon name="download"/> Exporter le brouillon</button></div></div>{archiveError && <div className="archive-message error"><Icon name="alert"/><span>{archiveError}</span></div>}{archiveLoading ? <div className="archive-message"><span>Chargement du registre en ligne…</span></div> : archive.length ? <div className="archive-list">{archive.map((record) => <article className={`surface archive-row ${activeVersion === record.version && record.week === currentWeek && record.year === currentWeekYear && !isDirty ? "active" : ""}`} key={record.id}><div className="archive-version"><span>{record.year} · S{String(record.week).padStart(2, "0")}</span><strong>V{record.version}</strong><small>ISO</small></div><div className="archive-copy"><span>{market.name}</span><strong>{dateLabel(record.meetingDate)}</strong><small>Enregistré le {new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z")).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</small></div><div className="archive-actions"><button className="secondary-button" onClick={() => exportJson(record)}><Icon name="download"/> JSON</button><button className="primary-button" onClick={() => loadRecord(record)}><Icon name="upload"/> Charger</button></div></article>)}</div> : !archiveError && <div className="surface archive-empty"><Icon name="download" size={28}/><strong>Aucune version en ligne</strong><span>Crée la première version de ce marché. Une autre sauvegarde sur la même année et la même semaine deviendra V2.</span></div>}</section>}
 
     {section === "mail" && <section className="editor-section"><SectionTitle eyebrow="07 · Diffusion" title="Paramètres du mail" detail="Ces valeurs sont intégrées à chaque version JSON et au rendu Outlook."/><div className="surface form-grid mail-settings"><TextField label="Destinataires" value={data.mail.to} onChange={(to) => setData((current) => ({ ...current, mail: { ...current.mail, to } }))} wide/><TextField label="Copie" value={data.mail.cc} onChange={(cc) => setData((current) => ({ ...current, mail: { ...current.mail, cc } }))} wide/><TextField label="Objet" value={data.mail.subject} onChange={(subject) => setData((current) => ({ ...current, mail: { ...current.mail, subject } }))} wide/><label className="field field-wide"><span>Introduction</span><textarea value={data.mail.intro} onChange={(event) => setData((current) => ({ ...current, mail: { ...current.mail, intro: event.target.value } }))}/></label></div><button className="primary-button mail-next" onClick={() => setView("mail")}><Icon name="mail"/> Vérifier le mail</button></section>}
   </main></div>;
 
   return <div className={`app-shell market-${market.tone}`} style={themeStyle}><div className="ambient ambient-a"/><div className="ambient ambient-b"/>
-    <header className="app-header"><a className="brand" href="#top"><span className="brand-mark"><Icon name="spark" size={19}/></span><div><strong>Market Pulse</strong><small>{data.pointName || "Générateur de point marché"}</small></div></a><div className="market-switch"><span>Marché actif</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{markets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div><nav className="view-tabs" aria-label="Mode d’affichage"><button className={view === "edit" ? "active" : ""} onClick={() => setView("edit")}><Icon name="edit"/> Saisie</button><button className={view === "preview" ? "active" : ""} onClick={() => setView("preview")}><Icon name="eye"/> Aperçu</button><button className={view === "mail" ? "active" : ""} onClick={() => setView("mail")}><Icon name="mail"/> Mail</button></nav><div className="header-actions"><button className="icon-button" title="Importer un fichier JSON" onClick={() => fileInput.current?.click()}><Icon name="upload"/></button><input ref={fileInput} className="sr-only" type="file" accept="application/json" onChange={importJson}/><button className="icon-button" title="Exporter le point en JSON" onClick={() => exportJson()}><Icon name="download"/></button><button className="secondary-button new-point" onClick={resetPoint}>Nouveau point</button><button className="primary-button save-point" disabled={saving || !ready} onClick={saveVersion}><Icon name="check"/> {saving ? "Enregistrement…" : "Sauvegarder une version"}</button></div></header>
-    <div id="top" className="top-strip"><span className="live-dot"/><strong>{market.short}</strong><i/>S{String(isoWeek(data.meetingDate)).padStart(2, "0")}<i/>{dateLabel(data.meetingDate)}<i/>{isDirty ? "Brouillon" : activeVersion ? `Version ${activeVersion}` : "Non enregistré"}<b>{alerts.length ? `${alerts.length} vigilance${alerts.length > 1 ? "s" : ""}` : "Aucune vigilance"}</b></div>
+    <header className="app-header"><a className="brand" href="#top"><span className="brand-mark"><Icon name="spark" size={19}/></span><div><strong>Market Pulse</strong><small>Générateur de point marché</small></div></a><div className="market-switch"><span>Marché actif</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div><nav className="view-tabs" aria-label="Mode d’affichage"><button className={view === "edit" ? "active" : ""} onClick={() => setView("edit")}><Icon name="edit"/> Saisie</button><button className={view === "preview" ? "active" : ""} onClick={() => setView("preview")}><Icon name="eye"/> Aperçu</button><button className={view === "mail" ? "active" : ""} onClick={() => setView("mail")}><Icon name="mail"/> Mail</button></nav><div className="header-actions"><button className="icon-button" title="Importer un fichier JSON" onClick={() => fileInput.current?.click()}><Icon name="upload"/></button><input ref={fileInput} className="sr-only" type="file" accept="application/json" onChange={importJson}/><button className="icon-button" title="Exporter le point en JSON" onClick={() => exportJson()}><Icon name="download"/></button><button className="secondary-button new-point" onClick={resetPoint}>Nouveau point</button><button className="primary-button save-point" disabled={saving || !ready} onClick={saveVersion}><Icon name="check"/> {saving ? "Enregistrement…" : "Sauvegarder une version"}</button></div></header>
+    <div id="top" className="top-strip"><span className="live-dot"/><strong>{market.short}</strong><i/>{isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}<i/>{dateLabel(data.meetingDate)}<i/>{isDirty ? "Brouillon" : activeVersion ? `Version ${activeVersion}` : "Non enregistré"}<b>{alerts.length ? `${alerts.length} vigilance${alerts.length > 1 ? "s" : ""}` : "Aucune vigilance"}</b></div>
     {view === "edit" && renderEditor()}
     {view === "preview" && <main className="preview-page"><div className="preview-toolbar"><div><span>Aperçu web</span><strong>Le rendu se met à jour en direct.</strong></div><button className="secondary-button" onClick={() => setView("edit")}><Icon name="edit"/> Modifier les données</button></div><PreviewDashboard data={data} market={market}/></main>}
     {view === "mail" && <main className="mail-page"><div className="mail-toolbar"><div><span>Version Outlook</span><strong>Statique, responsive et sans script.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { setSection("mail"); setView("edit"); }}><Icon name="edit"/> Paramètres</button><button className="secondary-button" onClick={() => download(`point-marche-mail-${marketId}-${data.meetingDate}.html`, mailHtml, "text/html;charset=utf-8")}><Icon name="download"/> Télécharger HTML</button><button className="primary-button" onClick={copyMail}><Icon name="copy"/> Copier pour Outlook</button></div></div><div className="mail-frame-wrap"><iframe title="Aperçu du mail Outlook" srcDoc={mailHtml}/></div></main>}
