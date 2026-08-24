@@ -14,9 +14,17 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Point marché Revêtements et Menuiserie",
-  description: "Point marché hebdomadaire : dossiers, simulations, évolutions tarifaires et tickets Jira.",
-  other: {
-    "codex-preview": "development",
+  description: "Outil de point marché hebdomadaire : dossiers, opérations commerciales, évolutions tarifaires, Jira et versions JSON en ligne.",
+  openGraph: {
+    title: "Market Pulse — Point marché",
+    description: "Dossiers, opérations commerciales, évolutions tarifaires, Jira et versions hebdomadaires.",
+    images: ["https://example.test/og.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Market Pulse — Point marché",
+    description: "Dossiers, opérations commerciales, Jira et versions hebdomadaires.",
+    images: ["https://example.test/og.png"],
   },
   icons: {
     icon: "/favicon.svg",
