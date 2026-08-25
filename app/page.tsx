@@ -457,7 +457,7 @@ export default function Home() {
   };
 
   const chooseMarket = (nextMarket: string) => {
-    if (nextMarket !== marketId && isDirty && !window.confirm("Changer de marché sans enregistrer ce brouillon ?")) return;
+    if (nextMarket !== marketId && view === "edit" && isDirty && !window.confirm("Changer de marché sans enregistrer ce brouillon ?")) return;
     setSection("general");
     void loadMarket(nextMarket, true, marketOptions.find((item) => item.id === nextMarket));
   };
@@ -513,7 +513,7 @@ export default function Home() {
   const importJson = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const payload = JSON.parse(String(reader.result)) as { marketId?: string; data?: unknown }; if (!payload.data) throw new Error(); const importedMarketInfo = marketOptions.find((item) => item.id === payload.marketId) ?? market; const importedMarket = importedMarketInfo.id; const importedData = normalizePointData(payload.data, importedMarket, importedMarketInfo); setMarketId(importedMarket); setData(importedData); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); void loadMarket(importedMarket, false, importedMarketInfo); setToast("JSON importé comme nouveau brouillon."); } catch { setToast("Fichier non reconnu."); } }; reader.readAsText(file); event.target.value = ""; };
   const resetPoint = () => { if (!window.confirm("Créer un nouveau point pour ce marché ? Le brouillon actuel sera remplacé, mais les versions enregistrées resteront disponibles.")) return; const fresh = initialData(marketId, market); fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail; fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; setData(fresh); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); setToast("Nouveau brouillon créé."); };
   const loadRecord = async (record: PointRecord, nextView: View = view, skipConfirm = false) => {
-    if (!skipConfirm && isDirty && !window.confirm("Charger cette version et remplacer le brouillon non enregistré ?")) return;
+    if (!skipConfirm && view === "edit" && isDirty && !window.confirm("Charger cette version et remplacer le brouillon non enregistré ?")) return;
     const recordMarket = marketOptions.find((item) => item.id === record.marketId) ?? market;
     const nextData = await applyJiraWeek(normalizePointData(record.data, record.marketId, recordMarket), record.marketId);
     setMarketId(record.marketId); setData(nextData); setActiveVersion(record.version); setSavedAt(new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z"))); setLastSavedSignature(pointSignature(record.marketId, nextData)); setSection("general"); setView(nextView); setToast(`${record.year} · S${String(record.week).padStart(2, "0")} · V${record.version} chargée.`);
@@ -523,7 +523,7 @@ export default function Home() {
     const meetingDate = dateFromWeekInput(value);
     const year = isoWeekYear(meetingDate); const week = isoWeek(meetingDate);
     if (year === currentWeekYear && week === currentWeek) return;
-    if (isDirty && !window.confirm("Changer de semaine sans enregistrer ce brouillon ?")) return;
+    if (view === "edit" && isDirty && !window.confirm("Changer de semaine sans enregistrer ce brouillon ?")) return;
     const latest = archive.filter((record) => record.year === year && record.week === week).sort((a, b) => b.version - a.version)[0];
     if (latest) { await loadRecord(latest, view, true); return; }
     const fresh = initialData(marketId, market);
