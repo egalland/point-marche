@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { jiraMarketAssignments, jiraWeeklySnapshots, marketDefinitions } from "../../../db/schema";
+import { globalUserMarkets, globalUsers, jiraMarketAssignments, jiraWeeklySnapshots, marketDefinitions } from "../../../db/schema";
 import { parseJiraAssigneeSummary } from "../../../lib/jira-import";
 import { getEditorUser } from "../../simple-auth";
 
@@ -83,6 +83,17 @@ export async function POST(request: Request) {
 
     const activeMarkets = await db.select({ id: marketDefinitions.id }).from(marketDefinitions)
       .where(eq(marketDefinitions.isActive, true));
+    const automaticDirectoryAssignments = await db.select({ marketId: globalUserMarkets.marketId, assignee: globalUsers.jiraName })
+      .from(globalUserMarkets)
+      .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
+      .where(and(
+        eq(globalUsers.isActive, true),
+        inArray(globalUsers.role, ["chef-produit", "chef-marche", "analyste-tarif-referentiel"]),
+      ));
+    const automaticByMarket = automaticDirectoryAssignments.reduce<Record<string, string[]>>((result, assignment) => {
+      result[assignment.marketId] = [...(result[assignment.marketId] ?? []), assignment.assignee];
+      return result;
+    }, {});
     const people = summary.people.map((person) => person.assignee);
     const knownPeople = new Set(people);
     for (const market of activeMarkets) {
@@ -90,9 +101,13 @@ export async function POST(request: Request) {
         eq(jiraMarketAssignments.marketId, market.id),
         inArray(jiraMarketAssignments.assignee, people),
       ));
-      const selected = Array.isArray(body.assignments?.[market.id])
+      const manuallySelected = Array.isArray(body.assignments?.[market.id])
         ? (body.assignments?.[market.id] as unknown[]).filter((name): name is string => typeof name === "string" && knownPeople.has(name))
         : [];
+      const selected = Array.from(new Set([
+        ...manuallySelected,
+        ...(automaticByMarket[market.id] ?? []).filter((name) => knownPeople.has(name)),
+      ]));
       if (selected.length) {
         await db.insert(jiraMarketAssignments).values(selected.map((assignee) => ({
           id: crypto.randomUUID(),

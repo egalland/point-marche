@@ -1,16 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { GLOBAL_ROLE_OPTIONS, roleLabel, roleMailMode, type GlobalDirectoryUser, type GlobalRole } from "../lib/global-directory";
 import { JIRA_SUMMARY_STATUSES, parseJiraAssigneeSummary, type JiraSummaryImport } from "../lib/jira-import";
 
 type Tone = "mint" | "violet" | "aqua" | "peach" | "red";
 type View = "read" | "edit" | "mail";
-type Section = "general" | "dossiers" | "operations" | "tariffs" | "jira" | "saved" | "markets" | "mail";
-type Dossier = { id: string; title: string; universe: string; reference: string; status: string; owner: string; action: string; deadline: string; progress: number; comment: string };
-type CommercialOperation = { id: string; name: string; month: string; state: string; summary: string; steps: [string, string][] };
+type Section = "general" | "dossiers" | "operations" | "tariffs" | "jira" | "saved" | "markets" | "users" | "mail";
+type CarryoverFields = { sourceId?: string; carriedFromYear?: number; carriedFromWeek?: number };
+type Dossier = { id: string; title: string; universe: string; reference: string; status: string; owner: string; action: string; deadline: string; progress: number; comment: string } & CarryoverFields;
+type CommercialOperation = { id: string; name: string; month: string; state: string; summary: string; steps: [string, string][] } & CarryoverFields;
 type Tariff = { id: string; code: string; supplier: string; month: string; state: string; receptionDate: string; dueDate: string; owner: string; comment: string };
 type JiraTicket = { id: string; key: string; summary: string; status: string; priority: string; assignee: string; lastActivity: string; link: string; comment: string; count?: number };
-type PointData = { pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; tariffs: Tariff[]; jira: JiraTicket[]; mail: { to: string; cc: string; subject: string; intro: string } };
+type PointData = { pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; tariffs: Tariff[]; jira: JiraTicket[]; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
 type AlertItem = { title: string; detail: string; severity: "warning" | "danger" };
 type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
 type Market = { id: string; name: string; short: string; tone: ThemeKey; colorHex: string; position: number };
@@ -19,6 +21,7 @@ type ImportOutcome = { count: number; message?: string };
 type JiraPersonGroup = { assignee: string; items: JiraTicket[]; total: number };
 type JiraWeekPayload = { snapshot: { year: number; week: number; rawText: string; summary: JiraSummaryImport; updatedAt: string } | null; assignments: Record<string, string[]>; error?: string };
 type SessionPayload = { user: { displayName: string; username: string } | null };
+type DirectoryDraft = { name: string; email: string; jiraName: string; role: GlobalRole; marketIds: string[] };
 
 const defaultMarkets: Market[] = [
   { id: "revetements-menuiserie", name: "Revêtements & Menuiserie", short: "REV–MEN", tone: "mint", colorHex: "", position: 0 },
@@ -37,6 +40,7 @@ const themes: { id: ThemeKey; label: string; accent: string; soft: string }[] = 
 
 const statusOptions = ["Dans les délais", "En cours", "En attente", "À surveiller", "Action requise", "Bloquant", "Terminé"];
 const stepOptions = ["À faire", "En attente", "En cours", "Fait", "Non applicable"];
+const emptyDirectoryDraft = (): DirectoryDraft => ({ name: "", email: "", jiraName: "", role: "chef-produit", marketIds: [] });
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const isoToday = () => new Date().toISOString().slice(0, 10);
 const validHex = (value: string) => /^#[0-9A-F]{6}$/i.test(value.trim());
@@ -56,7 +60,7 @@ function initialData(marketId = "revetements-menuiserie", marketOverride?: Marke
     customColor: market.colorHex,
     meetingDate: isoToday(),
     priority: "Sécuriser les dossiers à surveiller et confirmer les prochaines échéances.",
-    mail: { to: "", cc: "", subject: `Point marché — ${market.name}`, intro: "Bonjour à tous, voici le point d’avancement de la semaine." },
+    mail: { to: "", cc: "", subject: `Point marché — ${market.name}`, intro: "Bonjour à tous, voici le point d’avancement de la semaine.", autoTo: [], autoCc: [] },
   };
   if (marketId !== "revetements-menuiserie") return { ...common, dossiers: [], operations: [], tariffs: [], jira: [] };
   return {
@@ -123,6 +127,44 @@ async function fetchMarkets(): Promise<Market[]> {
   const payload = await response.json() as { markets?: { id: string; name: string; shortCode: string; tone: ThemeKey; colorHex?: string; position: number }[]; error?: string };
   if (!response.ok) throw new Error(payload.error || "Impossible de charger les marchés.");
   return (payload.markets ?? []).map((market) => ({ id: market.id, name: market.name, short: market.shortCode, tone: market.tone, colorHex: normalizeHex(market.colorHex), position: market.position }));
+}
+
+async function fetchDirectoryUsers(): Promise<GlobalDirectoryUser[]> {
+  const response = await fetch("/api/global-users", { cache: "no-store" });
+  const payload = await response.json() as { users?: GlobalDirectoryUser[]; error?: string };
+  if (!response.ok) throw new Error(payload.error || "Impossible de charger l’annuaire GLOBAL.");
+  return payload.users ?? [];
+}
+
+function emailList(value: string) {
+  return value.split(/[;,\n]/).map((email) => email.trim()).filter(Boolean);
+}
+
+function uniqueEmails(values: string[]) {
+  const seen = new Set<string>();
+  return values.filter((email) => {
+    const key = email.toLocaleLowerCase("fr-FR");
+    if (!email || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function applyDirectoryMail(data: PointData, marketId: string, users: GlobalDirectoryUser[]): PointData {
+  const previousAutoTo = new Set((data.mail.autoTo ?? []).map((email) => email.toLocaleLowerCase("fr-FR")));
+  const previousAutoCc = new Set((data.mail.autoCc ?? []).map((email) => email.toLocaleLowerCase("fr-FR")));
+  const manualTo = emailList(data.mail.to).filter((email) => !previousAutoTo.has(email.toLocaleLowerCase("fr-FR")));
+  const manualCc = emailList(data.mail.cc).filter((email) => !previousAutoCc.has(email.toLocaleLowerCase("fr-FR")));
+  const autoTo = uniqueEmails(users.filter((user) => user.marketIds.includes(marketId) && roleMailMode(user.role) === "to").map((user) => user.email));
+  const autoCc = uniqueEmails(users.filter((user) => roleMailMode(user.role) === "cc").map((user) => user.email));
+  const mail = {
+    ...data.mail,
+    to: uniqueEmails([...manualTo, ...autoTo]).join("; "),
+    cc: uniqueEmails([...manualCc, ...autoCc]).join("; "),
+    autoTo,
+    autoCc,
+  };
+  return JSON.stringify(mail) === JSON.stringify(data.mail) ? data : { ...data, mail };
 }
 
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
@@ -198,6 +240,13 @@ function weeksForMonth(monthString: string) {
 function dateLabel(value: string) { if (!value) return "Date à définir"; return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T12:00:00`)); }
 function daysBetween(from: string, to: string) { if (!from || !to) return 0; return Math.floor((new Date(`${to}T12:00:00`).valueOf() - new Date(`${from}T12:00:00`).valueOf()) / 86400000); }
 function isClosed(status: string) { return /(termin|cl[oô]tur|r[eé]solu|annul)/i.test(status); }
+function isOperationClosed(operation: CommercialOperation) {
+  if (isClosed(operation.state)) return true;
+  return Boolean(operation.steps.length) && operation.steps.every(([, state]) => /(fait|termin|non applicable|annul)/i.test(state));
+}
+function carriedFromLabel(item: CarryoverFields) {
+  return item.carriedFromYear && item.carriedFromWeek ? `Reporté de ${item.carriedFromYear} · S${String(item.carriedFromWeek).padStart(2, "0")}` : "";
+}
 function jiraItemCount(item: JiraTicket) { const count = Number(item.count); return Number.isFinite(count) && count > 0 ? Math.round(count) : 1; }
 function jiraStatusSummary(items: JiraTicket[]) {
   const totals = new Map<string, number>();
@@ -394,6 +443,11 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [marketSavingId, setMarketSavingId] = useState("");
   const [creatingMarket, setCreatingMarket] = useState(false);
+  const [directoryUsers, setDirectoryUsers] = useState<GlobalDirectoryUser[]>([]);
+  const [directoryReady, setDirectoryReady] = useState(false);
+  const [directorySavingId, setDirectorySavingId] = useState("");
+  const [newDirectoryUser, setNewDirectoryUser] = useState<DirectoryDraft>(() => emptyDirectoryDraft());
+  const [directoryRevision, setDirectoryRevision] = useState(0);
   const [lastSavedSignature, setLastSavedSignature] = useState("");
   const [toast, setToast] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(() => monthStart(isoToday()));
@@ -404,6 +458,8 @@ export default function Home() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+  const [carryoverOpen, setCarryoverOpen] = useState(false);
+  const [carryoverSelection, setCarryoverSelection] = useState<Record<string, boolean>>({});
   const fileInput = useRef<HTMLInputElement>(null);
   const archiveRequest = useRef(0);
   const market = marketOptions.find((item) => item.id === marketId) ?? marketOptions[0] ?? defaultMarkets[0];
@@ -416,8 +472,12 @@ export default function Home() {
   const currentWeek = isoWeek(data.meetingDate);
   const currentWeekYear = isoWeekYear(data.meetingDate);
   const currentWeekPoint = archive.find((item) => item.week === currentWeek && item.year === currentWeekYear);
+  const previousPoint = archive.find((item) => item.year < currentWeekYear || (item.year === currentWeekYear && item.week < currentWeek));
   const calendarWeeks = useMemo(() => weeksForMonth(calendarMonth), [calendarMonth]);
   const jiraPeople = useMemo(() => groupJiraPeople(data.jira), [data.jira]);
+  const automaticMailToUsers = directoryUsers.filter((user) => user.marketIds.includes(marketId) && roleMailMode(user.role) === "to");
+  const automaticMailCcUsers = directoryUsers.filter((user) => roleMailMode(user.role) === "cc");
+  const carryoverSelectedCount = Object.values(carryoverSelection).filter(Boolean).length;
 
   const loadMarket = useCallback(async (nextMarket: string, loadLatest = true, marketOverride?: Market) => {
     const requestId = ++archiveRequest.current;
@@ -480,16 +540,36 @@ export default function Home() {
     }
   }, [loadMarket]);
 
+  const loadDirectory = useCallback(async () => {
+    setDirectoryReady(false);
+    try {
+      setDirectoryUsers(await fetchDirectoryUsers());
+    } catch (error) {
+      setDirectoryUsers([]);
+      setToast(error instanceof Error ? error.message : "Impossible de charger l’annuaire GLOBAL.");
+    } finally {
+      setDirectoryReady(true);
+    }
+  }, []);
+
   useEffect(() => { const timer = window.setTimeout(() => { void bootstrap(); }, 0); return () => window.clearTimeout(timer); }, [bootstrap]);
   useEffect(() => {
     let active = true;
     void fetch("/api/session", { cache: "no-store" }).then((response) => response.json()).then((payload: SessionPayload) => {
       if (!active) return;
       setSession(payload);
-      if (payload.user && new URLSearchParams(window.location.search).get("mode") === "edit") setView("edit");
+      if (payload.user) {
+        void loadDirectory();
+        if (new URLSearchParams(window.location.search).get("mode") === "edit") setView("edit");
+      }
     }).catch(() => { /* La lecture publique reste disponible. */ }).finally(() => { if (active) setSessionReady(true); });
     return () => { active = false; };
-  }, []);
+  }, [loadDirectory]);
+  useEffect(() => {
+    if (!session.user || !directoryReady) return;
+    const timer = window.setTimeout(() => setData((current) => applyDirectoryMail(current, marketId, directoryUsers)), 0);
+    return () => window.clearTimeout(timer);
+  }, [data, directoryReady, directoryUsers, marketId, session.user]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(timer); }, [toast]);
 
   const openLogin = () => {
@@ -509,6 +589,7 @@ export default function Home() {
       setLoginPassword("");
       setLoginOpen(false);
       setView("edit");
+      await loadDirectory();
       setToast("Connexion réussie. Mode édition ouvert.");
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "Connexion impossible.");
@@ -519,6 +600,8 @@ export default function Home() {
   const logout = async () => {
     await fetch("/api/logout", { method: "POST" }).catch(() => undefined);
     setSession({ user: null });
+    setDirectoryUsers([]);
+    setDirectoryReady(false);
     setView("read");
     setLoginPassword("");
     setToast("Déconnexion effectuée.");
@@ -682,6 +765,84 @@ export default function Home() {
     } catch (error) { setToast(error instanceof Error ? error.message : "Suppression du marché impossible."); }
     finally { setMarketSavingId(""); }
   };
+  const updateDirectoryUser = (id: string, patch: Partial<GlobalDirectoryUser>) => setDirectoryUsers((current) => current.map((user) => user.id === id ? { ...user, ...patch } : user));
+  const toggleDirectoryMarket = (userId: string, selectedMarket: string) => setDirectoryUsers((current) => current.map((user) => user.id !== userId ? user : { ...user, marketIds: user.marketIds.includes(selectedMarket) ? user.marketIds.filter((id) => id !== selectedMarket) : [...user.marketIds, selectedMarket] }));
+  const toggleNewDirectoryMarket = (selectedMarket: string) => setNewDirectoryUser((current) => ({ ...current, marketIds: current.marketIds.includes(selectedMarket) ? current.marketIds.filter((id) => id !== selectedMarket) : [...current.marketIds, selectedMarket] }));
+  const acceptDirectoryPayload = (users: GlobalDirectoryUser[]) => {
+    setDirectoryUsers(users);
+    setDirectoryRevision((current) => current + 1);
+    setData((current) => applyDirectoryMail(current, marketId, users));
+  };
+  const createDirectoryUser = async () => {
+    if (directorySavingId) return;
+    setDirectorySavingId("new");
+    try {
+      const response = await fetch("/api/global-users", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(newDirectoryUser) });
+      const payload = await response.json() as { users?: GlobalDirectoryUser[]; error?: string };
+      if (!response.ok || !payload.users) throw new Error(payload.error || "Création impossible.");
+      acceptDirectoryPayload(payload.users);
+      setNewDirectoryUser(emptyDirectoryDraft());
+      setToast("Utilisateur ajouté à l’annuaire GLOBAL.");
+    } catch (error) { setToast(error instanceof Error ? error.message : "Création de l’utilisateur impossible."); }
+    finally { setDirectorySavingId(""); }
+  };
+  const saveDirectoryUser = async (id: string) => {
+    const draft = directoryUsers.find((user) => user.id === id);
+    if (!draft || directorySavingId) return;
+    setDirectorySavingId(id);
+    try {
+      const response = await fetch("/api/global-users", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(draft) });
+      const payload = await response.json() as { users?: GlobalDirectoryUser[]; error?: string };
+      if (!response.ok || !payload.users) throw new Error(payload.error || "Modification impossible.");
+      acceptDirectoryPayload(payload.users);
+      setToast(`Utilisateur « ${draft.name} » enregistré.`);
+    } catch (error) { setToast(error instanceof Error ? error.message : "Modification de l’utilisateur impossible."); }
+    finally { setDirectorySavingId(""); }
+  };
+  const deleteDirectoryUser = async (id: string) => {
+    const user = directoryUsers.find((item) => item.id === id);
+    if (!user || directorySavingId || !window.confirm(`Retirer « ${user.name} » de l’annuaire GLOBAL ?`)) return;
+    setDirectorySavingId(id);
+    try {
+      const response = await fetch(`/api/global-users?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const payload = await response.json() as { users?: GlobalDirectoryUser[]; error?: string };
+      if (!response.ok || !payload.users) throw new Error(payload.error || "Suppression impossible.");
+      acceptDirectoryPayload(payload.users);
+      setToast(`Utilisateur « ${user.name} » retiré.`);
+    } catch (error) { setToast(error instanceof Error ? error.message : "Suppression de l’utilisateur impossible."); }
+    finally { setDirectorySavingId(""); }
+  };
+  const setCarryoverPreset = (preset: "unfinished" | "all" | "none") => {
+    if (!previousPoint) return;
+    const dossierSources = new Set(data.dossiers.map((item) => item.sourceId ?? item.id));
+    const operationSources = new Set(data.operations.map((item) => item.sourceId ?? item.id));
+    const selection: Record<string, boolean> = {};
+    previousPoint.data.dossiers.forEach((item) => {
+      const available = !dossierSources.has(item.sourceId ?? item.id);
+      selection[`dossier:${item.id}`] = available && preset !== "none" && (preset === "all" || !isClosed(item.status));
+    });
+    previousPoint.data.operations.forEach((item) => {
+      const available = !operationSources.has(item.sourceId ?? item.id);
+      selection[`operation:${item.id}`] = available && preset !== "none" && (preset === "all" || !isOperationClosed(item));
+    });
+    setCarryoverSelection(selection);
+  };
+  const openCarryover = () => {
+    if (!previousPoint) { setToast("Aucun point antérieur disponible pour ce marché."); return; }
+    setCarryoverPreset("unfinished");
+    setCarryoverOpen(true);
+  };
+  const applyCarryover = () => {
+    if (!previousPoint) return;
+    const dossierSources = new Set(data.dossiers.map((item) => item.sourceId ?? item.id));
+    const operationSources = new Set(data.operations.map((item) => item.sourceId ?? item.id));
+    const dossiers = previousPoint.data.dossiers.filter((item) => carryoverSelection[`dossier:${item.id}`] && !dossierSources.has(item.sourceId ?? item.id)).map((item) => ({ ...item, id: uid(), sourceId: item.sourceId ?? item.id, carriedFromYear: previousPoint.year, carriedFromWeek: previousPoint.week }));
+    const operations = previousPoint.data.operations.filter((item) => carryoverSelection[`operation:${item.id}`] && !operationSources.has(item.sourceId ?? item.id)).map((item) => ({ ...item, id: uid(), sourceId: item.sourceId ?? item.id, carriedFromYear: previousPoint.year, carriedFromWeek: previousPoint.week, steps: item.steps.map(([label, state]) => [label, state] as [string, string]) }));
+    setData((current) => ({ ...current, dossiers: [...current.dossiers, ...dossiers], operations: [...current.operations, ...operations] }));
+    setCarryoverOpen(false);
+    const count = dossiers.length + operations.length;
+    setToast(count ? `${count} élément${count > 1 ? "s" : ""} repris du point ${previousPoint.year} · S${String(previousPoint.week).padStart(2, "0")}.` : "Aucun nouvel élément à reprendre.");
+  };
   const copyMail = async () => {
     try {
       if (navigator.clipboard && typeof ClipboardItem !== "undefined") {
@@ -696,7 +857,7 @@ export default function Home() {
   };
 
   const navItems: { id: Section; label: string; icon: string; count?: number }[] = [
-    { id: "general", label: "Cadre du point", icon: "spark" }, { id: "markets", label: "Gérer les marchés", icon: "edit", count: marketOptions.length }, { id: "dossiers", label: "Dossiers en cours", icon: "folder", count: data.dossiers.length },
+    { id: "general", label: "Cadre du point", icon: "spark" }, { id: "markets", label: "Gérer les marchés", icon: "edit", count: marketOptions.length }, { id: "users", label: "Utilisateurs GLOBAL", icon: "user", count: directoryUsers.length }, { id: "dossiers", label: "Dossiers en cours", icon: "folder", count: data.dossiers.length },
     { id: "operations", label: "Opérations commerciales", icon: "trend", count: data.operations.length }, { id: "tariffs", label: "Évolutions tarifaires", icon: "trend", count: data.tariffs.length },
     { id: "jira", label: "Tickets Jira", icon: "ticket", count: data.jira.reduce((sum, item) => sum + jiraItemCount(item), 0) }, { id: "saved", label: "Points enregistrés", icon: "download", count: archive.length }, { id: "mail", label: "Paramètres du mail", icon: "mail" },
   ];
@@ -710,7 +871,7 @@ export default function Home() {
     <div className="visual-week-picker">
       <div className="week-picker-toolbar">
         <div className="month-navigation"><button type="button" aria-label="Mois précédent" onClick={() => setCalendarMonth((current) => shiftMonth(current, -1))}><Icon name="chevron" size={16}/></button><strong>{calendarMonthLabel(calendarMonth)}</strong><button type="button" aria-label="Mois suivant" onClick={() => setCalendarMonth((current) => shiftMonth(current, 1))}><Icon name="chevron" size={16}/></button></div>
-        <div className="week-quick-actions"><button type="button" onClick={() => { void chooseCurrentWeek(); }}><Icon name="calendar" size={14}/> Cette semaine</button><button type="button" disabled={!archive.length} onClick={() => { void chooseLatestPublished(); }}><Icon name="check" size={14}/> Dernière publiée</button></div>
+        <div className="week-quick-actions"><button type="button" onClick={() => { void chooseCurrentWeek(); }}><Icon name="calendar" size={14}/> Cette semaine</button><button type="button" disabled={!archive.length} onClick={() => { void chooseLatestPublished(); }}><Icon name="check" size={14}/> Dernière publiée</button>{view === "edit" && <button type="button" disabled={!previousPoint} onClick={openCarryover}><Icon name="copy" size={14}/> Reprendre le précédent</button>}</div>
       </div>
       <div className="week-card-strip">{calendarWeeks.map((weekChoice) => { const savedPoint = archive.find((record) => record.year === weekChoice.year && record.week === weekChoice.week); const selected = weekChoice.year === currentWeekYear && weekChoice.week === currentWeek; const today = weekChoice.value === weekInputValue(isoToday()); return <button type="button" className={`week-choice ${selected ? "selected" : ""} ${savedPoint ? "published" : "empty"} ${selected && isDirty ? "draft" : ""}`} aria-pressed={selected} key={weekChoice.value} onClick={() => { void chooseWeek(weekChoice.value); }}><span><i/>{today ? "Cette semaine" : `${weekChoice.year}`}</span><strong>S{String(weekChoice.week).padStart(2, "0")}</strong><small>{weekChoice.range}</small><b>{savedPoint ? "Point enregistré" : "À renseigner"}</b></button>; })}</div>
     </div>
@@ -726,26 +887,50 @@ export default function Home() {
         <div className="field field-wide theme-field"><span>Couleur de ce point</span><div className="theme-picker">{themes.map((option) => <button key={option.id} type="button" className={!data.customColor && data.themeColor === option.id ? "active" : ""} style={{ "--swatch": option.accent } as CSSProperties} onClick={() => setData((current) => ({ ...current, themeColor: option.id, customColor: "" }))}><i/><b>{option.label}</b></button>)}</div><div className="hex-color-control"><input type="color" value={accent} aria-label="Sélecteur de couleur personnalisée" onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/><label><span>Hexadécimal personnalisé</span><input value={data.customColor} maxLength={7} placeholder={theme.accent.toUpperCase()} onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/></label><small className={data.customColor && !validHex(data.customColor) ? "invalid" : ""}>{data.customColor && !validHex(data.customColor) ? "Format attendu : #RRGGBB" : `Couleur active : ${accent.toUpperCase()}`}</small></div></div>
         <label className="field field-wide"><span>Priorité de la semaine</span><textarea value={data.priority} onChange={(event) => setData((current) => ({ ...current, priority: event.target.value }))} placeholder="L’action principale ou le message clé à retenir…"/></label>
       </div>
-      <div className="guidance-grid"><article><span>01</span><strong>Choisis le bon marché</strong><p>Les noms et codes sont administrables dans « Gérer les marchés ».</p></article><article><span>02</span><strong>Sauvegarde la semaine</strong><p>Un seul point est conservé par marché et par semaine. Une nouvelle sauvegarde le met simplement à jour.</p></article><article><span>03</span><strong>Prépare le mail</strong><p>Contrôle l’aperçu puis copie le rendu Outlook prêt à l’emploi.</p></article></div>
+      <div className="guidance-grid"><article><span>01</span><strong>Choisis le bon marché</strong><p>Les noms et codes sont administrables dans « Gérer les marchés ».</p></article><article><span>02</span><strong>Reprends les suivis utiles</strong><p>Les dossiers et opérations non terminés du dernier point peuvent être reconduits sans doublon.</p></article><article><span>03</span><strong>Sauvegarde et diffuse</strong><p>Les destinataires et tickets Jira sont préparés depuis l’annuaire GLOBAL.</p></article></div>
     </section>}
 
     {section === "markets" && <section className="editor-section"><SectionTitle eyebrow="02 · Administration" title="Gérer les marchés" detail="Modifie le nom affiché, le code court et la couleur par défaut, ou ajoute un nouveau marché." action={<button className="primary-button" disabled={creatingMarket} onClick={createMarket}><Icon name="plus"/> {creatingMarket ? "Ajout…" : "Ajouter un marché"}</button>}/><div className="market-admin-note"><Icon name="alert"/><div><strong>Suppression sans perte d’historique</strong><span>Un marché supprimé disparaît de la liste active, mais ses points hebdomadaires restent conservés.</span></div></div><div className="market-admin-list">{marketOptions.map((item, index) => { const marketAccent = normalizeHex(item.colorHex) || themes.find((option) => option.id === item.tone)?.accent || themes[0].accent; return <article className={`surface market-admin-card ${item.id === marketId ? "active" : ""}`} key={item.id}><div className="market-admin-index" style={{ "--swatch": marketAccent } as CSSProperties}><i/><span>{String(index + 1).padStart(2, "0")}</span></div><div className="market-admin-fields"><TextField label="Nom du marché" value={item.name} onChange={(name) => updateMarketDraft(item.id, { name })}/><TextField label="Code court" value={item.short} onChange={(short) => updateMarketDraft(item.id, { short })} placeholder="EX. BOIS"/><label className="field"><span>Palette par défaut</span><select value={item.tone} onChange={(event) => updateMarketDraft(item.id, { tone: event.target.value as ThemeKey, colorHex: "" })}>{themes.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label><label className="field market-hex-field"><span>Hex personnalisé</span><div><input type="color" value={marketAccent} aria-label={`Couleur de ${item.name}`} onChange={(event) => updateMarketDraft(item.id, { colorHex: event.target.value.toUpperCase() })}/><input value={item.colorHex} maxLength={7} placeholder="#RRGGBB" onChange={(event) => updateMarketDraft(item.id, { colorHex: event.target.value.toUpperCase() })}/></div></label></div><div className="market-admin-actions">{item.id === marketId && <span>Marché actif</span>}<button className="secondary-button" disabled={Boolean(marketSavingId)} onClick={() => saveMarket(item.id)}><Icon name="check"/> {marketSavingId === item.id ? "Enregistrement…" : "Enregistrer"}</button><button className="icon-button danger" disabled={Boolean(marketSavingId)} aria-label={`Supprimer ${item.name}`} title="Supprimer de la liste active" onClick={() => deleteMarket(item.id)}><Icon name="trash"/></button></div></article>; })}</div></section>}
 
-    {section === "dossiers" && <section className="editor-section"><SectionTitle eyebrow="02 · Suivi détaillé" title="Dossiers en cours" detail="La zone la plus détaillée du point : contexte, responsable, action et risque." action={<button className="primary-button" onClick={addDossier}><Icon name="plus"/> Ajouter un dossier</button>}/>{data.dossiers.length ? <div className="record-stack">{data.dossiers.map((item, index) => <article className="surface record-card" key={item.id}><div className="record-header"><span className="record-index">{String(index + 1).padStart(2, "0")}</span><div><strong>{item.title || "Nouveau dossier"}</strong><small>{item.status}</small></div><button className="icon-button danger" aria-label="Supprimer le dossier" onClick={() => setData((current) => ({ ...current, dossiers: current.dossiers.filter((row) => row.id !== item.id) }))}><Icon name="trash"/></button></div><div className="form-grid"><TextField label="Dossier" value={item.title} onChange={(title) => updateDossier(item.id, { title })} placeholder="Nom du dossier"/><TextField label="Univers" value={item.universe} onChange={(universe) => updateDossier(item.id, { universe })}/><TextField label="Référence" value={item.reference} onChange={(reference) => updateDossier(item.id, { reference })}/><SelectField label="Statut" value={item.status} onChange={(status) => updateDossier(item.id, { status })} options={statusOptions}/><TextField label="Responsable" value={item.owner} onChange={(owner) => updateDossier(item.id, { owner })}/><TextField label="Échéance" type="date" value={item.deadline} onChange={(deadline) => updateDossier(item.id, { deadline })}/><label className="field field-wide"><span>Prochaine action</span><textarea value={item.action} onChange={(event) => updateDossier(item.id, { action: event.target.value })}/></label><label className="field field-wide"><span>Commentaire / risque</span><textarea value={item.comment} onChange={(event) => updateDossier(item.id, { comment: event.target.value })}/></label><label className="field progress-field field-wide"><span><b>Avancement</b><strong>{item.progress}%</strong></span><input type="range" min="0" max="100" step="5" value={item.progress} onChange={(event) => updateDossier(item.id, { progress: Number(event.target.value) })}/></label></div></article>)}</div> : <EmptyState label="un dossier" onAdd={addDossier}/>}</section>}
+    {section === "users" && <section className="editor-section">
+      <SectionTitle eyebrow="02 · Annuaire interne" title="Utilisateurs GLOBAL" detail="Associe les personnes aux marchés existants. Un changement de nom du marché conserve automatiquement les liens."/>
+      <div className="directory-rule-grid"><article><Icon name="ticket"/><div><strong>Jira automatique</strong><span>Chefs de produit, chefs de marché et analystes tarif/référentiel sont affectés à leurs marchés via leur nom Jira.</span></div></article><article><Icon name="mail"/><div><strong>Mail automatique</strong><span>Ces rôles sont destinataires principaux ; l’unique manager Tarif est ajouté en copie.</span></div></article><article><Icon name="lock"/><div><strong>Administration unique</strong><span>L’annuaire ne change pas la connexion partagée GLOBAL actuellement utilisée.</span></div></article></div>
+      <article className="surface directory-create-card"><div className="directory-card-heading"><span className="directory-avatar"><Icon name="plus"/></span><div><strong>Ajouter une personne</strong><small>Nom, adresse mail, identité Jira et rôle métier</small></div></div><div className="directory-fields"><TextField label="Nom complet" value={newDirectoryUser.name} onChange={(name) => setNewDirectoryUser((current) => ({ ...current, name, jiraName: current.jiraName || name }))} placeholder="Louise PEPIN"/><TextField label="Adresse e-mail" type="email" value={newDirectoryUser.email} onChange={(email) => setNewDirectoryUser((current) => ({ ...current, email }))} placeholder="person@example.test"/><TextField label="Nom dans Jira" value={newDirectoryUser.jiraName} onChange={(jiraName) => setNewDirectoryUser((current) => ({ ...current, jiraName }))} placeholder="Louise Pepin"/><label className="field"><span>Rôle</span><select value={newDirectoryUser.role} onChange={(event) => setNewDirectoryUser((current) => ({ ...current, role: event.target.value as GlobalRole, marketIds: event.target.value === "manager-tarif" ? [] : current.marketIds }))}>{GLOBAL_ROLE_OPTIONS.map((role) => <option key={role.id} value={role.id}>{role.label}</option>)}</select></label></div>{newDirectoryUser.role !== "manager-tarif" ? <div className="directory-market-picker"><span>Marchés associés</span><div>{marketOptions.map((item) => <button type="button" className={newDirectoryUser.marketIds.includes(item.id) ? "selected" : ""} key={item.id} onClick={() => toggleNewDirectoryMarket(item.id)}><i style={{ "--swatch": normalizeHex(item.colorHex) || themes.find((themeOption) => themeOption.id === item.tone)?.accent || themes[0].accent } as CSSProperties}/>{item.name}</button>)}</div></div> : <div className="directory-manager-note"><Icon name="mail" size={15}/> Le manager Tarif sera automatiquement ajouté en copie de tous les mails.</div>}<div className="directory-card-actions"><span>{roleMailMode(newDirectoryUser.role) === "to" ? "Jira + destinataire principal" : roleMailMode(newDirectoryUser.role) === "cc" ? "Copie automatique" : "Association conservée sans automatisation"}</span><button className="primary-button" disabled={directorySavingId === "new" || !newDirectoryUser.name || !newDirectoryUser.email} onClick={createDirectoryUser}><Icon name="plus"/> {directorySavingId === "new" ? "Ajout…" : "Ajouter à l’annuaire"}</button></div></article>
+      {!directoryReady ? <div className="archive-message"><span>Chargement de l’annuaire GLOBAL…</span></div> : directoryUsers.length ? <div className="directory-list">{directoryUsers.map((user) => <article className="surface directory-user-card" key={user.id}><div className="directory-card-heading"><span className="directory-avatar">{user.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span><div><strong>{user.name || "Utilisateur GLOBAL"}</strong><small>{roleLabel(user.role)}</small></div><div className="directory-automation-badges">{roleMailMode(user.role) === "to" && <><span className="jira">Jira auto</span><span className="mail">Mail À</span></>}{roleMailMode(user.role) === "cc" && <span className="mail">Mail copie</span>}{roleMailMode(user.role) === "none" && <span>En réserve</span>}</div></div><div className="directory-fields"><TextField label="Nom complet" value={user.name} onChange={(name) => updateDirectoryUser(user.id, { name })}/><TextField label="Adresse e-mail" type="email" value={user.email} onChange={(email) => updateDirectoryUser(user.id, { email })}/><TextField label="Nom dans Jira" value={user.jiraName} onChange={(jiraName) => updateDirectoryUser(user.id, { jiraName })}/><label className="field"><span>Rôle</span><select value={user.role} onChange={(event) => updateDirectoryUser(user.id, { role: event.target.value as GlobalRole, marketIds: event.target.value === "manager-tarif" ? [] : user.marketIds })}>{GLOBAL_ROLE_OPTIONS.map((role) => <option key={role.id} value={role.id}>{role.label}</option>)}</select></label></div>{user.role !== "manager-tarif" ? <div className="directory-market-picker"><span>Marchés associés</span><div>{marketOptions.map((item) => <button type="button" className={user.marketIds.includes(item.id) ? "selected" : ""} key={item.id} onClick={() => toggleDirectoryMarket(user.id, item.id)}><i style={{ "--swatch": normalizeHex(item.colorHex) || themes.find((themeOption) => themeOption.id === item.tone)?.accent || themes[0].accent } as CSSProperties}/>{item.name}</button>)}</div></div> : <div className="directory-manager-note"><Icon name="mail" size={15}/> Manager Tarif unique · copie automatique de tous les mails</div>}<div className="directory-card-actions"><span>{user.marketIds.length ? `${user.marketIds.length} marché${user.marketIds.length > 1 ? "s" : ""} lié${user.marketIds.length > 1 ? "s" : ""}` : user.role === "manager-tarif" ? "Périmètre transversal Tarif" : "Aucun marché associé"}</span><div><button className="secondary-button" disabled={Boolean(directorySavingId)} onClick={() => saveDirectoryUser(user.id)}><Icon name="check"/> {directorySavingId === user.id ? "Enregistrement…" : "Enregistrer"}</button><button className="icon-button danger" disabled={Boolean(directorySavingId)} aria-label={`Retirer ${user.name}`} onClick={() => deleteDirectoryUser(user.id)}><Icon name="trash"/></button></div></div></article>)}</div> : <div className="surface archive-empty"><Icon name="user" size={28}/><strong>Annuaire GLOBAL vide</strong><span>Ajoute les chefs de produit, chefs de marché, analystes et le manager Tarif.</span></div>}
+    </section>}
 
-    {section === "operations" && <section className="editor-section"><SectionTitle eyebrow="03 · Promo" title="Opérations commerciales" detail="Suis chaque opération commerciale (promo), son mois, son état global et ses étapes de traitement." action={<button className="primary-button" onClick={addOperation}><Icon name="plus"/> Ajouter une opération</button>}/>{data.operations.length ? <div className="record-stack">{data.operations.map((item, index) => <article className="surface record-card" key={item.id}><div className="record-header"><span className="record-index letter">{String.fromCharCode(65 + index)}</span><div><strong>{item.name || "Nouvelle opération commerciale"}</strong><small>{item.month || "Mois à définir"}</small></div><button className="icon-button danger" aria-label="Supprimer l’opération commerciale" onClick={() => setData((current) => ({ ...current, operations: current.operations.filter((row) => row.id !== item.id) }))}><Icon name="trash"/></button></div><div className="form-grid"><TextField label="Nom de l’opération commerciale" value={item.name} onChange={(name) => updateOperation(item.id, { name })}/><TextField label="Mois affiché" value={item.month} onChange={(month) => updateOperation(item.id, { month })} placeholder="Septembre 2026"/><TextField label="État global" value={item.state} onChange={(state) => updateOperation(item.id, { state })} wide/><TextField label="Résumé" value={item.summary} onChange={(summary) => updateOperation(item.id, { summary })} wide/><div className="steps-editor field-wide"><span>Étapes de traitement</span>{item.steps.map(([label, state], stepIndex) => <div className="step-editor" key={`${item.id}-${stepIndex}`}><input value={label} onChange={(event) => updateOperation(item.id, { steps: item.steps.map((step, i) => i === stepIndex ? [event.target.value, step[1]] as [string,string] : step) })}/><select value={state} onChange={(event) => updateOperation(item.id, { steps: item.steps.map((step, i) => i === stepIndex ? [step[0], event.target.value] as [string,string] : step) })}>{stepOptions.map((option) => <option key={option}>{option}</option>)}</select><button className="icon-button subtle" aria-label="Supprimer l’étape" onClick={() => updateOperation(item.id, { steps: item.steps.filter((_, i) => i !== stepIndex) })}><Icon name="trash" size={15}/></button></div>)}<button className="inline-add" onClick={() => updateOperation(item.id, { steps: [...item.steps, ["Nouvelle étape", "À faire"]] })}><Icon name="plus" size={15}/> Ajouter une étape</button></div></div></article>)}</div> : <EmptyState label="une opération commerciale" onAdd={addOperation}/>}</section>}
+    {section === "dossiers" && <section className="editor-section">
+      <SectionTitle eyebrow="02 · Suivi détaillé" title="Dossiers en cours" detail="La zone la plus détaillée du point : contexte, responsable, action et risque." action={<div className="title-actions">{previousPoint && <button className="secondary-button" onClick={openCarryover}><Icon name="copy"/> Reprendre le précédent</button>}<button className="primary-button" onClick={addDossier}><Icon name="plus"/> Ajouter un dossier</button></div>}/>
+      {data.dossiers.length ? <div className="record-stack">{data.dossiers.map((item, index) => <article className="surface record-card" key={item.id}>
+        <div className="record-header"><span className="record-index">{String(index + 1).padStart(2, "0")}</span><div><strong>{item.title || "Nouveau dossier"}</strong><small>{item.status}{carriedFromLabel(item) ? ` · ${carriedFromLabel(item)}` : ""}</small></div><button className="icon-button danger" aria-label="Supprimer le dossier" onClick={() => setData((current) => ({ ...current, dossiers: current.dossiers.filter((row) => row.id !== item.id) }))}><Icon name="trash"/></button></div>
+        <div className="form-grid"><TextField label="Dossier" value={item.title} onChange={(title) => updateDossier(item.id, { title })} placeholder="Nom du dossier"/><TextField label="Univers" value={item.universe} onChange={(universe) => updateDossier(item.id, { universe })}/><TextField label="Référence" value={item.reference} onChange={(reference) => updateDossier(item.id, { reference })}/><SelectField label="Statut" value={item.status} onChange={(status) => updateDossier(item.id, { status })} options={statusOptions}/><TextField label="Responsable" value={item.owner} onChange={(owner) => updateDossier(item.id, { owner })}/><TextField label="Échéance" type="date" value={item.deadline} onChange={(deadline) => updateDossier(item.id, { deadline })}/><label className="field field-wide"><span>Prochaine action</span><textarea value={item.action} onChange={(event) => updateDossier(item.id, { action: event.target.value })}/></label><label className="field field-wide"><span>Commentaire / risque</span><textarea value={item.comment} onChange={(event) => updateDossier(item.id, { comment: event.target.value })}/></label><label className="field progress-field field-wide"><span><b>Avancement</b><strong>{item.progress}%</strong></span><input type="range" min="0" max="100" step="5" value={item.progress} onChange={(event) => updateDossier(item.id, { progress: Number(event.target.value) })}/></label></div>
+      </article>)}</div> : <EmptyState label="un dossier" onAdd={addDossier}/>}</section>}
+
+    {section === "operations" && <section className="editor-section">
+      <SectionTitle eyebrow="03 · Promo" title="Opérations commerciales" detail="Suis chaque opération commerciale (promo), son mois, son état global et ses étapes de traitement." action={<div className="title-actions">{previousPoint && <button className="secondary-button" onClick={openCarryover}><Icon name="copy"/> Reprendre le précédent</button>}<button className="primary-button" onClick={addOperation}><Icon name="plus"/> Ajouter une opération</button></div>}/>
+      {data.operations.length ? <div className="record-stack">{data.operations.map((item, index) => <article className="surface record-card" key={item.id}>
+        <div className="record-header"><span className="record-index letter">{String.fromCharCode(65 + index)}</span><div><strong>{item.name || "Nouvelle opération commerciale"}</strong><small>{item.month || "Mois à définir"}{carriedFromLabel(item) ? ` · ${carriedFromLabel(item)}` : ""}</small></div><button className="icon-button danger" aria-label="Supprimer l’opération commerciale" onClick={() => setData((current) => ({ ...current, operations: current.operations.filter((row) => row.id !== item.id) }))}><Icon name="trash"/></button></div>
+        <div className="form-grid"><TextField label="Nom de l’opération commerciale" value={item.name} onChange={(name) => updateOperation(item.id, { name })}/><TextField label="Mois affiché" value={item.month} onChange={(month) => updateOperation(item.id, { month })} placeholder="Septembre 2026"/><TextField label="État global" value={item.state} onChange={(state) => updateOperation(item.id, { state })} wide/><TextField label="Résumé" value={item.summary} onChange={(summary) => updateOperation(item.id, { summary })} wide/><div className="steps-editor field-wide"><span>Étapes de traitement</span>{item.steps.map(([label, state], stepIndex) => <div className="step-editor" key={`${item.id}-${stepIndex}`}><input value={label} onChange={(event) => updateOperation(item.id, { steps: item.steps.map((step, i) => i === stepIndex ? [event.target.value, step[1]] as [string,string] : step) })}/><select value={state} onChange={(event) => updateOperation(item.id, { steps: item.steps.map((step, i) => i === stepIndex ? [step[0], event.target.value] as [string,string] : step) })}>{stepOptions.map((option) => <option key={option}>{option}</option>)}</select><button className="icon-button subtle" aria-label="Supprimer l’étape" onClick={() => updateOperation(item.id, { steps: item.steps.filter((_, i) => i !== stepIndex) })}><Icon name="trash" size={15}/></button></div>)}<button className="inline-add" onClick={() => updateOperation(item.id, { steps: [...item.steps, ["Nouvelle étape", "À faire"]] })}><Icon name="plus" size={15}/> Ajouter une étape</button></div></div>
+      </article>)}</div> : <EmptyState label="une opération commerciale" onAdd={addOperation}/>}</section>}
 
     {section === "tariffs" && <section className="editor-section"><SectionTitle eyebrow="04 · Extraction manuelle" title="Évolutions tarifaires" detail="Colle directement ton extraction ou complète les lignes à la main." action={<div className="title-actions"><PasteImporter kind="tariffs" onImport={(text) => importTable("tariffs", text)}/><button className="primary-button" onClick={addTariff}><Icon name="plus"/> Ajouter</button></div>}/><div className="surface data-table-wrap"><table className="data-table"><thead><tr><th>Code</th><th>Fournisseur</th><th>Mois</th><th>État</th><th>Réception trame</th><th>Responsable</th><th>Commentaire</th><th/></tr></thead><tbody>{data.tariffs.map((item) => <tr key={item.id}><td><input value={item.code} onChange={(e) => updateTariff(item.id, { code: e.target.value })}/></td><td><input value={item.supplier} onChange={(e) => updateTariff(item.id, { supplier: e.target.value })}/></td><td><input value={item.month} onChange={(e) => updateTariff(item.id, { month: e.target.value })}/></td><td><input value={item.state} onChange={(e) => updateTariff(item.id, { state: e.target.value })}/></td><td><input type="date" value={item.receptionDate} onChange={(e) => updateTariff(item.id, { receptionDate: e.target.value })}/></td><td><input value={item.owner} onChange={(e) => updateTariff(item.id, { owner: e.target.value })}/></td><td><input value={item.comment} onChange={(e) => updateTariff(item.id, { comment: e.target.value })}/></td><td><button className="icon-button subtle" aria-label="Supprimer" onClick={() => setData((current) => ({ ...current, tariffs: current.tariffs.filter((row) => row.id !== item.id) }))}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!data.tariffs.length && <div className="table-empty">Aucune évolution tarifaire. Utilise « Coller un tableau » ou « Ajouter ».</div>}</div><div className="rule-note"><Icon name="alert"/><div><strong>Vigilances automatiques</strong><span>Du 8 au 14 : trame à sécuriser · après le 15 : KO sans trame · trame reçue depuis plus de 5 jours : traitement à contrôler.</span></div></div></section>}
 
     {section === "jira" && <section className="editor-section">
-      <SectionTitle eyebrow="05 · Tableau hebdomadaire global" title="Tickets Jira par personne" detail={`Colle une fois le tableau complet de la semaine, puis affecte les personnes aux marchés. La vue ${market.name} se met à jour automatiquement.`} action={<div className="title-actions"><JiraPasteImporter key={`${currentWeekYear}-${currentWeek}-${marketId}`} marketId={marketId} marketName={market.name} markets={marketOptions} year={currentWeekYear} week={currentWeek} onImport={importJiraSummary}/><button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter une personne</button></div>}/>
-      <div className="jira-import-note"><Icon name="ticket"/><div><strong>Un tableau conservé par semaine, des affectations durables par marché</strong><span>Le collage global garde toutes les personnes. Les cases cochées pour chaque marché sont réutilisées automatiquement lors des prochains imports, sans doublons.</span></div></div>
+      <SectionTitle eyebrow="05 · Tableau hebdomadaire global" title="Tickets Jira par personne" detail={`Colle une fois le tableau complet de la semaine, puis contrôle les personnes associées à chaque marché. La vue ${market.name} se met à jour automatiquement.`} action={<div className="title-actions"><JiraPasteImporter key={`${currentWeekYear}-${currentWeek}-${marketId}-${directoryRevision}`} marketId={marketId} marketName={market.name} markets={marketOptions} year={currentWeekYear} week={currentWeek} onImport={importJiraSummary}/><button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter une personne</button></div>}/>
+      <div className="jira-import-note"><Icon name="ticket"/><div><strong>Un tableau conservé par semaine, des affectations durables par marché</strong><span>Les noms Jira associés dans l’annuaire GLOBAL sont précochés automatiquement. Les autres personnes restent sélectionnables marché par marché, sans doublons.</span></div></div>
       <div className="surface data-table-wrap jira-summary-wrap"><table className="data-table jira-person-table"><thead><tr><th>Personne</th>{JIRA_SUMMARY_STATUSES.map((status) => <th key={status}>{status}</th>)}<th>Total</th><th/></tr></thead><tbody>{jiraPeople.map((person) => <tr key={person.assignee}><th scope="row"><input value={person.assignee} aria-label={`Personne ${person.assignee}`} onChange={(event) => renameJiraPerson(person.assignee, event.target.value)}/></th>{JIRA_SUMMARY_STATUSES.map((status) => { const statusItems = person.items.filter((item) => item.status === status); const count = statusItems.reduce((sum, item) => sum + jiraItemCount(item), 0); const link = statusItems.find((item) => item.link)?.link; return <td key={status}><div className="jira-count-cell"><input type="number" min="0" value={count} aria-label={`${status} pour ${person.assignee}`} onChange={(event) => setJiraPersonCount(person.assignee, status, Number(event.target.value))}/>{link && <a href={link} target="_blank" rel="noreferrer" title={`Ouvrir le filtre « ${status} »`} aria-label={`Ouvrir le filtre ${status} de ${person.assignee}`}>↗</a>}</div></td>; })}<td className="jira-person-total"><strong>{person.total}</strong><small>{jiraStatusSummary(person.items)}</small></td><td><button className="icon-button subtle" aria-label={`Supprimer ${person.assignee}`} onClick={() => removeJiraPerson(person.assignee)}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!jiraPeople.length && <div className="table-empty">Aucun ticket Jira. Importe le tableau complet ou ajoute une personne.</div>}</div>
     </section>}
 
     {section === "saved" && <section className="editor-section"><SectionTitle eyebrow="07 · Registre en ligne" title="Points enregistrés" detail="Un seul point est conservé par marché et par semaine. Sauvegarder met à jour le point existant." action={<button className="primary-button" disabled={saving || !ready} onClick={savePoint}><Icon name="check"/> {saving ? "Enregistrement…" : "Sauvegarder ce point"}</button>}/><div className="surface version-summary"><div className="version-week"><span>Semaine active</span><strong>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</strong><small>{currentWeekPoint ? `Point enregistré le ${new Date(currentWeekPoint.createdAt.replace(" ", "T") + (currentWeekPoint.createdAt.includes("Z") ? "" : "Z")).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}` : "Aucun point enregistré pour cette semaine"}</small></div><div className="version-next"><span>Fonctionnement</span><strong>{currentWeekPoint ? "Mise à jour" : "Création"}</strong><small>{currentWeekPoint ? "La sauvegarde remplace le contenu enregistré pour cette semaine." : "La première sauvegarde créera le point de cette semaine."}</small></div><div className="version-actions"><button className="secondary-button" onClick={() => fileInput.current?.click()}><Icon name="upload"/> Importer JSON</button><button className="secondary-button" onClick={() => exportJson()}><Icon name="download"/> Exporter le brouillon</button></div></div>{archiveError && <div className="archive-message error"><Icon name="alert"/><span>{archiveError}</span></div>}{archiveLoading ? <div className="archive-message"><span>Chargement des points enregistrés…</span></div> : archive.length ? <div className="archive-list">{archive.map((record) => <article className={`surface archive-row ${activeRecordId === record.id && !isDirty ? "active" : ""}`} key={record.id}><div className="archive-version"><span>{record.year}</span><strong>S{String(record.week).padStart(2, "0")}</strong><small>ISO</small></div><div className="archive-copy"><span>{market.name}</span><strong>{dateLabel(record.meetingDate)}</strong><small>Enregistré le {new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z")).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</small></div><div className="archive-actions"><button className="secondary-button" onClick={() => exportJson(record)}><Icon name="download"/> JSON</button><button className="primary-button" onClick={() => loadRecord(record)}><Icon name="upload"/> Charger</button></div></article>)}</div> : !archiveError && <div className="surface archive-empty"><Icon name="download" size={28}/><strong>Aucun point enregistré</strong><span>Sauvegarde le premier point hebdomadaire de ce marché.</span></div>}</section>}
 
-    {section === "mail" && <section className="editor-section"><SectionTitle eyebrow="07 · Diffusion" title="Paramètres du mail" detail="Ces valeurs sont intégrées au point enregistré et au rendu Outlook."/><div className="surface form-grid mail-settings"><TextField label="Destinataires" value={data.mail.to} onChange={(to) => setData((current) => ({ ...current, mail: { ...current.mail, to } }))} wide/><TextField label="Copie" value={data.mail.cc} onChange={(cc) => setData((current) => ({ ...current, mail: { ...current.mail, cc } }))} wide/><TextField label="Objet" value={data.mail.subject} onChange={(subject) => setData((current) => ({ ...current, mail: { ...current.mail, subject } }))} wide/><label className="field field-wide"><span>Introduction</span><textarea value={data.mail.intro} onChange={(event) => setData((current) => ({ ...current, mail: { ...current.mail, intro: event.target.value } }))}/></label></div><button className="primary-button mail-next" onClick={() => setView("mail")}><Icon name="mail"/> Vérifier le mail</button></section>}
+    {section === "mail" && <section className="editor-section">
+      <SectionTitle eyebrow="07 · Diffusion" title="Paramètres du mail" detail="L’annuaire prépare les destinataires ; tu peux conserver des adresses manuelles en complément." action={<button className="secondary-button" onClick={() => setData((current) => applyDirectoryMail(current, marketId, directoryUsers))}><Icon name="user"/> Actualiser depuis l’annuaire</button>}/>
+      <div className="mail-automation-grid">
+        <article><span><Icon name="mail" size={15}/> Destinataires automatiques</span><strong>{automaticMailToUsers.length ? automaticMailToUsers.map((user) => user.name).join(" · ") : "Aucun pour ce marché"}</strong><small>Chefs de produit, chefs de marché et analystes liés à {market.name}.</small></article>
+        <article><span><Icon name="copy" size={15}/> Copie automatique</span><strong>{automaticMailCcUsers.length ? automaticMailCcUsers.map((user) => user.name).join(" · ") : "Manager Tarif non renseigné"}</strong><small>L’unique manager Tarif est ajouté en copie pour tous les marchés.</small></article>
+      </div>
+      <div className="surface form-grid mail-settings"><TextField label="Destinataires" value={data.mail.to} onChange={(to) => setData((current) => ({ ...current, mail: { ...current.mail, to } }))} wide/><TextField label="Copie" value={data.mail.cc} onChange={(cc) => setData((current) => ({ ...current, mail: { ...current.mail, cc } }))} wide/><TextField label="Objet" value={data.mail.subject} onChange={(subject) => setData((current) => ({ ...current, mail: { ...current.mail, subject } }))} wide/><label className="field field-wide"><span>Introduction</span><textarea value={data.mail.intro} onChange={(event) => setData((current) => ({ ...current, mail: { ...current.mail, intro: event.target.value } }))}/></label></div><button className="primary-button mail-next" onClick={() => setView("mail")}><Icon name="mail"/> Vérifier le mail</button>
+    </section>}
   </main></div>;
 
   return <div className={`app-shell market-${market.tone}`} style={themeStyle}><div className="ambient ambient-a"/><div className="ambient ambient-b"/>
@@ -765,6 +950,16 @@ export default function Home() {
     {view === "edit" && session.user && renderEditor()}
     {view === "read" && <main className="preview-page"><div className="preview-toolbar"><div><span>Lecture générale</span><strong>Choisis le marché et la semaine dans le calendrier ci-dessus.</strong></div><button className="secondary-button" onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> {session.user ? "Modifier ce point" : "Connexion GLOBAL pour modifier"}</button></div>{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>La lecture affiche le brouillon disponible ; une sauvegarde créera le point de cette semaine.</span></div></div>}<PreviewDashboard data={data} market={market}/></main>}
     {view === "mail" && <main className="mail-page"><div className="mail-toolbar"><div><span>Aperçu Outlook</span><strong>Statique, responsive et sans script.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { setSection("mail"); chooseView("edit"); }}><Icon name={session.user ? "edit" : "lock"}/> Paramètres</button><button className="secondary-button" onClick={() => download(`point-marche-mail-${marketId}-${data.meetingDate}.html`, mailHtml, "text/html;charset=utf-8")}><Icon name="download"/> Télécharger HTML</button><button className="primary-button" onClick={copyMail}><Icon name="copy"/> Copier pour Outlook</button></div></div><div className="mail-frame-wrap"><iframe title="Aperçu du mail Outlook" srcDoc={mailHtml}/></div></main>}
+    {carryoverOpen && previousPoint && <div className="login-backdrop" onMouseDown={() => setCarryoverOpen(false)}><section className="carryover-dialog" role="dialog" aria-modal="true" aria-labelledby="carryover-title" onMouseDown={(event) => event.stopPropagation()}>
+      <button className="login-close" type="button" aria-label="Fermer" onClick={() => setCarryoverOpen(false)}>×</button>
+      <div className="carryover-heading"><span className="login-emblem"><Icon name="copy" size={22}/></span><div><span>Reprise sélective</span><h2 id="carryover-title">Reporter le point précédent</h2><p>{market.name} · {previousPoint.year} · S{String(previousPoint.week).padStart(2, "0")} vers {currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</p></div></div>
+      <div className="carryover-presets"><button type="button" onClick={() => setCarryoverPreset("unfinished")}><Icon name="alert" size={14}/> Non terminés</button><button type="button" onClick={() => setCarryoverPreset("all")}>Tout sélectionner</button><button type="button" onClick={() => setCarryoverPreset("none")}>Tout retirer</button></div>
+      <div className="carryover-content">
+        <div className="carryover-group"><div className="carryover-group-title"><span>Dossiers</span><b>{previousPoint.data.dossiers.length}</b></div>{previousPoint.data.dossiers.length ? previousPoint.data.dossiers.map((item) => { const alreadyCarried = data.dossiers.some((current) => (current.sourceId ?? current.id) === (item.sourceId ?? item.id)); return <label className={`carryover-row ${alreadyCarried ? "is-disabled" : ""}`} key={`dossier:${item.id}`}><input type="checkbox" disabled={alreadyCarried} checked={!alreadyCarried && Boolean(carryoverSelection[`dossier:${item.id}`])} onChange={(event) => setCarryoverSelection((current) => ({ ...current, [`dossier:${item.id}`]: event.target.checked }))}/><span><strong>{item.title || "Dossier sans titre"}</strong><small>{[item.universe, item.reference, item.owner].filter(Boolean).join(" · ") || "Contexte à compléter"}</small></span><b className={`tone-text-${toneForStatus(item.status)}`}>{alreadyCarried ? "Déjà reporté" : item.status}</b></label>; }) : <div className="carryover-empty">Aucun dossier dans ce point.</div>}</div>
+        <div className="carryover-group"><div className="carryover-group-title"><span>Opérations commerciales</span><b>{previousPoint.data.operations.length}</b></div>{previousPoint.data.operations.length ? previousPoint.data.operations.map((item) => { const alreadyCarried = data.operations.some((current) => (current.sourceId ?? current.id) === (item.sourceId ?? item.id)); return <label className={`carryover-row ${alreadyCarried ? "is-disabled" : ""}`} key={`operation:${item.id}`}><input type="checkbox" disabled={alreadyCarried} checked={!alreadyCarried && Boolean(carryoverSelection[`operation:${item.id}`])} onChange={(event) => setCarryoverSelection((current) => ({ ...current, [`operation:${item.id}`]: event.target.checked }))}/><span><strong>{item.name || "Opération sans titre"}</strong><small>{item.month || "Mois à définir"}</small></span><b className={`tone-text-${toneForStatus(item.state)}`}>{alreadyCarried ? "Déjà reportée" : item.state}</b></label>; }) : <div className="carryover-empty">Aucune opération commerciale dans ce point.</div>}</div>
+      </div>
+      <div className="carryover-footer"><span>Le point précédent reste intact. Chaque élément repris garde son origine.</span><button className="primary-button" type="button" disabled={!carryoverSelectedCount} onClick={applyCarryover}><Icon name="copy"/> Reporter {carryoverSelectedCount || ""} élément{carryoverSelectedCount > 1 ? "s" : ""}</button></div>
+    </section></div>}
     {loginOpen && <div className="login-backdrop" onMouseDown={() => !loginLoading && setLoginOpen(false)}><section className="login-dialog" role="dialog" aria-modal="true" aria-labelledby="login-title" onMouseDown={(event) => event.stopPropagation()}><button className="login-close" type="button" aria-label="Fermer" disabled={loginLoading} onClick={() => setLoginOpen(false)}>×</button><span className="login-emblem"><Icon name="lock" size={22}/></span><div className="login-heading"><span>Accès aux modifications</span><h2 id="login-title">Connexion GLOBAL</h2><p>La lecture reste accessible. Connecte-toi pour modifier et sauvegarder les points marché.</p></div><form onSubmit={submitLogin}><label><span>Compte</span><input autoFocus autoComplete="username" value={loginUsername} onChange={(event) => setLoginUsername(event.target.value)} /></label><label><span>Mot de passe</span><input type="password" autoComplete="current-password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} /></label>{loginError && <div className="login-error"><Icon name="alert" size={15}/>{loginError}</div>}<button className="primary-button login-submit" type="submit" disabled={loginLoading || !loginUsername || !loginPassword}><Icon name="lock"/> {loginLoading ? "Connexion…" : "Se connecter"}</button></form><small className="login-session-note">La session d’édition reste active pendant 12 heures sur cet appareil.</small></section></div>}
     {toast && <div className="toast"><Icon name="check"/>{toast}</div>}
   </div>;

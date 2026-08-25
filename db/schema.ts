@@ -54,3 +54,29 @@ export const jiraMarketAssignments = sqliteTable("jira_market_assignments", {
   uniqueIndex("jira_market_assignments_market_person_idx").on(table.marketId, table.assignee),
   index("jira_market_assignments_market_idx").on(table.marketId),
 ]);
+
+export const globalUsers = sqliteTable("global_users", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  jiraName: text("jira_name").notNull(),
+  role: text("role").notNull().default("autre"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("global_users_email_idx").on(table.email),
+  index("global_users_active_name_idx").on(table.isActive, table.name),
+  index("global_users_jira_name_idx").on(table.jiraName),
+]);
+
+export const globalUserMarkets = sqliteTable("global_user_markets", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => globalUsers.id, { onDelete: "cascade" }),
+  marketId: text("market_id").notNull().references(() => marketDefinitions.id),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("global_user_markets_user_market_idx").on(table.userId, table.marketId),
+  index("global_user_markets_market_idx").on(table.marketId),
+  index("global_user_markets_user_idx").on(table.userId),
+]);
