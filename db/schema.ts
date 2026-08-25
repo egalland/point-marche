@@ -7,6 +7,8 @@ export const marketDefinitions = sqliteTable("market_definitions", {
   shortCode: text("short_code").notNull(),
   tone: text("tone").notNull().default("mint"),
   colorHex: text("color_hex").notNull().default(""),
+  jiraWarningDays: integer("jira_warning_days").notNull().default(10),
+  jiraCriticalDays: integer("jira_critical_days").notNull().default(20),
   position: integer("position").notNull().default(0),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -45,6 +47,21 @@ export const jiraWeeklySnapshots = sqliteTable("jira_weekly_snapshots", {
   uniqueIndex("jira_weekly_snapshots_year_week_idx").on(table.year, table.week),
 ]);
 
+export const jiraMarketWeeklySnapshots = sqliteTable("jira_market_weekly_snapshots", {
+  id: text("id").primaryKey(),
+  marketId: text("market_id").notNull().references(() => marketDefinitions.id),
+  year: integer("year").notNull(),
+  week: integer("week").notNull(),
+  rawText: text("raw_text").notNull(),
+  payload: text("payload").notNull(),
+  updatedBy: text("updated_by").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("jira_market_weekly_snapshots_market_period_idx").on(table.marketId, table.year, table.week),
+  index("jira_market_weekly_snapshots_market_updated_idx").on(table.marketId, table.updatedAt),
+]);
+
 export const jiraMarketAssignments = sqliteTable("jira_market_assignments", {
   id: text("id").primaryKey(),
   marketId: text("market_id").notNull(),
@@ -59,7 +76,7 @@ export const globalUsers = sqliteTable("global_users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull(),
-  jiraName: text("jira_name").notNull(),
+  usercode: text("jira_name").notNull(),
   role: text("role").notNull().default("autre"),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -67,7 +84,7 @@ export const globalUsers = sqliteTable("global_users", {
 }, (table) => [
   uniqueIndex("global_users_email_idx").on(table.email),
   index("global_users_active_name_idx").on(table.isActive, table.name),
-  index("global_users_jira_name_idx").on(table.jiraName),
+  index("global_users_jira_name_idx").on(table.usercode),
 ]);
 
 export const globalUserMarkets = sqliteTable("global_user_markets", {

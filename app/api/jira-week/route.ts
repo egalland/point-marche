@@ -1,10 +1,8 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { globalUserMarkets, globalUsers, jiraMarketAssignments, jiraWeeklySnapshots, marketDefinitions } from "../../../db/schema";
-import { parseJiraAssigneeSummary } from "../../../lib/jira-import";
+import { globalUserMarkets, globalUsers, jiraMarketAssignments, jiraMarketWeeklySnapshots, jiraWeeklySnapshots, marketDefinitions } from "../../../db/schema";
+import { parseJiraAssigneeSummary, type JiraSummaryImport } from "../../../lib/jira-import";
 import { getEditorUser } from "../../simple-auth";
-
-type AssignmentPayload = Record<string, unknown>;
 
 function validPeriod(year: number, week: number) {
   return Number.isInteger(year) && year >= 2020 && year <= 2200 && Number.isInteger(week) && week >= 1 && week <= 53;
@@ -12,7 +10,7 @@ function validPeriod(year: number, week: number) {
 
 function routeError(error: unknown) {
   const message = error instanceof Error ? error.message : "Erreur inattendue";
-  if (/no such table|jira_weekly_snapshots|jira_market_assignments/i.test(message)) return "Le registre Jira hebdomadaire n’est pas encore disponible.";
+  if (/no such table|jira_weekly_snapshots|jira_market_weekly_snapshots|jira_market_assignments/i.test(message)) return "Le registre Jira hebdomadaire n’est pas encore disponible.";
   return message;
 }
 
@@ -23,27 +21,40 @@ function assignmentMap(rows: (typeof jiraMarketAssignments.$inferSelect)[]) {
   }, {});
 }
 
+function serializedSnapshot(snapshot: typeof jiraMarketWeeklySnapshots.$inferSelect | typeof jiraWeeklySnapshots.$inferSelect, summary: JiraSummaryImport) {
+  return {
+    year: snapshot.year,
+    week: snapshot.week,
+    rawText: snapshot.rawText,
+    summary,
+    updatedAt: snapshot.updatedAt,
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
+    const marketId = url.searchParams.get("marketId")?.trim() ?? "";
     const year = Number(url.searchParams.get("year"));
     const week = Number(url.searchParams.get("week"));
-    if (!validPeriod(year, week)) return Response.json({ error: "Année ou semaine ISO invalide." }, { status: 400 });
+    if (!marketId || !validPeriod(year, week)) return Response.json({ error: "Marché, année ou semaine ISO invalide." }, { status: 400 });
 
     const db = getDb();
-    const [snapshot] = await db.select().from(jiraWeeklySnapshots)
-      .where(and(eq(jiraWeeklySnapshots.year, year), eq(jiraWeeklySnapshots.week, week))).limit(1);
+    const [marketSnapshot] = await db.select().from(jiraMarketWeeklySnapshots)
+      .where(and(eq(jiraMarketWeeklySnapshots.marketId, marketId), eq(jiraMarketWeeklySnapshots.year, year), eq(jiraMarketWeeklySnapshots.week, week))).limit(1);
     const assignments = await db.select().from(jiraMarketAssignments)
       .orderBy(asc(jiraMarketAssignments.marketId), asc(jiraMarketAssignments.assignee));
+    if (marketSnapshot) {
+      return Response.json({
+        snapshot: serializedSnapshot(marketSnapshot, JSON.parse(marketSnapshot.payload) as JiraSummaryImport),
+        assignments: assignmentMap(assignments),
+      });
+    }
 
+    const [legacySnapshot] = await db.select().from(jiraWeeklySnapshots)
+      .where(and(eq(jiraWeeklySnapshots.year, year), eq(jiraWeeklySnapshots.week, week))).limit(1);
     return Response.json({
-      snapshot: snapshot ? {
-        year: snapshot.year,
-        week: snapshot.week,
-        rawText: snapshot.rawText,
-        summary: JSON.parse(snapshot.payload),
-        updatedAt: snapshot.updatedAt,
-      } : null,
+      snapshot: legacySnapshot ? serializedSnapshot(legacySnapshot, JSON.parse(legacySnapshot.payload) as JiraSummaryImport) : null,
       assignments: assignmentMap(assignments),
     });
   } catch (error) {
@@ -53,75 +64,61 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getEditorUser();
-    if (!user) return Response.json({ error: "Connecte-toi pour enregistrer le tableau Jira." }, { status: 401 });
+    const editor = await getEditorUser();
+    if (!editor) return Response.json({ error: "Connecte-toi pour enregistrer le tableau Jira." }, { status: 401 });
 
-    const body = await request.json() as { year?: unknown; week?: unknown; rawText?: unknown; assignments?: AssignmentPayload };
+    const body = await request.json() as { marketId?: unknown; year?: unknown; week?: unknown; rawText?: unknown };
+    const marketId = typeof body.marketId === "string" ? body.marketId.trim() : "";
     const year = Number(body.year);
     const week = Number(body.week);
     const rawText = typeof body.rawText === "string" ? body.rawText.trim() : "";
-    if (!validPeriod(year, week)) return Response.json({ error: "Année ou semaine ISO invalide." }, { status: 400 });
-    if (!rawText) return Response.json({ error: "Colle d’abord le tableau Jira complet." }, { status: 400 });
+    if (!marketId || !validPeriod(year, week)) return Response.json({ error: "Marché, année ou semaine ISO invalide." }, { status: 400 });
+    if (!rawText) return Response.json({ error: "Colle d’abord le tableau Jira détaillé." }, { status: 400 });
     if (rawText.length > 1_500_000) return Response.json({ error: "Le tableau Jira est trop volumineux." }, { status: 413 });
 
-    const summary = parseJiraAssigneeSummary(rawText);
-    if (!summary.personCount) return Response.json({ error: "Aucune personne Jira reconnue dans le tableau." }, { status: 400 });
-
-    const db = getDb();
-    const now = sql`CURRENT_TIMESTAMP`;
-    await db.insert(jiraWeeklySnapshots).values({
-      id: crypto.randomUUID(),
-      year,
-      week,
-      rawText,
-      payload: JSON.stringify(summary),
-      updatedBy: user.username,
-    }).onConflictDoUpdate({
-      target: [jiraWeeklySnapshots.year, jiraWeeklySnapshots.week],
-      set: { rawText, payload: JSON.stringify(summary), updatedBy: user.username, updatedAt: now },
-    });
-
-    const activeMarkets = await db.select({ id: marketDefinitions.id }).from(marketDefinitions)
-      .where(eq(marketDefinitions.isActive, true));
-    const automaticDirectoryAssignments = await db.select({ marketId: globalUserMarkets.marketId, assignee: globalUsers.jiraName })
-      .from(globalUserMarkets)
-      .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
-      .where(and(
-        eq(globalUsers.isActive, true),
-        inArray(globalUsers.role, ["chef-produit", "chef-marche", "analyste-tarif-referentiel"]),
-      ));
-    const automaticByMarket = automaticDirectoryAssignments.reduce<Record<string, string[]>>((result, assignment) => {
-      result[assignment.marketId] = [...(result[assignment.marketId] ?? []), assignment.assignee];
-      return result;
-    }, {});
-    const people = summary.people.map((person) => person.assignee);
-    const knownPeople = new Set(people);
-    for (const market of activeMarkets) {
-      await db.delete(jiraMarketAssignments).where(and(
-        eq(jiraMarketAssignments.marketId, market.id),
-        inArray(jiraMarketAssignments.assignee, people),
-      ));
-      const manuallySelected = Array.isArray(body.assignments?.[market.id])
-        ? (body.assignments?.[market.id] as unknown[]).filter((name): name is string => typeof name === "string" && knownPeople.has(name))
-        : [];
-      const selected = Array.from(new Set([
-        ...manuallySelected,
-        ...(automaticByMarket[market.id] ?? []).filter((name) => knownPeople.has(name)),
-      ]));
-      if (selected.length) {
-        await db.insert(jiraMarketAssignments).values(selected.map((assignee) => ({
-          id: crypto.randomUUID(),
-          marketId: market.id,
-          assignee,
-        }))).onConflictDoNothing();
-      }
+    const parsed = parseJiraAssigneeSummary(rawText);
+    if (parsed.mode !== "detailed" || !parsed.detailedTickets.length) {
+      return Response.json({ error: "Le tableau détaillé avec ticket, état, résumé, création, USERCODE et mise à jour n’a pas été reconnu." }, { status: 400 });
     }
 
-    const savedAssignments = await db.select().from(jiraMarketAssignments)
-      .orderBy(asc(jiraMarketAssignments.marketId), asc(jiraMarketAssignments.assignee));
+    const db = getDb();
+    const [market] = await db.select({ id: marketDefinitions.id }).from(marketDefinitions)
+      .where(and(eq(marketDefinitions.id, marketId), eq(marketDefinitions.isActive, true))).limit(1);
+    if (!market) return Response.json({ error: "Marché introuvable." }, { status: 404 });
+
+    const directory = await db.select({ usercode: globalUsers.usercode, name: globalUsers.name })
+      .from(globalUserMarkets)
+      .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
+      .where(and(eq(globalUserMarkets.marketId, marketId), eq(globalUsers.isActive, true)));
+    const directoryByUserCode = new Map(directory.map((person) => [person.usercode.toUpperCase(), person]));
+    if (!directoryByUserCode.size) return Response.json({ error: "Ajoute d’abord les personnes et leurs USERCODE dans l’annuaire de ce marché." }, { status: 409 });
+
+    const summary: JiraSummaryImport = {
+      ...parsed,
+      people: parsed.people.map((person) => {
+        const known = directoryByUserCode.get(person.assignee.toUpperCase());
+        return { ...person, displayName: known?.name, marketId: known ? marketId : undefined };
+      }),
+      detailedTickets: parsed.detailedTickets.map((ticket) => {
+        const known = directoryByUserCode.get(ticket.assigneeUserCode.toUpperCase());
+        return { ...ticket, assigneeName: known?.name, marketId: known ? marketId : undefined };
+      }),
+    };
+    const recognizedTickets = summary.detailedTickets.filter((ticket) => ticket.marketId === marketId);
+    if (!recognizedTickets.length) return Response.json({ error: "Aucun USERCODE de cet export ne correspond aux personnes du marché." }, { status: 409 });
+
+    const now = sql`CURRENT_TIMESTAMP`;
+    await db.insert(jiraMarketWeeklySnapshots).values({
+      id: crypto.randomUUID(), marketId, year, week, rawText, payload: JSON.stringify(summary), updatedBy: editor.username,
+    }).onConflictDoUpdate({
+      target: [jiraMarketWeeklySnapshots.marketId, jiraMarketWeeklySnapshots.year, jiraMarketWeeklySnapshots.week],
+      set: { rawText, payload: JSON.stringify(summary), updatedBy: editor.username, updatedAt: now },
+    });
+
     return Response.json({
       snapshot: { year, week, rawText, summary, updatedAt: new Date().toISOString() },
-      assignments: assignmentMap(savedAssignments),
+      assignments: { [marketId]: Array.from(directoryByUserCode.keys()) },
+      recognizedTickets: recognizedTickets.length,
     }, { status: 201 });
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });
