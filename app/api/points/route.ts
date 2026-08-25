@@ -1,4 +1,4 @@
-import { and, desc, eq, max } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { weeklyPoints } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
@@ -32,7 +32,6 @@ function serializePoint(row: typeof weeklyPoints.$inferSelect) {
     marketId: row.marketId,
     year: row.year,
     week: row.week,
-    version: row.version,
     meetingDate: row.meetingDate,
     pointName: row.pointName,
     themeColor: row.themeColor,
@@ -60,7 +59,12 @@ export async function GET(request: Request) {
       .orderBy(desc(weeklyPoints.year), desc(weeklyPoints.week), desc(weeklyPoints.version))
       .limit(200);
 
-    return Response.json({ points: rows.map(serializePoint) });
+    const latestByWeek = new Map<string, typeof weeklyPoints.$inferSelect>();
+    rows.forEach((row) => {
+      const key = `${row.year}-${row.week}`;
+      if (!latestByWeek.has(key)) latestByWeek.set(key, row);
+    });
+    return Response.json({ points: Array.from(latestByWeek.values(), serializePoint) });
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });
   }
@@ -69,7 +73,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await getChatGPTUser();
-    if (!user) return Response.json({ error: "Connecte-toi pour enregistrer une version." }, { status: 401 });
+    if (!user) return Response.json({ error: "Connecte-toi pour enregistrer le point." }, { status: 401 });
     const body = await request.json() as SavePointRequest;
     const marketId = body.marketId?.trim() ?? "";
     const data = body.data;
@@ -89,31 +93,44 @@ export async function POST(request: Request) {
     const { year, week } = isoWeekParts(meetingDate);
     const db = getDb();
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const [result] = await db.select({ value: max(weeklyPoints.version) }).from(weeklyPoints)
-        .where(and(eq(weeklyPoints.marketId, marketId), eq(weeklyPoints.year, year), eq(weeklyPoints.week, week)));
-      const version = Number(result?.value ?? 0) + 1;
+    const [existing] = await db.select().from(weeklyPoints)
+      .where(and(eq(weeklyPoints.marketId, marketId), eq(weeklyPoints.year, year), eq(weeklyPoints.week, week)))
+      .orderBy(desc(weeklyPoints.version)).limit(1);
 
-      try {
-        const [saved] = await db.insert(weeklyPoints).values({
-          id: crypto.randomUUID(),
-          marketId,
-          year,
-          week,
-          version,
-          meetingDate,
-          pointName,
-          themeColor,
-          payload,
-        }).returning();
-        return Response.json({ point: serializePoint(saved) }, { status: 201 });
-      } catch (error) {
-        if (attempt < 2 && /unique|constraint/i.test(error instanceof Error ? error.message : "")) continue;
-        throw error;
-      }
+    if (existing) {
+      const [saved] = await db.update(weeklyPoints).set({
+        meetingDate,
+        pointName,
+        themeColor,
+        payload,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+      }).where(eq(weeklyPoints.id, existing.id)).returning();
+      return Response.json({ point: serializePoint(saved) });
     }
 
-    return Response.json({ error: "Impossible d’attribuer une nouvelle version." }, { status: 409 });
+    try {
+      const [saved] = await db.insert(weeklyPoints).values({
+        id: crypto.randomUUID(),
+        marketId,
+        year,
+        week,
+        version: 1,
+        meetingDate,
+        pointName,
+        themeColor,
+        payload,
+      }).returning();
+      return Response.json({ point: serializePoint(saved) }, { status: 201 });
+    } catch (error) {
+      if (!/unique|constraint/i.test(error instanceof Error ? error.message : "")) throw error;
+      const [concurrent] = await db.select().from(weeklyPoints)
+        .where(and(eq(weeklyPoints.marketId, marketId), eq(weeklyPoints.year, year), eq(weeklyPoints.week, week)))
+        .orderBy(desc(weeklyPoints.version)).limit(1);
+      if (!concurrent) throw error;
+      const [saved] = await db.update(weeklyPoints).set({ meetingDate, pointName, themeColor, payload, createdAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(weeklyPoints.id, concurrent.id)).returning();
+      return Response.json({ point: serializePoint(saved) });
+    }
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });
   }
