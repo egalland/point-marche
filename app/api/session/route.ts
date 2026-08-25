@@ -1,12 +1,8 @@
-import { chatGPTSignInPath, chatGPTSignOutPath, getChatGPTUser } from "../../chatgpt-auth";
+import { getEditorUser } from "../../simple-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const user = await getChatGPTUser();
-  return Response.json({
-    user,
-    signInPath: chatGPTSignInPath("/?mode=edit"),
-    signOutPath: chatGPTSignOutPath("/"),
-  });
+  const user = await getEditorUser();
+  return Response.json({ user }, { headers: { "Cache-Control": "no-store" } });
 }

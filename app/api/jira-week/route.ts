@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { jiraMarketAssignments, jiraWeeklySnapshots, marketDefinitions } from "../../../db/schema";
 import { parseJiraAssigneeSummary } from "../../../lib/jira-import";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getEditorUser } from "../../simple-auth";
 
 type AssignmentPayload = Record<string, unknown>;
 
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getChatGPTUser();
+    const user = await getEditorUser();
     if (!user) return Response.json({ error: "Connecte-toi pour enregistrer le tableau Jira." }, { status: 401 });
 
     const body = await request.json() as { year?: unknown; week?: unknown; rawText?: unknown; assignments?: AssignmentPayload };
@@ -75,10 +75,10 @@ export async function POST(request: Request) {
       week,
       rawText,
       payload: JSON.stringify(summary),
-      updatedBy: user.email,
+      updatedBy: user.username,
     }).onConflictDoUpdate({
       target: [jiraWeeklySnapshots.year, jiraWeeklySnapshots.week],
-      set: { rawText, payload: JSON.stringify(summary), updatedBy: user.email, updatedAt: now },
+      set: { rawText, payload: JSON.stringify(summary), updatedBy: user.username, updatedAt: now },
     });
 
     const activeMarkets = await db.select({ id: marketDefinitions.id }).from(marketDefinitions)

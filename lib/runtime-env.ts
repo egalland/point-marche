@@ -9,6 +9,9 @@ type D1PreparedStatementLike = {
 };
 
 export type RuntimeEnv = {
+  MARKET_PULSE_USERNAME?: string;
+  MARKET_PULSE_PASSWORD?: string;
+  MARKET_PULSE_SESSION_SECRET?: string;
   DB?: {
     prepare(query: string): D1PreparedStatementLike;
     batch<T = unknown>(statements: D1PreparedStatementLike[]): Promise<T[]>;

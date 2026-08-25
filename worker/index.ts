@@ -6,6 +6,9 @@ import { runWithRuntimeEnv } from "../lib/runtime-env";
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  MARKET_PULSE_USERNAME?: string;
+  MARKET_PULSE_PASSWORD?: string;
+  MARKET_PULSE_SESSION_SECRET?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {

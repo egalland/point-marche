@@ -1,7 +1,7 @@
 import { and, asc, eq, max, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { marketDefinitions } from "../../../db/schema";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getEditorUser } from "../../simple-auth";
 
 const tones = new Set(["mint", "violet", "aqua", "peach", "red"]);
 
@@ -25,7 +25,7 @@ function cleanHex(value: unknown) {
 }
 
 async function requireEditor() {
-  const user = await getChatGPTUser();
+  const user = await getEditorUser();
   return user ? null : Response.json({ error: "Connecte-toi pour modifier les marchés." }, { status: 401 });
 }
 

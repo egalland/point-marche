@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { JIRA_SUMMARY_STATUSES, parseJiraAssigneeSummary, type JiraSummaryImport } from "../lib/jira-import";
 
 type Tone = "mint" | "violet" | "aqua" | "peach" | "red";
@@ -18,7 +18,7 @@ type PointRecord = { id: string; marketId: string; year: number; week: number; m
 type ImportOutcome = { count: number; message?: string };
 type JiraPersonGroup = { assignee: string; items: JiraTicket[]; total: number };
 type JiraWeekPayload = { snapshot: { year: number; week: number; rawText: string; summary: JiraSummaryImport; updatedAt: string } | null; assignments: Record<string, string[]>; error?: string };
-type SessionPayload = { user: { displayName: string; email: string } | null; signInPath: string; signOutPath: string };
+type SessionPayload = { user: { displayName: string; username: string } | null };
 
 const defaultMarkets: Market[] = [
   { id: "revetements-menuiserie", name: "Revêtements & Menuiserie", short: "REV–MEN", tone: "mint", colorHex: "", position: 0 },
@@ -397,8 +397,13 @@ export default function Home() {
   const [lastSavedSignature, setLastSavedSignature] = useState("");
   const [toast, setToast] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(() => monthStart(isoToday()));
-  const [session, setSession] = useState<SessionPayload>({ user: null, signInPath: "/signin-with-chatgpt?return_to=%2F%3Fmode%3Dedit", signOutPath: "/" });
+  const [session, setSession] = useState<SessionPayload>({ user: null });
   const [sessionReady, setSessionReady] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginUsername, setLoginUsername] = useState("GLOBAL");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const archiveRequest = useRef(0);
   const market = marketOptions.find((item) => item.id === marketId) ?? marketOptions[0] ?? defaultMarkets[0];
@@ -487,9 +492,41 @@ export default function Home() {
   }, []);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(timer); }, [toast]);
 
+  const openLogin = () => {
+    setLoginError("");
+    setLoginOpen(true);
+  };
+  const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (loginLoading) return;
+    setLoginLoading(true);
+    setLoginError("");
+    try {
+      const response = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: loginUsername, password: loginPassword }) });
+      const payload = await response.json() as { user?: SessionPayload["user"]; error?: string };
+      if (!response.ok || !payload.user) throw new Error(payload.error || "Connexion impossible.");
+      setSession({ user: payload.user });
+      setLoginPassword("");
+      setLoginOpen(false);
+      setView("edit");
+      setToast("Connexion réussie. Mode édition ouvert.");
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Connexion impossible.");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+  const logout = async () => {
+    await fetch("/api/logout", { method: "POST" }).catch(() => undefined);
+    setSession({ user: null });
+    setView("read");
+    setLoginPassword("");
+    setToast("Déconnexion effectuée.");
+  };
+
   const chooseView = (nextView: View) => {
     if (nextView === "edit" && !session.user) {
-      window.location.href = session.signInPath;
+      openLogin();
       return;
     }
     setView(nextView);
@@ -583,7 +620,7 @@ export default function Home() {
   };
   const savePoint = async () => {
     if (saving || !ready) return;
-    if (!session.user) { window.location.href = session.signInPath; return; }
+    if (!session.user) { openLogin(); return; }
     if (data.customColor && !validHex(data.customColor)) { setToast("La couleur personnalisée doit suivre le format #RRGGBB."); return; }
     setSaving(true);
     try {
@@ -719,15 +756,16 @@ export default function Home() {
       <div className="header-actions">
         <input ref={fileInput} className="sr-only" type="file" accept="application/json" onChange={importJson}/>
         {session.user && view === "edit" && <><button className="icon-button" title="Importer un fichier JSON" onClick={() => fileInput.current?.click()}><Icon name="upload"/></button><button className="icon-button" title="Exporter le point en JSON" onClick={() => exportJson()}><Icon name="download"/></button><button className="secondary-button new-point" onClick={resetPoint}>Nouveau</button><button className="primary-button save-point" disabled={saving || !ready} onClick={savePoint}><Icon name="check"/> {saving ? "Enregistrement…" : "Sauvegarder"}</button></>}
-        {!session.user && <a className="login-button" href={session.signInPath}><Icon name="lock"/> {sessionReady ? "Connexion édition" : "Vérification…"}</a>}
-        {session.user && <div className="editor-profile"><span><Icon name="user" size={15}/></span><div><strong>{session.user.displayName}</strong><small>Profil d’édition</small></div><a href={session.signOutPath}>Déconnexion</a></div>}
+        {!session.user && <button className="login-button" disabled={!sessionReady} onClick={openLogin}><Icon name="lock"/> {sessionReady ? "Connexion édition" : "Vérification…"}</button>}
+        {session.user && <div className="editor-profile"><span><Icon name="user" size={15}/></span><div><strong>{session.user.displayName}</strong><small>{session.user.username}</small></div><button onClick={logout}>Déconnexion</button></div>}
       </div>
     </header>
     <div id="top" className="top-strip"><span className="live-dot"/><strong>{market.short}</strong><i/>{isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}<i/>{dateLabel(data.meetingDate)}<i/>{isDirty ? "Brouillon" : activeRecordId ? "Enregistré" : "Non enregistré"}<b>{alerts.length ? `${alerts.length} vigilance${alerts.length > 1 ? "s" : ""}` : "Aucune vigilance"}</b></div>
     {view !== "mail" && periodNavigator}
     {view === "edit" && session.user && renderEditor()}
-    {view === "read" && <main className="preview-page"><div className="preview-toolbar"><div><span>Lecture générale</span><strong>Choisis le marché et la semaine dans le calendrier ci-dessus.</strong></div><button className="secondary-button" onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> {session.user ? "Modifier ce point" : "Se connecter pour modifier"}</button></div>{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>La lecture affiche le brouillon disponible ; une sauvegarde créera le point de cette semaine.</span></div></div>}<PreviewDashboard data={data} market={market}/></main>}
+    {view === "read" && <main className="preview-page"><div className="preview-toolbar"><div><span>Lecture générale</span><strong>Choisis le marché et la semaine dans le calendrier ci-dessus.</strong></div><button className="secondary-button" onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> {session.user ? "Modifier ce point" : "Connexion GLOBAL pour modifier"}</button></div>{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>La lecture affiche le brouillon disponible ; une sauvegarde créera le point de cette semaine.</span></div></div>}<PreviewDashboard data={data} market={market}/></main>}
     {view === "mail" && <main className="mail-page"><div className="mail-toolbar"><div><span>Aperçu Outlook</span><strong>Statique, responsive et sans script.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { setSection("mail"); chooseView("edit"); }}><Icon name={session.user ? "edit" : "lock"}/> Paramètres</button><button className="secondary-button" onClick={() => download(`point-marche-mail-${marketId}-${data.meetingDate}.html`, mailHtml, "text/html;charset=utf-8")}><Icon name="download"/> Télécharger HTML</button><button className="primary-button" onClick={copyMail}><Icon name="copy"/> Copier pour Outlook</button></div></div><div className="mail-frame-wrap"><iframe title="Aperçu du mail Outlook" srcDoc={mailHtml}/></div></main>}
+    {loginOpen && <div className="login-backdrop" onMouseDown={() => !loginLoading && setLoginOpen(false)}><section className="login-dialog" role="dialog" aria-modal="true" aria-labelledby="login-title" onMouseDown={(event) => event.stopPropagation()}><button className="login-close" type="button" aria-label="Fermer" disabled={loginLoading} onClick={() => setLoginOpen(false)}>×</button><span className="login-emblem"><Icon name="lock" size={22}/></span><div className="login-heading"><span>Accès aux modifications</span><h2 id="login-title">Connexion GLOBAL</h2><p>La lecture reste accessible. Connecte-toi pour modifier et sauvegarder les points marché.</p></div><form onSubmit={submitLogin}><label><span>Compte</span><input autoFocus autoComplete="username" value={loginUsername} onChange={(event) => setLoginUsername(event.target.value)} /></label><label><span>Mot de passe</span><input type="password" autoComplete="current-password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} /></label>{loginError && <div className="login-error"><Icon name="alert" size={15}/>{loginError}</div>}<button className="primary-button login-submit" type="submit" disabled={loginLoading || !loginUsername || !loginPassword}><Icon name="lock"/> {loginLoading ? "Connexion…" : "Se connecter"}</button></form><small className="login-session-note">La session d’édition reste active pendant 12 heures sur cet appareil.</small></section></div>}
     {toast && <div className="toast"><Icon name="check"/>{toast}</div>}
   </div>;
 }
