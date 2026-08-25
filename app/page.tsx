@@ -4,25 +4,27 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import { JIRA_SUMMARY_STATUSES, parseJiraAssigneeSummary, type JiraSummaryImport } from "../lib/jira-import";
 
 type Tone = "mint" | "violet" | "aqua" | "peach" | "red";
-type View = "edit" | "preview" | "mail";
+type View = "read" | "edit" | "mail";
 type Section = "general" | "dossiers" | "operations" | "tariffs" | "jira" | "versions" | "markets" | "mail";
 type Dossier = { id: string; title: string; universe: string; reference: string; status: string; owner: string; action: string; deadline: string; progress: number; comment: string };
 type CommercialOperation = { id: string; name: string; month: string; state: string; summary: string; steps: [string, string][] };
 type Tariff = { id: string; code: string; supplier: string; month: string; state: string; receptionDate: string; dueDate: string; owner: string; comment: string };
 type JiraTicket = { id: string; key: string; summary: string; status: string; priority: string; assignee: string; lastActivity: string; link: string; comment: string; count?: number };
-type PointData = { pointName: string; themeColor: ThemeKey; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; tariffs: Tariff[]; jira: JiraTicket[]; mail: { to: string; cc: string; subject: string; intro: string } };
+type PointData = { pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; tariffs: Tariff[]; jira: JiraTicket[]; mail: { to: string; cc: string; subject: string; intro: string } };
 type AlertItem = { title: string; detail: string; severity: "warning" | "danger" };
 type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
-type Market = { id: string; name: string; short: string; tone: ThemeKey; position: number };
+type Market = { id: string; name: string; short: string; tone: ThemeKey; colorHex: string; position: number };
 type PointRecord = { id: string; marketId: string; year: number; week: number; version: number; meetingDate: string; pointName: string; themeColor: ThemeKey; data: PointData; createdAt: string };
 type ImportOutcome = { count: number; message?: string };
 type JiraPersonGroup = { assignee: string; items: JiraTicket[]; total: number };
+type JiraWeekPayload = { snapshot: { year: number; week: number; rawText: string; summary: JiraSummaryImport; updatedAt: string } | null; assignments: Record<string, string[]>; error?: string };
+type SessionPayload = { user: { displayName: string; email: string } | null; signInPath: string; signOutPath: string };
 
 const defaultMarkets: Market[] = [
-  { id: "revetements-menuiserie", name: "Revêtements & Menuiserie", short: "REV–MEN", tone: "mint", position: 0 },
-  { id: "bois-amex", name: "Bois amin / AMEX", short: "BOIS", tone: "peach", position: 1 },
-  { id: "outillage-quincaillerie", name: "Outillage & Quincaillerie", short: "OUT–QUIN", tone: "aqua", position: 2 },
-  { id: "panneaux", name: "Panneaux", short: "PAN", tone: "violet", position: 3 },
+  { id: "revetements-menuiserie", name: "Revêtements & Menuiserie", short: "REV–MEN", tone: "mint", colorHex: "", position: 0 },
+  { id: "bois-amex", name: "Bois amin / AMEX", short: "BOIS", tone: "peach", colorHex: "", position: 1 },
+  { id: "outillage-quincaillerie", name: "Outillage & Quincaillerie", short: "OUT–QUIN", tone: "aqua", colorHex: "", position: 2 },
+  { id: "panneaux", name: "Panneaux", short: "PAN", tone: "violet", colorHex: "", position: 3 },
 ];
 
 const themes: { id: ThemeKey; label: string; accent: string; soft: string }[] = [
@@ -37,12 +39,21 @@ const statusOptions = ["Dans les délais", "En cours", "En attente", "À surveil
 const stepOptions = ["À faire", "En attente", "En cours", "Fait", "Non applicable"];
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const isoToday = () => new Date().toISOString().slice(0, 10);
+const validHex = (value: string) => /^#[0-9A-F]{6}$/i.test(value.trim());
+const normalizeHex = (value: unknown) => typeof value === "string" && validHex(value) ? value.trim().toUpperCase() : "";
+function hexSoft(value: string) {
+  const hex = normalizeHex(value);
+  if (!hex) return "rgba(114,245,197,.12)";
+  const number = Number.parseInt(hex.slice(1), 16);
+  return `rgba(${number >> 16},${(number >> 8) & 255},${number & 255},.12)`;
+}
 
 function initialData(marketId = "revetements-menuiserie", marketOverride?: Market): PointData {
   const market = marketOverride ?? defaultMarkets.find((item) => item.id === marketId) ?? defaultMarkets[0];
   const common = {
     pointName: "Point marché",
     themeColor: market.tone,
+    customColor: market.colorHex,
     meetingDate: isoToday(),
     priority: "Sécuriser les dossiers à surveiller et confirmer les prochaines échéances.",
     mail: { to: "", cc: "", subject: `Point marché — ${market.name}`, intro: "Bonjour à tous, voici le point d’avancement de la semaine." },
@@ -87,6 +98,7 @@ function normalizePointData(value: unknown, marketId: string, marketOverride?: M
   return {
     pointName: "Point marché",
     themeColor,
+    customColor: normalizeHex(source.customColor) || fallback.customColor,
     meetingDate: typeof source.meetingDate === "string" ? source.meetingDate : fallback.meetingDate,
     priority: typeof source.priority === "string" ? source.priority : fallback.priority,
     dossiers: Array.isArray(source.dossiers) ? source.dossiers : [],
@@ -108,9 +120,9 @@ async function fetchPointRecords(marketId: string, marketOverride?: Market): Pro
 
 async function fetchMarkets(): Promise<Market[]> {
   const response = await fetch("/api/markets", { cache: "no-store" });
-  const payload = await response.json() as { markets?: { id: string; name: string; shortCode: string; tone: ThemeKey; position: number }[]; error?: string };
+  const payload = await response.json() as { markets?: { id: string; name: string; shortCode: string; tone: ThemeKey; colorHex?: string; position: number }[]; error?: string };
   if (!response.ok) throw new Error(payload.error || "Impossible de charger les marchés.");
-  return (payload.markets ?? []).map((market) => ({ id: market.id, name: market.name, short: market.shortCode, tone: market.tone, position: market.position }));
+  return (payload.markets ?? []).map((market) => ({ id: market.id, name: market.name, short: market.shortCode, tone: market.tone, colorHex: normalizeHex(market.colorHex), position: market.position }));
 }
 
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
@@ -126,6 +138,9 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     copy: <><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></>,
     download: <><path d="M12 3v12m0 0 5-5m-5 5-5-5"/><path d="M4 20h16"/></>, upload: <><path d="M12 16V4m0 0 5 5m-5-5L7 9"/><path d="M4 20h16"/></>,
     spark: <><path d="m12 2 1.4 5.1L18 9l-4.6 1.9L12 16l-1.4-5.1L6 9l4.6-1.9Z"/><path d="m19 15 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7Z"/></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></>,
+    user: <><circle cx="12" cy="8" r="3"/><path d="M5 21c.7-4 3-6 7-6s6.3 2 7 6"/></>,
+    lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
     chevron: <path d="m9 6 6 6-6 6"/>, check: <path d="m5 12 4 4L19 6"/>,
   };
   return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
@@ -137,6 +152,16 @@ function isoWeek(dateString: string) {
   firstThursday.setDate(firstThursday.getDate() - firstDay + 3); return 1 + Math.round((target.valueOf() - firstThursday.valueOf()) / 604800000);
 }
 function isoWeekYear(dateString: string) { const date = new Date(`${dateString || isoToday()}T12:00:00`); const day = (date.getDay() + 6) % 7; date.setDate(date.getDate() - day + 3); return date.getFullYear(); }
+function weekInputValue(dateString: string) { return `${isoWeekYear(dateString)}-W${String(isoWeek(dateString)).padStart(2, "0")}`; }
+function dateFromWeekInput(value: string) {
+  const match = /^(\d{4})-W(\d{2})$/.exec(value);
+  if (!match) return isoToday();
+  const year = Number(match[1]); const week = Number(match[2]);
+  const januaryFourth = new Date(Date.UTC(year, 0, 4));
+  const monday = new Date(januaryFourth);
+  monday.setUTCDate(januaryFourth.getUTCDate() - ((januaryFourth.getUTCDay() + 6) % 7) + (week - 1) * 7);
+  return monday.toISOString().slice(0, 10);
+}
 function dateLabel(value: string) { if (!value) return "Date à définir"; return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T12:00:00`)); }
 function daysBetween(from: string, to: string) { if (!from || !to) return 0; return Math.floor((new Date(`${to}T12:00:00`).valueOf() - new Date(`${from}T12:00:00`).valueOf()) / 86400000); }
 function isClosed(status: string) { return /(termin|cl[oô]tur|r[eé]solu|annul)/i.test(status); }
@@ -157,6 +182,28 @@ function groupJiraPeople(items: JiraTicket[]): JiraPersonGroup[] {
     items: personItems,
     total: personItems.reduce((sum, item) => sum + jiraItemCount(item), 0),
   })).sort((a, b) => b.total - a.total || a.assignee.localeCompare(b.assignee, "fr"));
+}
+function jiraTicketsFromSummary(summary: JiraSummaryImport, selectedPeople: string[]) {
+  const selected = new Set(selectedPeople);
+  return summary.items.filter((item) => selected.has(item.assignee)).map((item) => ({
+    id: uid(), key: "", summary: "Synthèse de la file Jira", status: item.status, priority: "", assignee: item.assignee,
+    lastActivity: "", link: item.link, comment: "Tableau Jira hebdomadaire", count: item.count,
+  }));
+}
+async function fetchJiraWeek(year: number, week: number): Promise<JiraWeekPayload> {
+  const response = await fetch(`/api/jira-week?year=${year}&week=${week}`, { cache: "no-store" });
+  const payload = await response.json() as JiraWeekPayload;
+  if (!response.ok) throw new Error(payload.error || "Impossible de charger le tableau Jira hebdomadaire.");
+  return payload;
+}
+async function applyJiraWeek(data: PointData, marketId: string) {
+  try {
+    const payload = await fetchJiraWeek(isoWeekYear(data.meetingDate), isoWeek(data.meetingDate));
+    if (!payload.snapshot) return data;
+    return { ...data, jira: jiraTicketsFromSummary(payload.snapshot.summary, payload.assignments[marketId] ?? []) };
+  } catch {
+    return data;
+  }
 }
 function toneForStatus(status: string): Tone { if (/(bloqu|d[eé]pass|retard)/i.test(status)) return "red"; if (/(attente|surveill|action|pr[eé]par)/i.test(status)) return "peach"; if (/(fait|termin|re[cç]u|d[eé]lai)/i.test(status)) return "mint"; if (/cours/i.test(status)) return "aqua"; return "violet"; }
 function escapeHtml(value: string) { return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character); }
@@ -179,59 +226,71 @@ function PasteImporter({ kind, marketName, onImport }: { kind: "tariffs" | "jira
   return <div className={`paste-importer ${open ? "is-open" : ""}`}><button className="secondary-button" onClick={() => setOpen((value) => !value)}><Icon name="copy" /> Coller un tableau</button>{open && <div className="paste-panel"><div><strong>Import rapide des {label}</strong><span>{kind === "jira" ? "Colle le tableau récapitulatif complet : toutes les personnes et tous les statuts seront reconnus." : "Copie les lignes depuis Excel, avec ou sans en-tête."}</span></div>{kind === "jira" && marketName && <div className="paste-market-target"><Icon name="check" size={14}/><span>Marché cible</span><strong>{marketName}</strong></div>}<code>{columns}</code><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={kind === "jira" ? "Colle ici le tableau Jira complet, tel qu’il est copié…" : "Colle ici les lignes séparées par des tabulations ou des points-virgules…"} /><div className="paste-actions"><span>{message}</span><button className="primary-button small" onClick={() => { const result = onImport(text); setMessage(result.message ?? (result.count ? `${result.count} ligne${result.count > 1 ? "s" : ""} importée${result.count > 1 ? "s" : ""}.` : "Aucune ligne reconnue.")); if (result.count) setText(""); }}>Importer</button></div></div>}</div>;
 }
 
-function JiraPasteImporter({ marketId, marketName, onImport }: { marketId: string; marketName: string; onImport: (summary: JiraSummaryImport, selectedPeople: string[]) => ImportOutcome }) {
+function JiraPasteImporter({ marketId, marketName, markets, year, week, onImport }: { marketId: string; marketName: string; markets: Market[]; year: number; week: number; onImport: (summary: JiraSummaryImport, selectedPeople: string[]) => ImportOutcome }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [preview, setPreview] = useState<JiraSummaryImport>(() => parseJiraAssigneeSummary(""));
-  const [selectedPeople, setSelectedPeople] = useState<string[]>([]);
+  const [assignments, setAssignments] = useState<Record<string, string[]>>({});
+  const [mappingMarket, setMappingMarket] = useState(marketId);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const selectedPeople = useMemo(() => assignments[mappingMarket] ?? [], [assignments, mappingMarket]);
   const selectedSet = useMemo(() => new Set(selectedPeople), [selectedPeople]);
-  const selectedTickets = preview.people
-    .filter((person) => selectedSet.has(person.assignee))
-    .reduce((sum, person) => sum + person.total, 0);
-  const storageKey = `market-pulse:jira-people:${marketId}`;
+  const selectedTickets = preview.people.filter((person) => selectedSet.has(person.assignee)).reduce((sum, person) => sum + person.total, 0);
 
-  const remember = (people: string[]) => {
-    setSelectedPeople(people);
-    try { window.localStorage.setItem(storageKey, JSON.stringify(people)); } catch { /* Préférence locale facultative. */ }
-  };
-  const updateText = (value: string) => {
-    setText(value);
-    setMessage("");
-    const parsed = parseJiraAssigneeSummary(value);
-    setPreview(parsed);
-    const available = parsed.people.map((person) => person.assignee);
-    try {
-      const stored = window.localStorage.getItem(storageKey);
-      if (stored !== null) {
-        const remembered = JSON.parse(stored) as unknown;
-        const names = Array.isArray(remembered) ? remembered.filter((name): name is string => typeof name === "string" && available.includes(name)) : [];
-        setSelectedPeople(names);
-        return;
+  useEffect(() => {
+    let active = true;
+    void fetchJiraWeek(year, week).then((payload) => {
+      if (!active) return;
+      setAssignments(payload.assignments ?? {});
+      if (payload.snapshot) {
+        setText(payload.snapshot.rawText);
+        setPreview(payload.snapshot.summary);
+        setMessage(`Tableau global déjà enregistré pour ${year} · S${String(week).padStart(2, "0")}.`);
+      } else {
+        setText("");
+        setPreview(parseJiraAssigneeSummary(""));
+        setMessage("Aucun tableau global enregistré pour cette semaine.");
       }
-    } catch { /* Un stockage bloqué ne doit pas empêcher l’import. */ }
-    setSelectedPeople(available);
-  };
-  const togglePerson = (assignee: string) => remember(selectedSet.has(assignee) ? selectedPeople.filter((name) => name !== assignee) : [...selectedPeople, assignee]);
-  const importSelection = () => {
-    const result = onImport(preview, selectedPeople);
-    setMessage(result.message ?? (result.count ? "Import terminé." : "Sélectionne au moins une personne."));
+    }).catch((error) => { if (active) setMessage(error instanceof Error ? error.message : "Chargement impossible."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [year, week]);
+
+  const updateText = (value: string) => { setText(value); setMessage(""); setPreview(parseJiraAssigneeSummary(value)); };
+  const setPeopleForMarket = (next: string[]) => setAssignments((current) => ({ ...current, [mappingMarket]: next }));
+  const togglePerson = (assignee: string) => setPeopleForMarket(selectedSet.has(assignee) ? selectedPeople.filter((name) => name !== assignee) : [...selectedPeople, assignee]);
+  const saveGlobalTable = async () => {
+    if (!preview.personCount || saving) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/jira-week", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ year, week, rawText: text, assignments }) });
+      const payload = await response.json() as JiraWeekPayload;
+      if (!response.ok || !payload.snapshot) throw new Error(payload.error || "Enregistrement impossible.");
+      setAssignments(payload.assignments);
+      const result = onImport(payload.snapshot.summary, payload.assignments[marketId] ?? []);
+      setMessage(result.message ?? `Tableau et affectations enregistrés pour ${year} · S${String(week).padStart(2, "0")}.`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Enregistrement impossible."); }
+    finally { setSaving(false); }
   };
   const formatLabel = preview.format === "tabulated" ? "Tableau tabulé détecté" : preview.format === "markdown" ? "Tableau Jira détecté" : preview.format === "semicolon" ? "Tableau séparé par ; détecté" : "En attente du tableau";
 
   return <div className={`paste-importer jira-paste-importer ${open ? "is-open" : ""}`}>
-    <button type="button" className="secondary-button" onClick={() => setOpen((value) => !value)}><Icon name="copy" /> Importer le tableau Jira</button>
+    <button type="button" className="secondary-button" onClick={() => setOpen((value) => !value)}><Icon name="copy" /> Tableau Jira de la semaine</button>
     {open && <div className="paste-panel jira-paste-panel">
-      <div className="jira-import-heading"><div><strong>Importer le récapitulatif Jira</strong><span>Copie le tableau Jira puis colle-le ici : les tabulations, les compteurs et les liens sont reconnus.</span></div><div className="paste-market-target"><Icon name="check" size={14}/><span>Marché cible</span><strong>{marketName}</strong></div></div>
+      <div className="jira-import-heading"><div><strong>Tableau Jira global · {year} · S{String(week).padStart(2, "0")}</strong><span>Colle une seule fois le tableau complet avec tout le monde, puis affecte les personnes à chaque marché.</span></div><div className="paste-market-target"><Icon name="check" size={14}/><span>Marché affiché</span><strong>{marketName}</strong></div></div>
       <code>Personne assignée → À faire → Réouvert → En cours → Attente client → Attente tiers → Attente changement → Total</code>
-      <textarea value={text} onChange={(event) => updateText(event.target.value)} placeholder="Colle ici le tableau Jira tabulé complet…" aria-label="Tableau Jira tabulé" />
-      <div className={`jira-detection ${preview.personCount ? "is-valid" : ""}`}><span><Icon name={preview.personCount ? "check" : "copy"} size={15}/> {formatLabel}</span><strong>{preview.personCount ? `${preview.personCount} personne${preview.personCount > 1 ? "s" : ""} · ${preview.tickets} tickets` : "Aucune ligne reconnue"}</strong></div>
-      {preview.personCount > 0 && <div className="jira-preview">
-        <div className="jira-preview-toolbar"><div><strong>Prévisualisation avant import</strong><span>La sélection est mémorisée uniquement pour « {marketName} ».</span></div><div><button type="button" onClick={() => remember(preview.people.map((person) => person.assignee))}>Tout sélectionner</button><button type="button" onClick={() => remember([])}>Tout retirer</button></div></div>
-        <div className="jira-preview-table-wrap"><table className="jira-preview-table"><thead><tr><th scope="col">Inclure</th><th scope="col">Personne</th>{JIRA_SUMMARY_STATUSES.map((status) => <th scope="col" key={status}>{status}</th>)}<th scope="col">Total</th></tr></thead><tbody>{preview.people.map((person) => <tr className={selectedSet.has(person.assignee) ? "is-selected" : ""} key={person.assignee}><td><input type="checkbox" checked={selectedSet.has(person.assignee)} onChange={() => togglePerson(person.assignee)} aria-label={`Inclure ${person.assignee}`} /></td><th scope="row"><button type="button" onClick={() => togglePerson(person.assignee)}>{person.assignee}</button></th>{JIRA_SUMMARY_STATUSES.map((status) => { const item = person.statuses.find((candidate) => candidate.status === status); return <td key={status}>{item?.count || <span>—</span>}</td>; })}<td><strong>{person.total}</strong></td></tr>)}</tbody></table></div>
-        <div className="jira-selection-summary"><div><span>Import prévu</span><strong>{selectedPeople.length} personne{selectedPeople.length > 1 ? "s" : ""} · {selectedTickets} tickets</strong></div><small><Icon name="check" size={14}/> Sélection conservée pour ce marché sur cet appareil</small></div>
+      <textarea value={text} disabled={loading} onChange={(event) => updateText(event.target.value)} placeholder="Colle ici le tableau Jira tabulé complet…" aria-label="Tableau Jira tabulé complet de la semaine" />
+      <div className={`jira-detection ${preview.personCount ? "is-valid" : ""}`}><span><Icon name={preview.personCount ? "check" : "copy"} size={15}/> {loading ? "Chargement du tableau hebdomadaire…" : formatLabel}</span><strong>{preview.personCount ? `${preview.personCount} personne${preview.personCount > 1 ? "s" : ""} · ${preview.tickets} tickets` : "Aucune ligne reconnue"}</strong></div>
+      {preview.personCount > 0 && <div className="jira-preview jira-market-mapping">
+        <div className="jira-preview-toolbar"><div><strong>Affectations automatiques par marché</strong><span>Choisis un marché, puis coche les personnes qui lui correspondent. Ces choix seront repris les semaines suivantes.</span></div></div>
+        <div className="jira-market-tabs" role="tablist" aria-label="Marchés pour les affectations Jira">{markets.map((item) => <button type="button" role="tab" aria-selected={mappingMarket === item.id} className={mappingMarket === item.id ? "active" : ""} key={item.id} onClick={() => setMappingMarket(item.id)}><span>{item.short}</span><b>{(assignments[item.id] ?? []).filter((name) => preview.people.some((person) => person.assignee === name)).length}</b></button>)}</div>
+        <div className="jira-person-checklist">{preview.people.map((person) => <label className={selectedSet.has(person.assignee) ? "selected" : ""} key={person.assignee}><input type="checkbox" checked={selectedSet.has(person.assignee)} onChange={() => togglePerson(person.assignee)}/><span><strong>{person.assignee}</strong><small>{person.statuses.filter((status) => status.count).map((status) => `${status.status} ${status.count}`).join(" · ")}</small></span><b>{person.total}</b></label>)}</div>
+        <div className="jira-selection-summary"><div><span>{markets.find((item) => item.id === mappingMarket)?.name}</span><strong>{selectedPeople.length} personne{selectedPeople.length > 1 ? "s" : ""} · {selectedTickets} tickets</strong></div><div className="jira-bulk-actions"><button type="button" onClick={() => setPeopleForMarket(preview.people.map((person) => person.assignee))}>Tout cocher</button><button type="button" onClick={() => setPeopleForMarket([])}>Tout décocher</button></div></div>
       </div>}
-      <div className="paste-actions"><span>{message}</span><button type="button" className="primary-button small" disabled={!selectedPeople.length} onClick={importSelection}>Importer {selectedPeople.length || ""} personne{selectedPeople.length > 1 ? "s" : ""}</button></div>
+      <div className="paste-actions"><span>{message}</span><button type="button" className="primary-button small" disabled={!preview.personCount || saving || loading} onClick={saveGlobalTable}><Icon name="check" size={15}/> {saving ? "Enregistrement…" : "Enregistrer le tableau et les affectations"}</button></div>
     </div>}
   </div>;
 }
@@ -272,15 +331,16 @@ function PreviewDashboard({ data, market }: { data: PointData; market: Market })
 function buildMailHtml(data: PointData, market: Market) {
   const alerts = buildAlerts(data); const activeJiraItems = data.jira.filter((item) => !isClosed(item.status)); const activeJira = activeJiraItems.reduce((sum, item) => sum + jiraItemCount(item), 0);
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
+  const accent = normalizeHex(data.customColor) || theme.accent;
   const dossierRows = data.dossiers.map((item) => `<tr><td style="padding:12px 14px;border-bottom:1px solid #DDE7E3"><b style="color:#10201D">${escapeHtml(item.title || "Dossier")}</b><br><span style="color:#64736F;font-size:11px">${escapeHtml([item.universe, item.reference].filter(Boolean).join(" · "))}</span></td><td style="padding:12px 14px;border-bottom:1px solid #DDE7E3;color:#41534E;font-size:12px">${escapeHtml(item.action || item.comment || "—")}</td><td style="padding:12px 14px;border-bottom:1px solid #DDE7E3;text-align:right"><span style="display:inline-block;padding:6px 9px;border-radius:99px;background:#E7EEE9;color:#253E36;font-size:10px;font-weight:700">${escapeHtml(item.status)}</span></td></tr>`).join("");
-  const tariffRows = data.tariffs.map((item) => `<tr><td style="padding:8px 10px;color:#7C8F92;font-family:monospace;font-size:10px">${escapeHtml(item.code || "—")}</td><td style="padding:8px 10px;color:#FFFFFF;font-size:11px;font-weight:700">${escapeHtml(item.supplier || "Fournisseur")}</td><td style="padding:8px 10px;color:#AFC0C2;font-size:10px">${escapeHtml(item.month || "—")}</td><td style="padding:8px 10px;color:${theme.accent};font-size:10px">${escapeHtml(item.state || "—")}</td></tr>`).join("");
+  const tariffRows = data.tariffs.map((item) => `<tr><td style="padding:8px 10px;color:#7C8F92;font-family:monospace;font-size:10px">${escapeHtml(item.code || "—")}</td><td style="padding:8px 10px;color:#FFFFFF;font-size:11px;font-weight:700">${escapeHtml(item.supplier || "Fournisseur")}</td><td style="padding:8px 10px;color:#AFC0C2;font-size:10px">${escapeHtml(item.month || "—")}</td><td style="padding:8px 10px;color:${accent};font-size:10px">${escapeHtml(item.state || "—")}</td></tr>`).join("");
   const jiraPeople = Array.from(new Set(activeJiraItems.map((item) => item.assignee || "Non assigné"))).map((assignee) => { const items = activeJiraItems.filter((item) => (item.assignee || "Non assigné") === assignee); return { assignee, items, total: items.reduce((sum, item) => sum + jiraItemCount(item), 0) }; }).sort((a, b) => b.total - a.total || a.assignee.localeCompare(b.assignee, "fr"));
   const jiraRows = jiraPeople.map((person) => `<tr><td style="padding:8px 10px;color:#FFFFFF;font-size:11px;font-weight:700">${escapeHtml(person.assignee)}</td><td style="padding:8px 10px;color:#AFC0C2;font-size:9px">${escapeHtml(jiraStatusSummary(person.items))}</td><td style="padding:8px 10px;color:#70D8FF;font-family:monospace;font-size:12px;font-weight:700;text-align:right">${person.total}</td></tr>`).join("");
   const alertRows = alerts.map((item, index) => `<tr><td style="padding:9px 0;border-bottom:1px solid #E18B5E;width:34px;color:#743817;font-family:monospace;font-size:10px">${String(index + 1).padStart(2, "0")}</td><td style="padding:9px 0;border-bottom:1px solid #E18B5E"><b style="display:block;color:#23140C;font-size:11px">${escapeHtml(item.title)}</b><span style="color:#743817;font-size:10px">${escapeHtml(item.detail)}</span></td></tr>`).join("");
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${escapeHtml(data.mail.subject)}</title></head><body style="margin:0;padding:0;background:#F2F5F4;font-family:Arial,sans-serif;color:#10201D"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F2F5F4"><tr><td align="center" style="padding:26px 12px"><table role="presentation" width="1000" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:1000px;background:#071012">
-  <tr><td style="padding:28px 30px 22px;background:#071012"><span style="display:inline-block;padding:6px 10px;border:1px solid ${theme.accent};border-radius:99px;color:${theme.accent};font-size:10px;font-weight:700">MARKET PULSE / ${escapeHtml(market.short)}</span><h1 style="margin:12px 0 4px;color:#FFFFFF;font-size:38px;line-height:42px">Point marché</h1><p style="margin:0;color:${theme.accent};font-size:16px;font-weight:700">${escapeHtml(market.name)}</p><p style="margin:15px 0 0;color:#AFC0C2;font-size:12px">Année ISO ${isoWeekYear(data.meetingDate)} · Semaine ${String(isoWeek(data.meetingDate)).padStart(2, "0")} · ${escapeHtml(dateLabel(data.meetingDate))}</p></td></tr>
+  <tr><td style="padding:28px 30px 22px;background:#071012"><span style="display:inline-block;padding:6px 10px;border:1px solid ${accent};border-radius:99px;color:${accent};font-size:10px;font-weight:700">MARKET PULSE / ${escapeHtml(market.short)}</span><h1 style="margin:12px 0 4px;color:#FFFFFF;font-size:38px;line-height:42px">Point marché</h1><p style="margin:0;color:${accent};font-size:16px;font-weight:700">${escapeHtml(market.name)}</p><p style="margin:15px 0 0;color:#AFC0C2;font-size:12px">Année ISO ${isoWeekYear(data.meetingDate)} · Semaine ${String(isoWeek(data.meetingDate)).padStart(2, "0")} · ${escapeHtml(dateLabel(data.meetingDate))}</p></td></tr>
   <tr><td style="padding:0 30px 22px;background:#071012"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>${[[data.dossiers.length,"Dossiers"],[data.tariffs.length,"Évolutions"],[activeJira,"Tickets Jira"],[alerts.length,"Vigilances"]].map(([value,label], index) => `<td width="25%" style="padding-right:${index < 3 ? "8px" : "0"}"><table role="presentation" width="100%" style="background:#102023;border:1px solid #263C40"><tr><td style="padding:13px"><b style="display:block;color:#FFFFFF;font-size:24px">${value}</b><span style="color:#AFC0C2;font-size:10px;text-transform:uppercase">${label}</span></td></tr></table></td>`).join("")}</tr></table></td></tr>
-  <tr><td style="padding:0 30px 24px;background:#071012"><table role="presentation" width="100%" style="background:#132622;border-left:4px solid ${theme.accent}"><tr><td style="padding:14px 16px"><b style="display:block;color:${theme.accent};font-size:9px;text-transform:uppercase">Priorité de la semaine</b><span style="display:block;margin-top:5px;color:#FFFFFF;font-size:13px">${escapeHtml(data.priority || "Aucune priorité renseignée.")}</span></td></tr></table></td></tr>
+  <tr><td style="padding:0 30px 24px;background:#071012"><table role="presentation" width="100%" style="background:#132622;border-left:4px solid ${accent}"><tr><td style="padding:14px 16px"><b style="display:block;color:${accent};font-size:9px;text-transform:uppercase">Priorité de la semaine</b><span style="display:block;margin-top:5px;color:#FFFFFF;font-size:13px">${escapeHtml(data.priority || "Aucune priorité renseignée.")}</span></td></tr></table></td></tr>
   <tr><td style="padding:0 30px 18px;background:#071012"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td valign="top" width="65%" style="padding-right:8px"><table role="presentation" width="100%" style="background:#F5F8F6"><tr><td style="padding:17px 18px 8px;color:#55716A;font-size:10px;font-weight:700;text-transform:uppercase">Dossiers en cours</td></tr><tr><td style="padding:0 8px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${dossierRows || '<tr><td style="padding:16px;color:#64736F;font-size:12px">Aucun dossier renseigné</td></tr>'}</table></td></tr></table></td><td valign="top" width="35%" style="padding-left:8px"><table role="presentation" width="100%" style="background:#FFB083"><tr><td style="padding:16px"><b style="font-size:13px;text-transform:uppercase">Vigilances · ${alerts.length}</b><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:8px">${alertRows || '<tr><td style="padding:12px 0;color:#743817;font-size:11px">Aucune vigilance détectée</td></tr>'}</table></td></tr></table></td></tr></table></td></tr>
   <tr><td style="padding:0 30px 18px;background:#071012"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td valign="top" width="50%" style="padding-right:8px"><table role="presentation" width="100%" style="background:#102023"><tr><td style="padding:15px;color:#B39AFF;font-size:11px;font-weight:700;text-transform:uppercase">Évolutions tarifaires</td></tr><tr><td style="padding:0 6px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${tariffRows || '<tr><td style="padding:12px;color:#AFC0C2;font-size:11px">Aucune évolution</td></tr>'}</table></td></tr></table></td><td valign="top" width="50%" style="padding-left:8px"><table role="presentation" width="100%" style="background:#102023"><tr><td style="padding:15px;color:#70D8FF;font-size:11px;font-weight:700;text-transform:uppercase">Tickets Jira actifs</td></tr><tr><td style="padding:0 6px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${jiraRows || '<tr><td style="padding:12px;color:#AFC0C2;font-size:11px">Aucun ticket actif</td></tr>'}</table></td></tr></table></td></tr></table></td></tr>
   <tr><td style="padding:18px 30px;background:#0C181B;color:#789094;font-size:9px;text-transform:uppercase">Market Pulse · ${escapeHtml(market.name)} · Point marché ${isoWeekYear(data.meetingDate)} · S${String(isoWeek(data.meetingDate)).padStart(2, "0")}</td></tr></table></td></tr></table></body></html>`;
@@ -290,7 +350,7 @@ export default function Home() {
   const [marketOptions, setMarketOptions] = useState<Market[]>(defaultMarkets);
   const [marketId, setMarketId] = useState("revetements-menuiserie");
   const [data, setData] = useState<PointData>(() => initialData());
-  const [view, setView] = useState<View>("edit");
+  const [view, setView] = useState<View>("read");
   const [section, setSection] = useState<Section>("general");
   const [ready, setReady] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -303,11 +363,14 @@ export default function Home() {
   const [creatingMarket, setCreatingMarket] = useState(false);
   const [lastSavedSignature, setLastSavedSignature] = useState("");
   const [toast, setToast] = useState("");
+  const [session, setSession] = useState<SessionPayload>({ user: null, signInPath: "/signin-with-chatgpt?return_to=%2F%3Fmode%3Dedit", signOutPath: "/" });
+  const [sessionReady, setSessionReady] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const archiveRequest = useRef(0);
   const market = marketOptions.find((item) => item.id === marketId) ?? marketOptions[0] ?? defaultMarkets[0];
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
-  const themeStyle = { "--accent": theme.accent, "--accent-soft": theme.soft } as CSSProperties;
+  const accent = normalizeHex(data.customColor) || theme.accent;
+  const themeStyle = { "--accent": accent, "--accent-soft": normalizeHex(data.customColor) ? hexSoft(data.customColor) : theme.soft } as CSSProperties;
   const alerts = useMemo(() => buildAlerts(data), [data]);
   const mailHtml = useMemo(() => buildMailHtml(data, market), [data, market]);
   const isDirty = pointSignature(marketId, data) !== lastSavedSignature;
@@ -328,13 +391,14 @@ export default function Home() {
       if (loadLatest) {
         const latest = points[0];
         if (latest) {
-          const nextData = normalizePointData(latest.data, nextMarket, marketOverride);
+          const nextData = await applyJiraWeek(normalizePointData(latest.data, nextMarket, marketOverride), nextMarket);
           setData(nextData);
           setActiveVersion(latest.version);
           setSavedAt(new Date(latest.createdAt.replace(" ", "T") + (latest.createdAt.includes("Z") ? "" : "Z")));
           setLastSavedSignature(pointSignature(nextMarket, nextData));
         } else {
-          setData(initialData(nextMarket, marketOverride));
+          const nextData = await applyJiraWeek(initialData(nextMarket, marketOverride), nextMarket);
+          setData(nextData);
           setActiveVersion(null);
           setSavedAt(null);
           setLastSavedSignature("");
@@ -345,7 +409,7 @@ export default function Home() {
       setArchive([]);
       setArchiveError(error instanceof Error ? error.message : "Impossible de charger les sauvegardes.");
       if (loadLatest) {
-        setData(initialData(nextMarket, marketOverride));
+        setData(await applyJiraWeek(initialData(nextMarket, marketOverride), nextMarket));
         setActiveVersion(null);
         setSavedAt(null);
         setLastSavedSignature("");
@@ -373,7 +437,24 @@ export default function Home() {
   }, [loadMarket]);
 
   useEffect(() => { const timer = window.setTimeout(() => { void bootstrap(); }, 0); return () => window.clearTimeout(timer); }, [bootstrap]);
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/session", { cache: "no-store" }).then((response) => response.json()).then((payload: SessionPayload) => {
+      if (!active) return;
+      setSession(payload);
+      if (payload.user && new URLSearchParams(window.location.search).get("mode") === "edit") setView("edit");
+    }).catch(() => { /* La lecture publique reste disponible. */ }).finally(() => { if (active) setSessionReady(true); });
+    return () => { active = false; };
+  }, []);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(timer); }, [toast]);
+
+  const chooseView = (nextView: View) => {
+    if (nextView === "edit" && !session.user) {
+      window.location.href = session.signInPath;
+      return;
+    }
+    setView(nextView);
+  };
 
   const chooseMarket = (nextMarket: string) => {
     if (nextMarket !== marketId && isDirty && !window.confirm("Changer de marché sans enregistrer ce brouillon ?")) return;
@@ -416,41 +497,51 @@ export default function Home() {
     return { count: rows.length };
   };
   const importJiraSummary = (summary: JiraSummaryImport, selectedPeople: string[]) => {
-    const selected = new Set(selectedPeople);
-    const selectedRows = summary.people.filter((person) => selected.has(person.assignee));
+    const selectedRows = summary.people.filter((person) => selectedPeople.includes(person.assignee));
     if (!selectedRows.length) return { count: 0 };
-    const jira = summary.items.filter((item) => selected.has(item.assignee)).map((item) => ({
-      id: uid(),
-      key: "",
-      summary: "Synthèse de la file Jira",
-      status: item.status,
-      priority: "",
-      assignee: item.assignee,
-      lastActivity: "",
-      link: item.link,
-      comment: "Import du tableau récapitulatif Jira",
-      count: item.count,
-    }));
+    const jira = jiraTicketsFromSummary(summary, selectedPeople);
     const tickets = selectedRows.reduce((sum, person) => sum + person.total, 0);
     setData((current) => ({ ...current, jira }));
-    return { count: selectedRows.length, message: `${selectedRows.length} personne${selectedRows.length > 1 ? "s" : ""} · ${tickets} tickets rattachés à « ${market.name} ».` };
+    return { count: selectedRows.length, message: `${selectedRows.length} personne${selectedRows.length > 1 ? "s" : ""} · ${tickets} tickets automatiquement rattachés à « ${market.name} ».` };
   };
   const download = (name: string, content: string, type: string) => { const url = URL.createObjectURL(new Blob([content], { type })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 500); };
   const exportJson = (record?: PointRecord) => {
     const exportMarket = record?.marketId ?? marketId; const exportData = record?.data ?? data; const week = record?.week ?? isoWeek(exportData.meetingDate); const year = record?.year ?? isoWeekYear(exportData.meetingDate); const version = record?.version ?? activeVersion;
     const exportMarketInfo = marketOptions.find((item) => item.id === exportMarket);
-    download(`point-marche-${exportMarket}-${year}-S${String(week).padStart(2, "0")}${version ? `-V${version}` : "-brouillon"}.json`, JSON.stringify({ schemaVersion: 3, marketId: exportMarket, market: exportMarketInfo ? { name: exportMarketInfo.name, shortCode: exportMarketInfo.short, tone: exportMarketInfo.tone } : undefined, year, week, version, data: exportData }, null, 2), "application/json");
+    download(`point-marche-${exportMarket}-${year}-S${String(week).padStart(2, "0")}${version ? `-V${version}` : "-brouillon"}.json`, JSON.stringify({ schemaVersion: 4, marketId: exportMarket, market: exportMarketInfo ? { name: exportMarketInfo.name, shortCode: exportMarketInfo.short, tone: exportMarketInfo.tone, colorHex: exportMarketInfo.colorHex } : undefined, year, week, version, data: exportData }, null, 2), "application/json");
   };
   const importJson = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const payload = JSON.parse(String(reader.result)) as { marketId?: string; data?: unknown }; if (!payload.data) throw new Error(); const importedMarketInfo = marketOptions.find((item) => item.id === payload.marketId) ?? market; const importedMarket = importedMarketInfo.id; const importedData = normalizePointData(payload.data, importedMarket, importedMarketInfo); setMarketId(importedMarket); setData(importedData); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); void loadMarket(importedMarket, false, importedMarketInfo); setToast("JSON importé comme nouveau brouillon."); } catch { setToast("Fichier non reconnu."); } }; reader.readAsText(file); event.target.value = ""; };
-  const resetPoint = () => { if (!window.confirm("Créer un nouveau point pour ce marché ? Le brouillon actuel sera remplacé, mais les versions enregistrées resteront disponibles.")) return; const fresh = initialData(marketId, market); fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail; fresh.themeColor = data.themeColor; setData(fresh); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); setToast("Nouveau brouillon créé."); };
-  const loadRecord = (record: PointRecord) => {
-    if (isDirty && !window.confirm("Charger cette version et remplacer le brouillon non enregistré ?")) return;
+  const resetPoint = () => { if (!window.confirm("Créer un nouveau point pour ce marché ? Le brouillon actuel sera remplacé, mais les versions enregistrées resteront disponibles.")) return; const fresh = initialData(marketId, market); fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail; fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; setData(fresh); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); setToast("Nouveau brouillon créé."); };
+  const loadRecord = async (record: PointRecord, nextView: View = view, skipConfirm = false) => {
+    if (!skipConfirm && isDirty && !window.confirm("Charger cette version et remplacer le brouillon non enregistré ?")) return;
     const recordMarket = marketOptions.find((item) => item.id === record.marketId) ?? market;
-    const nextData = normalizePointData(record.data, record.marketId, recordMarket);
-    setMarketId(record.marketId); setData(nextData); setActiveVersion(record.version); setSavedAt(new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z"))); setLastSavedSignature(pointSignature(record.marketId, nextData)); setSection("general"); setView("edit"); setToast(`${record.year} · S${String(record.week).padStart(2, "0")} · V${record.version} chargée.`);
+    const nextData = await applyJiraWeek(normalizePointData(record.data, record.marketId, recordMarket), record.marketId);
+    setMarketId(record.marketId); setData(nextData); setActiveVersion(record.version); setSavedAt(new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z"))); setLastSavedSignature(pointSignature(record.marketId, nextData)); setSection("general"); setView(nextView); setToast(`${record.year} · S${String(record.week).padStart(2, "0")} · V${record.version} chargée.`);
+  };
+  const chooseWeek = async (value: string) => {
+    if (!/^\d{4}-W\d{2}$/.test(value)) return;
+    const meetingDate = dateFromWeekInput(value);
+    const year = isoWeekYear(meetingDate); const week = isoWeek(meetingDate);
+    if (year === currentWeekYear && week === currentWeek) return;
+    if (isDirty && !window.confirm("Changer de semaine sans enregistrer ce brouillon ?")) return;
+    const latest = archive.filter((record) => record.year === year && record.week === week).sort((a, b) => b.version - a.version)[0];
+    if (latest) { await loadRecord(latest, view, true); return; }
+    const fresh = initialData(marketId, market);
+    fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail;
+    fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; fresh.meetingDate = meetingDate;
+    const nextData = await applyJiraWeek(fresh, marketId);
+    setData(nextData); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); setToast(`${year} · S${String(week).padStart(2, "0")} ouverte comme nouveau brouillon.`);
+  };
+  const chooseVersion = async (value: string) => {
+    const version = Number(value);
+    if (!version) return;
+    const record = currentWeekVersions.find((item) => item.version === version);
+    if (record) await loadRecord(record, view);
   };
   const saveVersion = async () => {
     if (saving || !ready) return;
+    if (!session.user) { window.location.href = session.signInPath; return; }
+    if (data.customColor && !validHex(data.customColor)) { setToast("La couleur personnalisée doit suivre le format #RRGGBB."); return; }
     setSaving(true);
     try {
       const response = await fetch("/api/points", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ marketId, marketName: market.name, data }) });
@@ -467,10 +558,10 @@ export default function Home() {
     setCreatingMarket(true);
     try {
       const index = marketOptions.length + 1;
-      const response = await fetch("/api/markets", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: `Nouveau marché ${index}`, shortCode: `MARCHÉ-${index}`, tone: themes[index % themes.length].id }) });
-      const payload = await response.json() as { market?: { id: string; name: string; shortCode: string; tone: ThemeKey; position: number }; error?: string };
+      const response = await fetch("/api/markets", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: `Nouveau marché ${index}`, shortCode: `MARCHÉ-${index}`, tone: themes[index % themes.length].id, colorHex: "" }) });
+      const payload = await response.json() as { market?: { id: string; name: string; shortCode: string; tone: ThemeKey; colorHex?: string; position: number }; error?: string };
       if (!response.ok || !payload.market) throw new Error(payload.error || "Création impossible.");
-      const created: Market = { id: payload.market.id, name: payload.market.name, short: payload.market.shortCode, tone: payload.market.tone, position: payload.market.position };
+      const created: Market = { id: payload.market.id, name: payload.market.name, short: payload.market.shortCode, tone: payload.market.tone, colorHex: normalizeHex(payload.market.colorHex), position: payload.market.position };
       setMarketOptions((current) => [...current, created].sort((a, b) => a.position - b.position));
       setToast("Marché ajouté. Tu peux maintenant modifier son nom.");
     } catch (error) { setToast(error instanceof Error ? error.message : "Création du marché impossible."); }
@@ -479,14 +570,15 @@ export default function Home() {
   const saveMarket = async (id: string) => {
     const draft = marketOptions.find((item) => item.id === id);
     if (!draft || marketSavingId) return;
+    if (draft.colorHex && !validHex(draft.colorHex)) { setToast("La couleur du marché doit suivre le format #RRGGBB."); return; }
     setMarketSavingId(id);
     try {
-      const response = await fetch("/api/markets", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, name: draft.name, shortCode: draft.short, tone: draft.tone }) });
-      const payload = await response.json() as { market?: { id: string; name: string; shortCode: string; tone: ThemeKey; position: number }; error?: string };
+      const response = await fetch("/api/markets", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, name: draft.name, shortCode: draft.short, tone: draft.tone, colorHex: draft.colorHex }) });
+      const payload = await response.json() as { market?: { id: string; name: string; shortCode: string; tone: ThemeKey; colorHex?: string; position: number }; error?: string };
       if (!response.ok || !payload.market) throw new Error(payload.error || "Modification impossible.");
-      const saved: Market = { id: payload.market.id, name: payload.market.name, short: payload.market.shortCode, tone: payload.market.tone, position: payload.market.position };
+      const saved: Market = { id: payload.market.id, name: payload.market.name, short: payload.market.shortCode, tone: payload.market.tone, colorHex: normalizeHex(payload.market.colorHex), position: payload.market.position };
       setMarketOptions((current) => current.map((item) => item.id === id ? saved : item));
-      if (id === marketId) setData((current) => ({ ...current, mail: { ...current.mail, subject: /^Point marché —/.test(current.mail.subject) ? `Point marché — ${saved.name}` : current.mail.subject } }));
+      if (id === marketId) setData((current) => ({ ...current, themeColor: saved.tone, customColor: saved.colorHex, mail: { ...current.mail, subject: /^Point marché —/.test(current.mail.subject) ? `Point marché — ${saved.name}` : current.mail.subject } }));
       setToast(`Marché « ${saved.name} » enregistré.`);
     } catch (error) { setToast(error instanceof Error ? error.message : "Modification du marché impossible."); }
     finally { setMarketSavingId(""); }
@@ -529,10 +621,28 @@ export default function Home() {
     { id: "jira", label: "Tickets Jira", icon: "ticket", count: data.jira.reduce((sum, item) => sum + jiraItemCount(item), 0) }, { id: "versions", label: "Sauvegardes & versions", icon: "download", count: archive.length }, { id: "mail", label: "Paramètres du mail", icon: "mail" },
   ];
 
-  const renderEditor = () => <div className="editor-layout"><aside className="editor-nav"><div className="editor-nav-title"><span>Sommaire</span><small>Complète ton point</small></div>{navItems.map((item) => <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => setSection(item.id)}><Icon name={item.icon}/><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}<Icon name="chevron" size={15}/></button>)}<div className={`autosave-card ${isDirty ? "is-dirty" : ""}`}><span><Icon name={isDirty ? "edit" : "check"} size={14}/> {isDirty ? "Brouillon à enregistrer" : "Sauvegarde en ligne"}</span><small>{archiveLoading ? "Chargement du registre…" : activeVersion ? `Version ${activeVersion}${savedAt ? ` · ${savedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}` : "Aucune version enregistrée"}</small></div></aside><main className="editor-content">
-    {section === "general" && <section className="editor-section"><SectionTitle eyebrow="01 · Cadre" title="Préparer le point" detail="Le marché, la date ISO et la couleur pilotent le rendu web et le mail."/><div className="surface form-grid general-grid"><label className="field"><span>Marché</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><TextField label="Date du point" type="date" value={data.meetingDate} onChange={(meetingDate) => setData((current) => ({ ...current, meetingDate }))}/><div className="week-display"><span>Référence ISO</span><strong>{isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong></div><div className="field field-wide theme-field"><span>Couleur de ce point</span><div className="theme-picker">{themes.map((option) => <button key={option.id} type="button" className={data.themeColor === option.id ? "active" : ""} style={{ "--swatch": option.accent } as CSSProperties} onClick={() => setData((current) => ({ ...current, themeColor: option.id }))}><i/><b>{option.label}</b></button>)}</div></div><label className="field field-wide"><span>Priorité de la semaine</span><textarea value={data.priority} onChange={(event) => setData((current) => ({ ...current, priority: event.target.value }))} placeholder="L’action principale ou le message clé à retenir…"/></label></div><div className="guidance-grid"><article><span>01</span><strong>Choisis le bon marché</strong><p>Les noms et codes sont administrables dans « Gérer les marchés ».</p></article><article><span>02</span><strong>Crée une version</strong><p>Chaque sauvegarde ajoute une version JSON liée à l’année et à la semaine ISO.</p></article><article><span>03</span><strong>Prépare le mail</strong><p>Contrôle l’aperçu puis copie le rendu Outlook prêt à l’emploi.</p></article></div></section>}
+  const periodNavigator = <section className={`period-navigator ${view === "edit" ? "edit-period" : "read-period"}`} aria-label={view === "edit" ? "Période d’édition" : "Navigation de lecture"}>
+    <div className="period-title"><span><Icon name={view === "edit" ? "edit" : "eye"} size={15}/> {view === "edit" ? "Période d’édition" : "Lecture des points"}</span><strong>{market.name}</strong></div>
+    <label><span>Marché</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+    <label><span><Icon name="calendar" size={13}/> Calendrier</span><input type="week" value={weekInputValue(data.meetingDate)} onChange={(event) => { void chooseWeek(event.target.value); }}/></label>
+    <label><span>Version</span><select value={activeVersion ?? ""} onChange={(event) => { void chooseVersion(event.target.value); }}><option value="">{currentWeekVersions.length ? "Brouillon / nouvelle version" : "Aucune version enregistrée"}</option>{[...currentWeekVersions].sort((a, b) => b.version - a.version).map((record) => <option value={record.version} key={record.id}>V{record.version} · {dateLabel(record.meetingDate)}</option>)}</select></label>
+    <div className="period-state"><span>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</span><strong>{isDirty ? "Brouillon modifié" : activeVersion ? `Version ${activeVersion}` : "Nouvelle semaine"}</strong><small>{currentWeekVersions.length} version{currentWeekVersions.length > 1 ? "s" : ""} disponible{currentWeekVersions.length > 1 ? "s" : ""}</small></div>
+  </section>;
 
-    {section === "markets" && <section className="editor-section"><SectionTitle eyebrow="02 · Administration" title="Gérer les marchés" detail="Modifie le nom affiché, le code court et la couleur par défaut, ou ajoute un nouveau marché." action={<button className="primary-button" disabled={creatingMarket} onClick={createMarket}><Icon name="plus"/> {creatingMarket ? "Ajout…" : "Ajouter un marché"}</button>}/><div className="market-admin-note"><Icon name="alert"/><div><strong>Suppression sans perte d’historique</strong><span>Un marché supprimé disparaît de la liste active, mais ses anciennes versions JSON restent conservées.</span></div></div><div className="market-admin-list">{marketOptions.map((item, index) => <article className={`surface market-admin-card ${item.id === marketId ? "active" : ""}`} key={item.id}><div className="market-admin-index" style={{ "--swatch": themes.find((option) => option.id === item.tone)?.accent ?? themes[0].accent } as CSSProperties}><i/><span>{String(index + 1).padStart(2, "0")}</span></div><div className="market-admin-fields"><TextField label="Nom du marché" value={item.name} onChange={(name) => updateMarketDraft(item.id, { name })}/><TextField label="Code court" value={item.short} onChange={(short) => updateMarketDraft(item.id, { short })} placeholder="EX. BOIS"/><label className="field"><span>Couleur par défaut</span><select value={item.tone} onChange={(event) => updateMarketDraft(item.id, { tone: event.target.value as ThemeKey })}>{themes.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label></div><div className="market-admin-actions">{item.id === marketId && <span>Marché actif</span>}<button className="secondary-button" disabled={Boolean(marketSavingId)} onClick={() => saveMarket(item.id)}><Icon name="check"/> {marketSavingId === item.id ? "Enregistrement…" : "Enregistrer"}</button><button className="icon-button danger" disabled={Boolean(marketSavingId)} aria-label={`Supprimer ${item.name}`} title="Supprimer de la liste active" onClick={() => deleteMarket(item.id)}><Icon name="trash"/></button></div></article>)}</div></section>}
+  const renderEditor = () => <div className="editor-layout"><aside className="editor-nav"><div className="editor-nav-title"><span>Sommaire</span><small>Complète ton point</small></div>{navItems.map((item) => <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => setSection(item.id)}><Icon name={item.icon}/><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}<Icon name="chevron" size={15}/></button>)}<div className={`autosave-card ${isDirty ? "is-dirty" : ""}`}><span><Icon name={isDirty ? "edit" : "check"} size={14}/> {isDirty ? "Brouillon à enregistrer" : "Sauvegarde en ligne"}</span><small>{archiveLoading ? "Chargement du registre…" : activeVersion ? `Version ${activeVersion}${savedAt ? ` · ${savedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}` : "Aucune version enregistrée"}</small></div></aside><main className="editor-content">
+    {section === "general" && <section className="editor-section">
+      <SectionTitle eyebrow="01 · Cadre" title="Préparer le point" detail="Le marché, la date ISO et la couleur pilotent le rendu web et le mail."/>
+      <div className="surface form-grid general-grid">
+        <label className="field"><span>Marché</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <TextField label="Date du point" type="date" value={data.meetingDate} onChange={(meetingDate) => setData((current) => ({ ...current, meetingDate }))}/>
+        <div className="week-display"><span>Référence ISO</span><strong>{isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong></div>
+        <div className="field field-wide theme-field"><span>Couleur de ce point</span><div className="theme-picker">{themes.map((option) => <button key={option.id} type="button" className={!data.customColor && data.themeColor === option.id ? "active" : ""} style={{ "--swatch": option.accent } as CSSProperties} onClick={() => setData((current) => ({ ...current, themeColor: option.id, customColor: "" }))}><i/><b>{option.label}</b></button>)}</div><div className="hex-color-control"><input type="color" value={accent} aria-label="Sélecteur de couleur personnalisée" onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/><label><span>Hexadécimal personnalisé</span><input value={data.customColor} maxLength={7} placeholder={theme.accent.toUpperCase()} onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/></label><small className={data.customColor && !validHex(data.customColor) ? "invalid" : ""}>{data.customColor && !validHex(data.customColor) ? "Format attendu : #RRGGBB" : `Couleur active : ${accent.toUpperCase()}`}</small></div></div>
+        <label className="field field-wide"><span>Priorité de la semaine</span><textarea value={data.priority} onChange={(event) => setData((current) => ({ ...current, priority: event.target.value }))} placeholder="L’action principale ou le message clé à retenir…"/></label>
+      </div>
+      <div className="guidance-grid"><article><span>01</span><strong>Choisis le bon marché</strong><p>Les noms et codes sont administrables dans « Gérer les marchés ».</p></article><article><span>02</span><strong>Crée une version</strong><p>Chaque sauvegarde ajoute une version JSON liée à l’année et à la semaine ISO.</p></article><article><span>03</span><strong>Prépare le mail</strong><p>Contrôle l’aperçu puis copie le rendu Outlook prêt à l’emploi.</p></article></div>
+    </section>}
+
+    {section === "markets" && <section className="editor-section"><SectionTitle eyebrow="02 · Administration" title="Gérer les marchés" detail="Modifie le nom affiché, le code court et la couleur par défaut, ou ajoute un nouveau marché." action={<button className="primary-button" disabled={creatingMarket} onClick={createMarket}><Icon name="plus"/> {creatingMarket ? "Ajout…" : "Ajouter un marché"}</button>}/><div className="market-admin-note"><Icon name="alert"/><div><strong>Suppression sans perte d’historique</strong><span>Un marché supprimé disparaît de la liste active, mais ses anciennes versions JSON restent conservées.</span></div></div><div className="market-admin-list">{marketOptions.map((item, index) => { const marketAccent = normalizeHex(item.colorHex) || themes.find((option) => option.id === item.tone)?.accent || themes[0].accent; return <article className={`surface market-admin-card ${item.id === marketId ? "active" : ""}`} key={item.id}><div className="market-admin-index" style={{ "--swatch": marketAccent } as CSSProperties}><i/><span>{String(index + 1).padStart(2, "0")}</span></div><div className="market-admin-fields"><TextField label="Nom du marché" value={item.name} onChange={(name) => updateMarketDraft(item.id, { name })}/><TextField label="Code court" value={item.short} onChange={(short) => updateMarketDraft(item.id, { short })} placeholder="EX. BOIS"/><label className="field"><span>Palette par défaut</span><select value={item.tone} onChange={(event) => updateMarketDraft(item.id, { tone: event.target.value as ThemeKey, colorHex: "" })}>{themes.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label><label className="field market-hex-field"><span>Hex personnalisé</span><div><input type="color" value={marketAccent} aria-label={`Couleur de ${item.name}`} onChange={(event) => updateMarketDraft(item.id, { colorHex: event.target.value.toUpperCase() })}/><input value={item.colorHex} maxLength={7} placeholder="#RRGGBB" onChange={(event) => updateMarketDraft(item.id, { colorHex: event.target.value.toUpperCase() })}/></div></label></div><div className="market-admin-actions">{item.id === marketId && <span>Marché actif</span>}<button className="secondary-button" disabled={Boolean(marketSavingId)} onClick={() => saveMarket(item.id)}><Icon name="check"/> {marketSavingId === item.id ? "Enregistrement…" : "Enregistrer"}</button><button className="icon-button danger" disabled={Boolean(marketSavingId)} aria-label={`Supprimer ${item.name}`} title="Supprimer de la liste active" onClick={() => deleteMarket(item.id)}><Icon name="trash"/></button></div></article>; })}</div></section>}
 
     {section === "dossiers" && <section className="editor-section"><SectionTitle eyebrow="02 · Suivi détaillé" title="Dossiers en cours" detail="La zone la plus détaillée du point : contexte, responsable, action et risque." action={<button className="primary-button" onClick={addDossier}><Icon name="plus"/> Ajouter un dossier</button>}/>{data.dossiers.length ? <div className="record-stack">{data.dossiers.map((item, index) => <article className="surface record-card" key={item.id}><div className="record-header"><span className="record-index">{String(index + 1).padStart(2, "0")}</span><div><strong>{item.title || "Nouveau dossier"}</strong><small>{item.status}</small></div><button className="icon-button danger" aria-label="Supprimer le dossier" onClick={() => setData((current) => ({ ...current, dossiers: current.dossiers.filter((row) => row.id !== item.id) }))}><Icon name="trash"/></button></div><div className="form-grid"><TextField label="Dossier" value={item.title} onChange={(title) => updateDossier(item.id, { title })} placeholder="Nom du dossier"/><TextField label="Univers" value={item.universe} onChange={(universe) => updateDossier(item.id, { universe })}/><TextField label="Référence" value={item.reference} onChange={(reference) => updateDossier(item.id, { reference })}/><SelectField label="Statut" value={item.status} onChange={(status) => updateDossier(item.id, { status })} options={statusOptions}/><TextField label="Responsable" value={item.owner} onChange={(owner) => updateDossier(item.id, { owner })}/><TextField label="Échéance" type="date" value={item.deadline} onChange={(deadline) => updateDossier(item.id, { deadline })}/><label className="field field-wide"><span>Prochaine action</span><textarea value={item.action} onChange={(event) => updateDossier(item.id, { action: event.target.value })}/></label><label className="field field-wide"><span>Commentaire / risque</span><textarea value={item.comment} onChange={(event) => updateDossier(item.id, { comment: event.target.value })}/></label><label className="field progress-field field-wide"><span><b>Avancement</b><strong>{item.progress}%</strong></span><input type="range" min="0" max="100" step="5" value={item.progress} onChange={(event) => updateDossier(item.id, { progress: Number(event.target.value) })}/></label></div></article>)}</div> : <EmptyState label="un dossier" onAdd={addDossier}/>}</section>}
 
@@ -541,8 +651,8 @@ export default function Home() {
     {section === "tariffs" && <section className="editor-section"><SectionTitle eyebrow="04 · Extraction manuelle" title="Évolutions tarifaires" detail="Colle directement ton extraction ou complète les lignes à la main." action={<div className="title-actions"><PasteImporter kind="tariffs" onImport={(text) => importTable("tariffs", text)}/><button className="primary-button" onClick={addTariff}><Icon name="plus"/> Ajouter</button></div>}/><div className="surface data-table-wrap"><table className="data-table"><thead><tr><th>Code</th><th>Fournisseur</th><th>Mois</th><th>État</th><th>Réception trame</th><th>Responsable</th><th>Commentaire</th><th/></tr></thead><tbody>{data.tariffs.map((item) => <tr key={item.id}><td><input value={item.code} onChange={(e) => updateTariff(item.id, { code: e.target.value })}/></td><td><input value={item.supplier} onChange={(e) => updateTariff(item.id, { supplier: e.target.value })}/></td><td><input value={item.month} onChange={(e) => updateTariff(item.id, { month: e.target.value })}/></td><td><input value={item.state} onChange={(e) => updateTariff(item.id, { state: e.target.value })}/></td><td><input type="date" value={item.receptionDate} onChange={(e) => updateTariff(item.id, { receptionDate: e.target.value })}/></td><td><input value={item.owner} onChange={(e) => updateTariff(item.id, { owner: e.target.value })}/></td><td><input value={item.comment} onChange={(e) => updateTariff(item.id, { comment: e.target.value })}/></td><td><button className="icon-button subtle" aria-label="Supprimer" onClick={() => setData((current) => ({ ...current, tariffs: current.tariffs.filter((row) => row.id !== item.id) }))}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!data.tariffs.length && <div className="table-empty">Aucune évolution tarifaire. Utilise « Coller un tableau » ou « Ajouter ».</div>}</div><div className="rule-note"><Icon name="alert"/><div><strong>Vigilances automatiques</strong><span>Du 8 au 14 : trame à sécuriser · après le 15 : KO sans trame · trame reçue depuis plus de 5 jours : traitement à contrôler.</span></div></div></section>}
 
     {section === "jira" && <section className="editor-section">
-      <SectionTitle eyebrow="05 · Extraction manuelle" title="Tickets Jira par personne" detail={`Colle le tableau tabulé complet, contrôle l’aperçu puis choisis les personnes à rattacher à ${market.name}.`} action={<div className="title-actions"><JiraPasteImporter key={marketId} marketId={marketId} marketName={market.name} onImport={importJiraSummary}/><button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter une personne</button></div>}/>
-      <div className="jira-import-note"><Icon name="ticket"/><div><strong>Un instantané complet, sans doublons</strong><span>Chaque import remplace le précédent relevé Jira de ce marché. Ta sélection de personnes est mémorisée séparément pour chaque marché et les liens Jira restent accessibles.</span></div></div>
+      <SectionTitle eyebrow="05 · Tableau hebdomadaire global" title="Tickets Jira par personne" detail={`Colle une fois le tableau complet de la semaine, puis affecte les personnes aux marchés. La vue ${market.name} se met à jour automatiquement.`} action={<div className="title-actions"><JiraPasteImporter key={`${currentWeekYear}-${currentWeek}-${marketId}`} marketId={marketId} marketName={market.name} markets={marketOptions} year={currentWeekYear} week={currentWeek} onImport={importJiraSummary}/><button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter une personne</button></div>}/>
+      <div className="jira-import-note"><Icon name="ticket"/><div><strong>Un tableau conservé par semaine, des affectations durables par marché</strong><span>Le collage global garde toutes les personnes. Les cases cochées pour chaque marché sont réutilisées automatiquement lors des prochains imports, sans doublons.</span></div></div>
       <div className="surface data-table-wrap jira-summary-wrap"><table className="data-table jira-person-table"><thead><tr><th>Personne</th>{JIRA_SUMMARY_STATUSES.map((status) => <th key={status}>{status}</th>)}<th>Total</th><th/></tr></thead><tbody>{jiraPeople.map((person) => <tr key={person.assignee}><th scope="row"><input value={person.assignee} aria-label={`Personne ${person.assignee}`} onChange={(event) => renameJiraPerson(person.assignee, event.target.value)}/></th>{JIRA_SUMMARY_STATUSES.map((status) => { const statusItems = person.items.filter((item) => item.status === status); const count = statusItems.reduce((sum, item) => sum + jiraItemCount(item), 0); const link = statusItems.find((item) => item.link)?.link; return <td key={status}><div className="jira-count-cell"><input type="number" min="0" value={count} aria-label={`${status} pour ${person.assignee}`} onChange={(event) => setJiraPersonCount(person.assignee, status, Number(event.target.value))}/>{link && <a href={link} target="_blank" rel="noreferrer" title={`Ouvrir le filtre « ${status} »`} aria-label={`Ouvrir le filtre ${status} de ${person.assignee}`}>↗</a>}</div></td>; })}<td className="jira-person-total"><strong>{person.total}</strong><small>{jiraStatusSummary(person.items)}</small></td><td><button className="icon-button subtle" aria-label={`Supprimer ${person.assignee}`} onClick={() => removeJiraPerson(person.assignee)}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!jiraPeople.length && <div className="table-empty">Aucun ticket Jira. Importe le tableau complet ou ajoute une personne.</div>}</div>
     </section>}
 
@@ -552,11 +662,22 @@ export default function Home() {
   </main></div>;
 
   return <div className={`app-shell market-${market.tone}`} style={themeStyle}><div className="ambient ambient-a"/><div className="ambient ambient-b"/>
-    <header className="app-header"><a className="brand" href="#top"><span className="brand-mark"><Icon name="spark" size={19}/></span><div><strong>Market Pulse</strong><small>Générateur de point marché</small></div></a><div className="market-switch"><span>Marché actif</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div><nav className="view-tabs" aria-label="Mode d’affichage"><button className={view === "edit" ? "active" : ""} onClick={() => setView("edit")}><Icon name="edit"/> Saisie</button><button className={view === "preview" ? "active" : ""} onClick={() => setView("preview")}><Icon name="eye"/> Aperçu</button><button className={view === "mail" ? "active" : ""} onClick={() => setView("mail")}><Icon name="mail"/> Mail</button></nav><div className="header-actions"><button className="icon-button" title="Importer un fichier JSON" onClick={() => fileInput.current?.click()}><Icon name="upload"/></button><input ref={fileInput} className="sr-only" type="file" accept="application/json" onChange={importJson}/><button className="icon-button" title="Exporter le point en JSON" onClick={() => exportJson()}><Icon name="download"/></button><button className="secondary-button new-point" onClick={resetPoint}>Nouveau point</button><button className="primary-button save-point" disabled={saving || !ready} onClick={saveVersion}><Icon name="check"/> {saving ? "Enregistrement…" : "Sauvegarder une version"}</button></div></header>
+    <header className="app-header">
+      <a className="brand" href="#top"><span className="brand-mark"><Icon name="spark" size={19}/></span><div><strong>Market Pulse</strong><small>Générateur de point marché</small></div></a>
+      <div className="market-switch"><span>Marché actif</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+      <nav className="view-tabs" aria-label="Mode d’affichage"><button className={view === "read" ? "active" : ""} onClick={() => chooseView("read")}><Icon name="eye"/> Lecture</button><button className={view === "edit" ? "active" : ""} onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> Édition</button><button className={view === "mail" ? "active" : ""} onClick={() => chooseView("mail")}><Icon name="mail"/> Mail</button></nav>
+      <div className="header-actions">
+        <input ref={fileInput} className="sr-only" type="file" accept="application/json" onChange={importJson}/>
+        {session.user && view === "edit" && <><button className="icon-button" title="Importer un fichier JSON" onClick={() => fileInput.current?.click()}><Icon name="upload"/></button><button className="icon-button" title="Exporter le point en JSON" onClick={() => exportJson()}><Icon name="download"/></button><button className="secondary-button new-point" onClick={resetPoint}>Nouveau</button><button className="primary-button save-point" disabled={saving || !ready} onClick={saveVersion}><Icon name="check"/> {saving ? "Enregistrement…" : "Sauvegarder"}</button></>}
+        {!session.user && <a className="login-button" href={session.signInPath}><Icon name="lock"/> {sessionReady ? "Connexion édition" : "Vérification…"}</a>}
+        {session.user && <div className="editor-profile"><span><Icon name="user" size={15}/></span><div><strong>{session.user.displayName}</strong><small>Profil d’édition</small></div><a href={session.signOutPath}>Déconnexion</a></div>}
+      </div>
+    </header>
     <div id="top" className="top-strip"><span className="live-dot"/><strong>{market.short}</strong><i/>{isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}<i/>{dateLabel(data.meetingDate)}<i/>{isDirty ? "Brouillon" : activeVersion ? `Version ${activeVersion}` : "Non enregistré"}<b>{alerts.length ? `${alerts.length} vigilance${alerts.length > 1 ? "s" : ""}` : "Aucune vigilance"}</b></div>
-    {view === "edit" && renderEditor()}
-    {view === "preview" && <main className="preview-page"><div className="preview-toolbar"><div><span>Aperçu web</span><strong>Le rendu se met à jour en direct.</strong></div><button className="secondary-button" onClick={() => setView("edit")}><Icon name="edit"/> Modifier les données</button></div><PreviewDashboard data={data} market={market}/></main>}
-    {view === "mail" && <main className="mail-page"><div className="mail-toolbar"><div><span>Version Outlook</span><strong>Statique, responsive et sans script.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { setSection("mail"); setView("edit"); }}><Icon name="edit"/> Paramètres</button><button className="secondary-button" onClick={() => download(`point-marche-mail-${marketId}-${data.meetingDate}.html`, mailHtml, "text/html;charset=utf-8")}><Icon name="download"/> Télécharger HTML</button><button className="primary-button" onClick={copyMail}><Icon name="copy"/> Copier pour Outlook</button></div></div><div className="mail-frame-wrap"><iframe title="Aperçu du mail Outlook" srcDoc={mailHtml}/></div></main>}
+    {view !== "mail" && periodNavigator}
+    {view === "edit" && session.user && renderEditor()}
+    {view === "read" && <main className="preview-page"><div className="preview-toolbar"><div><span>Lecture générale</span><strong>Choisis le marché, la semaine et la version dans le calendrier ci-dessus.</strong></div><button className="secondary-button" onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> {session.user ? "Modifier ce point" : "Se connecter pour modifier"}</button></div>{!activeVersion && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucune version enregistrée pour cette sélection</strong><span>La lecture affiche le brouillon disponible ; une sauvegarde créera la première version de cette semaine.</span></div></div>}<PreviewDashboard data={data} market={market}/></main>}
+    {view === "mail" && <main className="mail-page"><div className="mail-toolbar"><div><span>Version Outlook</span><strong>Statique, responsive et sans script.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { setSection("mail"); chooseView("edit"); }}><Icon name={session.user ? "edit" : "lock"}/> Paramètres</button><button className="secondary-button" onClick={() => download(`point-marche-mail-${marketId}-${data.meetingDate}.html`, mailHtml, "text/html;charset=utf-8")}><Icon name="download"/> Télécharger HTML</button><button className="primary-button" onClick={copyMail}><Icon name="copy"/> Copier pour Outlook</button></div></div><div className="mail-frame-wrap"><iframe title="Aperçu du mail Outlook" srcDoc={mailHtml}/></div></main>}
     {toast && <div className="toast"><Icon name="check"/>{toast}</div>}
   </div>;
 }

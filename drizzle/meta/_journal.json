@@ -15,6 +15,13 @@
       "when": 1787582555882,
       "tag": "0001_daffy_iron_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787654194596,
+      "tag": "0002_nasty_pretty_boy",
+      "breakpoints": true
     }
   ]
 }

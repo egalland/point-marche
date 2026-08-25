@@ -1,6 +1,7 @@
 import { and, desc, eq, max } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { weeklyPoints } from "../../../db/schema";
+import { getChatGPTUser } from "../../chatgpt-auth";
 
 type SavePointRequest = {
   marketId?: string;
@@ -67,6 +68,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const user = await getChatGPTUser();
+    if (!user) return Response.json({ error: "Connecte-toi pour enregistrer une version." }, { status: 401 });
     const body = await request.json() as SavePointRequest;
     const marketId = body.marketId?.trim() ?? "";
     const data = body.data;

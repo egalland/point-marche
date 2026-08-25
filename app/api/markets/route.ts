@@ -1,6 +1,7 @@
 import { and, asc, eq, max, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { marketDefinitions } from "../../../db/schema";
+import { getChatGPTUser } from "../../chatgpt-auth";
 
 const tones = new Set(["mint", "violet", "aqua", "peach", "red"]);
 
@@ -15,6 +16,17 @@ function cleanShort(value: unknown, name: string) {
 
 function cleanTone(value: unknown) {
   return typeof value === "string" && tones.has(value) ? value : "mint";
+}
+
+function cleanHex(value: unknown) {
+  if (typeof value !== "string") return "";
+  const hex = value.trim().toUpperCase();
+  return /^#[0-9A-F]{6}$/.test(hex) ? hex : "";
+}
+
+async function requireEditor() {
+  const user = await getChatGPTUser();
+  return user ? null : Response.json({ error: "Connecte-toi pour modifier les marchés." }, { status: 401 });
 }
 
 function routeError(error: unknown) {
@@ -38,7 +50,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { name?: unknown; shortCode?: unknown; tone?: unknown };
+    const denied = await requireEditor();
+    if (denied) return denied;
+    const body = await request.json() as { name?: unknown; shortCode?: unknown; tone?: unknown; colorHex?: unknown };
     const name = cleanName(body.name);
     if (!name) return Response.json({ error: "Le nom du marché est requis." }, { status: 400 });
 
@@ -50,6 +64,7 @@ export async function POST(request: Request) {
       const [restored] = await db.update(marketDefinitions).set({
         shortCode: cleanShort(body.shortCode, name),
         tone: cleanTone(body.tone),
+        colorHex: cleanHex(body.colorHex),
         position: Number(positionResult?.value ?? -1) + 1,
         isActive: true,
         updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -61,6 +76,7 @@ export async function POST(request: Request) {
       name,
       shortCode: cleanShort(body.shortCode, name),
       tone: cleanTone(body.tone),
+      colorHex: cleanHex(body.colorHex),
       position: Number(positionResult?.value ?? -1) + 1,
     }).returning();
     return Response.json({ market }, { status: 201 });
@@ -71,7 +87,9 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const body = await request.json() as { id?: unknown; name?: unknown; shortCode?: unknown; tone?: unknown };
+    const denied = await requireEditor();
+    if (denied) return denied;
+    const body = await request.json() as { id?: unknown; name?: unknown; shortCode?: unknown; tone?: unknown; colorHex?: unknown };
     const id = typeof body.id === "string" ? body.id.trim() : "";
     const name = cleanName(body.name);
     if (!id || !name) return Response.json({ error: "Identifiant et nom du marché requis." }, { status: 400 });
@@ -81,6 +99,7 @@ export async function PATCH(request: Request) {
       name,
       shortCode: cleanShort(body.shortCode, name),
       tone: cleanTone(body.tone),
+      colorHex: cleanHex(body.colorHex),
       updatedAt: sql`CURRENT_TIMESTAMP`,
     }).where(and(eq(marketDefinitions.id, id), eq(marketDefinitions.isActive, true))).returning();
     if (!market) return Response.json({ error: "Marché introuvable." }, { status: 404 });
@@ -92,6 +111,8 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const denied = await requireEditor();
+    if (denied) return denied;
     const id = new URL(request.url).searchParams.get("id")?.trim() ?? "";
     if (!id) return Response.json({ error: "Identifiant du marché requis." }, { status: 400 });
 
