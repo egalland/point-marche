@@ -162,6 +162,39 @@ function dateFromWeekInput(value: string) {
   monday.setUTCDate(januaryFourth.getUTCDate() - ((januaryFourth.getUTCDay() + 6) % 7) + (week - 1) * 7);
   return monday.toISOString().slice(0, 10);
 }
+function monthStart(dateString: string) {
+  const date = new Date(`${dateString || isoToday()}T12:00:00Z`);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+function shiftMonth(monthString: string, amount: number) {
+  const date = new Date(`${monthString}T12:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() + amount, 1);
+  return monthStart(date.toISOString().slice(0, 10));
+}
+function calendarMonthLabel(monthString: string) {
+  const label = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${monthString}T12:00:00Z`));
+  return label.charAt(0).toLocaleUpperCase("fr-FR") + label.slice(1);
+}
+function shortMonth(value: Date) { return new Intl.DateTimeFormat("fr-FR", { month: "short", timeZone: "UTC" }).format(value).replace(".", ""); }
+function weekRangeLabel(start: Date, end: Date) {
+  const startDay = start.getUTCDate(); const endDay = end.getUTCDate();
+  return start.getUTCMonth() === end.getUTCMonth() ? `${startDay}–${endDay} ${shortMonth(end)}` : `${startDay} ${shortMonth(start)}–${endDay} ${shortMonth(end)}`;
+}
+function weeksForMonth(monthString: string) {
+  const first = new Date(`${monthString}T12:00:00Z`);
+  const cursor = new Date(first);
+  cursor.setUTCDate(cursor.getUTCDate() - ((cursor.getUTCDay() + 6) % 7));
+  const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0, 12));
+  const weeks: { year: number; week: number; value: string; start: string; end: string; range: string }[] = [];
+  while (cursor <= last || weeks.length < 5) {
+    const start = new Date(cursor); const end = new Date(cursor); end.setUTCDate(end.getUTCDate() + 6);
+    const startString = start.toISOString().slice(0, 10); const year = isoWeekYear(startString); const week = isoWeek(startString);
+    weeks.push({ year, week, value: `${year}-W${String(week).padStart(2, "0")}`, start: startString, end: end.toISOString().slice(0, 10), range: weekRangeLabel(start, end) });
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+    if (weeks.length >= 6) break;
+  }
+  return weeks;
+}
 function dateLabel(value: string) { if (!value) return "Date à définir"; return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T12:00:00`)); }
 function daysBetween(from: string, to: string) { if (!from || !to) return 0; return Math.floor((new Date(`${to}T12:00:00`).valueOf() - new Date(`${from}T12:00:00`).valueOf()) / 86400000); }
 function isClosed(status: string) { return /(termin|cl[oô]tur|r[eé]solu|annul)/i.test(status); }
@@ -363,6 +396,7 @@ export default function Home() {
   const [creatingMarket, setCreatingMarket] = useState(false);
   const [lastSavedSignature, setLastSavedSignature] = useState("");
   const [toast, setToast] = useState("");
+  const [calendarMonth, setCalendarMonth] = useState(() => monthStart(isoToday()));
   const [session, setSession] = useState<SessionPayload>({ user: null, signInPath: "/signin-with-chatgpt?return_to=%2F%3Fmode%3Dedit", signOutPath: "/" });
   const [sessionReady, setSessionReady] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -377,6 +411,7 @@ export default function Home() {
   const currentWeek = isoWeek(data.meetingDate);
   const currentWeekYear = isoWeekYear(data.meetingDate);
   const currentWeekVersions = archive.filter((item) => item.week === currentWeek && item.year === currentWeekYear);
+  const calendarWeeks = useMemo(() => weeksForMonth(calendarMonth), [calendarMonth]);
   const jiraPeople = useMemo(() => groupJiraPeople(data.jira), [data.jira]);
 
   const loadMarket = useCallback(async (nextMarket: string, loadLatest = true, marketOverride?: Market) => {
@@ -393,12 +428,14 @@ export default function Home() {
         if (latest) {
           const nextData = await applyJiraWeek(normalizePointData(latest.data, nextMarket, marketOverride), nextMarket);
           setData(nextData);
+          setCalendarMonth(monthStart(nextData.meetingDate));
           setActiveVersion(latest.version);
           setSavedAt(new Date(latest.createdAt.replace(" ", "T") + (latest.createdAt.includes("Z") ? "" : "Z")));
           setLastSavedSignature(pointSignature(nextMarket, nextData));
         } else {
           const nextData = await applyJiraWeek(initialData(nextMarket, marketOverride), nextMarket);
           setData(nextData);
+          setCalendarMonth(monthStart(nextData.meetingDate));
           setActiveVersion(null);
           setSavedAt(null);
           setLastSavedSignature("");
@@ -409,7 +446,9 @@ export default function Home() {
       setArchive([]);
       setArchiveError(error instanceof Error ? error.message : "Impossible de charger les sauvegardes.");
       if (loadLatest) {
-        setData(await applyJiraWeek(initialData(nextMarket, marketOverride), nextMarket));
+        const nextData = await applyJiraWeek(initialData(nextMarket, marketOverride), nextMarket);
+        setData(nextData);
+        setCalendarMonth(monthStart(nextData.meetingDate));
         setActiveVersion(null);
         setSavedAt(null);
         setLastSavedSignature("");
@@ -510,33 +549,43 @@ export default function Home() {
     const exportMarketInfo = marketOptions.find((item) => item.id === exportMarket);
     download(`point-marche-${exportMarket}-${year}-S${String(week).padStart(2, "0")}${version ? `-V${version}` : "-brouillon"}.json`, JSON.stringify({ schemaVersion: 4, marketId: exportMarket, market: exportMarketInfo ? { name: exportMarketInfo.name, shortCode: exportMarketInfo.short, tone: exportMarketInfo.tone, colorHex: exportMarketInfo.colorHex } : undefined, year, week, version, data: exportData }, null, 2), "application/json");
   };
-  const importJson = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const payload = JSON.parse(String(reader.result)) as { marketId?: string; data?: unknown }; if (!payload.data) throw new Error(); const importedMarketInfo = marketOptions.find((item) => item.id === payload.marketId) ?? market; const importedMarket = importedMarketInfo.id; const importedData = normalizePointData(payload.data, importedMarket, importedMarketInfo); setMarketId(importedMarket); setData(importedData); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); void loadMarket(importedMarket, false, importedMarketInfo); setToast("JSON importé comme nouveau brouillon."); } catch { setToast("Fichier non reconnu."); } }; reader.readAsText(file); event.target.value = ""; };
-  const resetPoint = () => { if (!window.confirm("Créer un nouveau point pour ce marché ? Le brouillon actuel sera remplacé, mais les versions enregistrées resteront disponibles.")) return; const fresh = initialData(marketId, market); fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail; fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; setData(fresh); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); setToast("Nouveau brouillon créé."); };
+  const importJson = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const payload = JSON.parse(String(reader.result)) as { marketId?: string; data?: unknown }; if (!payload.data) throw new Error(); const importedMarketInfo = marketOptions.find((item) => item.id === payload.marketId) ?? market; const importedMarket = importedMarketInfo.id; const importedData = normalizePointData(payload.data, importedMarket, importedMarketInfo); setMarketId(importedMarket); setData(importedData); setCalendarMonth(monthStart(importedData.meetingDate)); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); void loadMarket(importedMarket, false, importedMarketInfo); setToast("JSON importé comme nouveau brouillon."); } catch { setToast("Fichier non reconnu."); } }; reader.readAsText(file); event.target.value = ""; };
+  const resetPoint = () => { if (!window.confirm("Créer un nouveau point pour ce marché ? Le brouillon actuel sera remplacé, mais les versions enregistrées resteront disponibles.")) return; const fresh = initialData(marketId, market); fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail; fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; setData(fresh); setCalendarMonth(monthStart(fresh.meetingDate)); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); setToast("Nouveau brouillon créé."); };
   const loadRecord = async (record: PointRecord, nextView: View = view, skipConfirm = false) => {
     if (!skipConfirm && view === "edit" && isDirty && !window.confirm("Charger cette version et remplacer le brouillon non enregistré ?")) return;
     const recordMarket = marketOptions.find((item) => item.id === record.marketId) ?? market;
     const nextData = await applyJiraWeek(normalizePointData(record.data, record.marketId, recordMarket), record.marketId);
-    setMarketId(record.marketId); setData(nextData); setActiveVersion(record.version); setSavedAt(new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z"))); setLastSavedSignature(pointSignature(record.marketId, nextData)); setSection("general"); setView(nextView); setToast(`${record.year} · S${String(record.week).padStart(2, "0")} · V${record.version} chargée.`);
+    setMarketId(record.marketId); setData(nextData); setCalendarMonth(monthStart(nextData.meetingDate)); setActiveVersion(record.version); setSavedAt(new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z"))); setLastSavedSignature(pointSignature(record.marketId, nextData)); setSection("general"); setView(nextView); setToast(`${record.year} · S${String(record.week).padStart(2, "0")} · V${record.version} chargée.`);
   };
   const chooseWeek = async (value: string) => {
     if (!/^\d{4}-W\d{2}$/.test(value)) return;
     const meetingDate = dateFromWeekInput(value);
     const year = isoWeekYear(meetingDate); const week = isoWeek(meetingDate);
-    if (year === currentWeekYear && week === currentWeek) return;
+    if (year === currentWeekYear && week === currentWeek) { setCalendarMonth(monthStart(meetingDate)); return; }
     if (view === "edit" && isDirty && !window.confirm("Changer de semaine sans enregistrer ce brouillon ?")) return;
+    setCalendarMonth(monthStart(meetingDate));
     const latest = archive.filter((record) => record.year === year && record.week === week).sort((a, b) => b.version - a.version)[0];
     if (latest) { await loadRecord(latest, view, true); return; }
     const fresh = initialData(marketId, market);
     fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail;
     fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; fresh.meetingDate = meetingDate;
     const nextData = await applyJiraWeek(fresh, marketId);
-    setData(nextData); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); setToast(`${year} · S${String(week).padStart(2, "0")} ouverte comme nouveau brouillon.`);
+    setData(nextData); setCalendarMonth(monthStart(nextData.meetingDate)); setActiveVersion(null); setSavedAt(null); setLastSavedSignature(""); setToast(`${year} · S${String(week).padStart(2, "0")} ouverte comme nouveau brouillon.`);
   };
   const chooseVersion = async (value: string) => {
     const version = Number(value);
     if (!version) return;
     const record = currentWeekVersions.find((item) => item.version === version);
     if (record) await loadRecord(record, view);
+  };
+  const chooseCurrentWeek = async () => {
+    const today = isoToday();
+    setCalendarMonth(monthStart(today));
+    await chooseWeek(weekInputValue(today));
+  };
+  const chooseLatestPublished = async () => {
+    const latest = archive[0];
+    if (latest) await loadRecord(latest, view);
   };
   const saveVersion = async () => {
     if (saving || !ready) return;
@@ -622,11 +671,19 @@ export default function Home() {
   ];
 
   const periodNavigator = <section className={`period-navigator ${view === "edit" ? "edit-period" : "read-period"}`} aria-label={view === "edit" ? "Période d’édition" : "Navigation de lecture"}>
-    <div className="period-title"><span><Icon name={view === "edit" ? "edit" : "eye"} size={15}/> {view === "edit" ? "Période d’édition" : "Lecture des points"}</span><strong>{market.name}</strong></div>
-    <label><span>Marché</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-    <label><span><Icon name="calendar" size={13}/> Calendrier</span><input type="week" value={weekInputValue(data.meetingDate)} onChange={(event) => { void chooseWeek(event.target.value); }}/></label>
-    <label><span>Version</span><select value={activeVersion ?? ""} onChange={(event) => { void chooseVersion(event.target.value); }}><option value="">{currentWeekVersions.length ? "Brouillon / nouvelle version" : "Aucune version enregistrée"}</option>{[...currentWeekVersions].sort((a, b) => b.version - a.version).map((record) => <option value={record.version} key={record.id}>V{record.version} · {dateLabel(record.meetingDate)}</option>)}</select></label>
-    <div className="period-state"><span>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</span><strong>{isDirty ? "Brouillon modifié" : activeVersion ? `Version ${activeVersion}` : "Nouvelle semaine"}</strong><small>{currentWeekVersions.length} version{currentWeekVersions.length > 1 ? "s" : ""} disponible{currentWeekVersions.length > 1 ? "s" : ""}</small></div>
+    <div className="period-head">
+      <div className="period-title"><span><Icon name={view === "edit" ? "edit" : "eye"} size={15}/> {view === "edit" ? "Période d’édition" : "Lecture des points"}</span><strong>{market.name}</strong></div>
+      <label className="period-market"><span>Marché</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <div className="period-state"><span>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</span><strong>{isDirty ? "Brouillon modifié" : activeVersion ? `Version ${activeVersion}` : "Nouvelle semaine"}</strong><small>{currentWeekVersions.length} version{currentWeekVersions.length > 1 ? "s" : ""} disponible{currentWeekVersions.length > 1 ? "s" : ""}</small></div>
+    </div>
+    <div className="visual-week-picker">
+      <div className="week-picker-toolbar">
+        <div className="month-navigation"><button type="button" aria-label="Mois précédent" onClick={() => setCalendarMonth((current) => shiftMonth(current, -1))}><Icon name="chevron" size={16}/></button><strong>{calendarMonthLabel(calendarMonth)}</strong><button type="button" aria-label="Mois suivant" onClick={() => setCalendarMonth((current) => shiftMonth(current, 1))}><Icon name="chevron" size={16}/></button></div>
+        <div className="week-quick-actions"><button type="button" onClick={() => { void chooseCurrentWeek(); }}><Icon name="calendar" size={14}/> Cette semaine</button><button type="button" disabled={!archive.length} onClick={() => { void chooseLatestPublished(); }}><Icon name="check" size={14}/> Dernière publiée</button></div>
+      </div>
+      <div className="week-card-strip">{calendarWeeks.map((weekChoice) => { const versions = archive.filter((record) => record.year === weekChoice.year && record.week === weekChoice.week); const selected = weekChoice.year === currentWeekYear && weekChoice.week === currentWeek; const today = weekChoice.value === weekInputValue(isoToday()); return <button type="button" className={`week-choice ${selected ? "selected" : ""} ${versions.length ? "published" : "empty"} ${selected && isDirty ? "draft" : ""}`} aria-pressed={selected} key={weekChoice.value} onClick={() => { void chooseWeek(weekChoice.value); }}><span><i/>{today ? "Cette semaine" : `${weekChoice.year}`}</span><strong>S{String(weekChoice.week).padStart(2, "0")}</strong><small>{weekChoice.range}</small><b>{versions.length ? `${versions.length} version${versions.length > 1 ? "s" : ""}` : "Aucune version"}</b></button>; })}</div>
+      <div className="week-version-row"><span>Versions de S{String(currentWeek).padStart(2, "0")}</span><div>{[...currentWeekVersions].sort((a, b) => a.version - b.version).map((record) => <button type="button" className={activeVersion === record.version && !isDirty ? "active" : ""} key={record.id} onClick={() => { void chooseVersion(String(record.version)); }}>V{record.version}<small>{dateLabel(record.meetingDate)}</small></button>)}{isDirty && <b className="draft-version">Brouillon modifié</b>}{!currentWeekVersions.length && !isDirty && <small className="no-version">Aucune version enregistrée pour cette semaine</small>}</div></div>
+    </div>
   </section>;
 
   const renderEditor = () => <div className="editor-layout"><aside className="editor-nav"><div className="editor-nav-title"><span>Sommaire</span><small>Complète ton point</small></div>{navItems.map((item) => <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => setSection(item.id)}><Icon name={item.icon}/><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}<Icon name="chevron" size={15}/></button>)}<div className={`autosave-card ${isDirty ? "is-dirty" : ""}`}><span><Icon name={isDirty ? "edit" : "check"} size={14}/> {isDirty ? "Brouillon à enregistrer" : "Sauvegarde en ligne"}</span><small>{archiveLoading ? "Chargement du registre…" : activeVersion ? `Version ${activeVersion}${savedAt ? ` · ${savedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}` : "Aucune version enregistrée"}</small></div></aside><main className="editor-content">
@@ -634,7 +691,7 @@ export default function Home() {
       <SectionTitle eyebrow="01 · Cadre" title="Préparer le point" detail="Le marché, la date ISO et la couleur pilotent le rendu web et le mail."/>
       <div className="surface form-grid general-grid">
         <label className="field"><span>Marché</span><select value={marketId} onChange={(event) => chooseMarket(event.target.value)}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <TextField label="Date du point" type="date" value={data.meetingDate} onChange={(meetingDate) => setData((current) => ({ ...current, meetingDate }))}/>
+        <TextField label="Date du point" type="date" value={data.meetingDate} onChange={(meetingDate) => { setData((current) => ({ ...current, meetingDate })); setCalendarMonth(monthStart(meetingDate)); }}/>
         <div className="week-display"><span>Référence ISO</span><strong>{isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong></div>
         <div className="field field-wide theme-field"><span>Couleur de ce point</span><div className="theme-picker">{themes.map((option) => <button key={option.id} type="button" className={!data.customColor && data.themeColor === option.id ? "active" : ""} style={{ "--swatch": option.accent } as CSSProperties} onClick={() => setData((current) => ({ ...current, themeColor: option.id, customColor: "" }))}><i/><b>{option.label}</b></button>)}</div><div className="hex-color-control"><input type="color" value={accent} aria-label="Sélecteur de couleur personnalisée" onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/><label><span>Hexadécimal personnalisé</span><input value={data.customColor} maxLength={7} placeholder={theme.accent.toUpperCase()} onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/></label><small className={data.customColor && !validHex(data.customColor) ? "invalid" : ""}>{data.customColor && !validHex(data.customColor) ? "Format attendu : #RRGGBB" : `Couleur active : ${accent.toUpperCase()}`}</small></div></div>
         <label className="field field-wide"><span>Priorité de la semaine</span><textarea value={data.priority} onChange={(event) => setData((current) => ({ ...current, priority: event.target.value }))} placeholder="L’action principale ou le message clé à retenir…"/></label>
