@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from "react";
-import { parseJiraAssigneeSummary } from "../lib/jira-import";
+import { JIRA_SUMMARY_STATUSES, parseJiraAssigneeSummary, type JiraSummaryImport } from "../lib/jira-import";
 
 type Tone = "mint" | "violet" | "aqua" | "peach" | "red";
 type View = "edit" | "preview" | "mail";
@@ -16,6 +16,7 @@ type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
 type Market = { id: string; name: string; short: string; tone: ThemeKey; position: number };
 type PointRecord = { id: string; marketId: string; year: number; week: number; version: number; meetingDate: string; pointName: string; themeColor: ThemeKey; data: PointData; createdAt: string };
 type ImportOutcome = { count: number; message?: string };
+type JiraPersonGroup = { assignee: string; items: JiraTicket[]; total: number };
 
 const defaultMarkets: Market[] = [
   { id: "revetements-menuiserie", name: "Revêtements & Menuiserie", short: "REV–MEN", tone: "mint", position: 0 },
@@ -145,6 +146,18 @@ function jiraStatusSummary(items: JiraTicket[]) {
   items.forEach((item) => totals.set(item.status || "À qualifier", (totals.get(item.status || "À qualifier") ?? 0) + jiraItemCount(item)));
   return Array.from(totals, ([status, count]) => `${status} ${count}`).join(" · ");
 }
+function groupJiraPeople(items: JiraTicket[]): JiraPersonGroup[] {
+  const groups = new Map<string, JiraTicket[]>();
+  items.forEach((item) => {
+    const assignee = item.assignee.trim() || "Non assigné";
+    groups.set(assignee, [...(groups.get(assignee) ?? []), item]);
+  });
+  return Array.from(groups, ([assignee, personItems]) => ({
+    assignee,
+    items: personItems,
+    total: personItems.reduce((sum, item) => sum + jiraItemCount(item), 0),
+  })).sort((a, b) => b.total - a.total || a.assignee.localeCompare(b.assignee, "fr"));
+}
 function toneForStatus(status: string): Tone { if (/(bloqu|d[eé]pass|retard)/i.test(status)) return "red"; if (/(attente|surveill|action|pr[eé]par)/i.test(status)) return "peach"; if (/(fait|termin|re[cç]u|d[eé]lai)/i.test(status)) return "mint"; if (/cours/i.test(status)) return "aqua"; return "violet"; }
 function escapeHtml(value: string) { return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character); }
 
@@ -164,6 +177,63 @@ function PasteImporter({ kind, marketName, onImport }: { kind: "tariffs" | "jira
   const label = kind === "tariffs" ? "évolutions tarifaires" : "tickets Jira";
   const columns = kind === "tariffs" ? "Code | Fournisseur | Mois | État | Réception | Échéance | Responsable | Commentaire" : "Personne | À faire | Réouvert | En cours | Attente client | Attente tiers | Attente changement | Total";
   return <div className={`paste-importer ${open ? "is-open" : ""}`}><button className="secondary-button" onClick={() => setOpen((value) => !value)}><Icon name="copy" /> Coller un tableau</button>{open && <div className="paste-panel"><div><strong>Import rapide des {label}</strong><span>{kind === "jira" ? "Colle le tableau récapitulatif complet : toutes les personnes et tous les statuts seront reconnus." : "Copie les lignes depuis Excel, avec ou sans en-tête."}</span></div>{kind === "jira" && marketName && <div className="paste-market-target"><Icon name="check" size={14}/><span>Marché cible</span><strong>{marketName}</strong></div>}<code>{columns}</code><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={kind === "jira" ? "Colle ici le tableau Jira complet, tel qu’il est copié…" : "Colle ici les lignes séparées par des tabulations ou des points-virgules…"} /><div className="paste-actions"><span>{message}</span><button className="primary-button small" onClick={() => { const result = onImport(text); setMessage(result.message ?? (result.count ? `${result.count} ligne${result.count > 1 ? "s" : ""} importée${result.count > 1 ? "s" : ""}.` : "Aucune ligne reconnue.")); if (result.count) setText(""); }}>Importer</button></div></div>}</div>;
+}
+
+function JiraPasteImporter({ marketId, marketName, onImport }: { marketId: string; marketName: string; onImport: (summary: JiraSummaryImport, selectedPeople: string[]) => ImportOutcome }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [preview, setPreview] = useState<JiraSummaryImport>(() => parseJiraAssigneeSummary(""));
+  const [selectedPeople, setSelectedPeople] = useState<string[]>([]);
+  const [message, setMessage] = useState("");
+  const selectedSet = useMemo(() => new Set(selectedPeople), [selectedPeople]);
+  const selectedTickets = preview.people
+    .filter((person) => selectedSet.has(person.assignee))
+    .reduce((sum, person) => sum + person.total, 0);
+  const storageKey = `market-pulse:jira-people:${marketId}`;
+
+  const remember = (people: string[]) => {
+    setSelectedPeople(people);
+    try { window.localStorage.setItem(storageKey, JSON.stringify(people)); } catch { /* Préférence locale facultative. */ }
+  };
+  const updateText = (value: string) => {
+    setText(value);
+    setMessage("");
+    const parsed = parseJiraAssigneeSummary(value);
+    setPreview(parsed);
+    const available = parsed.people.map((person) => person.assignee);
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (stored !== null) {
+        const remembered = JSON.parse(stored) as unknown;
+        const names = Array.isArray(remembered) ? remembered.filter((name): name is string => typeof name === "string" && available.includes(name)) : [];
+        setSelectedPeople(names);
+        return;
+      }
+    } catch { /* Un stockage bloqué ne doit pas empêcher l’import. */ }
+    setSelectedPeople(available);
+  };
+  const togglePerson = (assignee: string) => remember(selectedSet.has(assignee) ? selectedPeople.filter((name) => name !== assignee) : [...selectedPeople, assignee]);
+  const importSelection = () => {
+    const result = onImport(preview, selectedPeople);
+    setMessage(result.message ?? (result.count ? "Import terminé." : "Sélectionne au moins une personne."));
+  };
+  const formatLabel = preview.format === "tabulated" ? "Tableau tabulé détecté" : preview.format === "markdown" ? "Tableau Jira détecté" : preview.format === "semicolon" ? "Tableau séparé par ; détecté" : "En attente du tableau";
+
+  return <div className={`paste-importer jira-paste-importer ${open ? "is-open" : ""}`}>
+    <button type="button" className="secondary-button" onClick={() => setOpen((value) => !value)}><Icon name="copy" /> Importer le tableau Jira</button>
+    {open && <div className="paste-panel jira-paste-panel">
+      <div className="jira-import-heading"><div><strong>Importer le récapitulatif Jira</strong><span>Copie le tableau Jira puis colle-le ici : les tabulations, les compteurs et les liens sont reconnus.</span></div><div className="paste-market-target"><Icon name="check" size={14}/><span>Marché cible</span><strong>{marketName}</strong></div></div>
+      <code>Personne assignée → À faire → Réouvert → En cours → Attente client → Attente tiers → Attente changement → Total</code>
+      <textarea value={text} onChange={(event) => updateText(event.target.value)} placeholder="Colle ici le tableau Jira tabulé complet…" aria-label="Tableau Jira tabulé" />
+      <div className={`jira-detection ${preview.personCount ? "is-valid" : ""}`}><span><Icon name={preview.personCount ? "check" : "copy"} size={15}/> {formatLabel}</span><strong>{preview.personCount ? `${preview.personCount} personne${preview.personCount > 1 ? "s" : ""} · ${preview.tickets} tickets` : "Aucune ligne reconnue"}</strong></div>
+      {preview.personCount > 0 && <div className="jira-preview">
+        <div className="jira-preview-toolbar"><div><strong>Prévisualisation avant import</strong><span>La sélection est mémorisée uniquement pour « {marketName} ».</span></div><div><button type="button" onClick={() => remember(preview.people.map((person) => person.assignee))}>Tout sélectionner</button><button type="button" onClick={() => remember([])}>Tout retirer</button></div></div>
+        <div className="jira-preview-table-wrap"><table className="jira-preview-table"><thead><tr><th scope="col">Inclure</th><th scope="col">Personne</th>{JIRA_SUMMARY_STATUSES.map((status) => <th scope="col" key={status}>{status}</th>)}<th scope="col">Total</th></tr></thead><tbody>{preview.people.map((person) => <tr className={selectedSet.has(person.assignee) ? "is-selected" : ""} key={person.assignee}><td><input type="checkbox" checked={selectedSet.has(person.assignee)} onChange={() => togglePerson(person.assignee)} aria-label={`Inclure ${person.assignee}`} /></td><th scope="row"><button type="button" onClick={() => togglePerson(person.assignee)}>{person.assignee}</button></th>{JIRA_SUMMARY_STATUSES.map((status) => { const item = person.statuses.find((candidate) => candidate.status === status); return <td key={status}>{item?.count || <span>—</span>}</td>; })}<td><strong>{person.total}</strong></td></tr>)}</tbody></table></div>
+        <div className="jira-selection-summary"><div><span>Import prévu</span><strong>{selectedPeople.length} personne{selectedPeople.length > 1 ? "s" : ""} · {selectedTickets} tickets</strong></div><small><Icon name="check" size={14}/> Sélection conservée pour ce marché sur cet appareil</small></div>
+      </div>}
+      <div className="paste-actions"><span>{message}</span><button type="button" className="primary-button small" disabled={!selectedPeople.length} onClick={importSelection}>Importer {selectedPeople.length || ""} personne{selectedPeople.length > 1 ? "s" : ""}</button></div>
+    </div>}
+  </div>;
 }
 
 function buildAlerts(data: PointData): AlertItem[] {
@@ -244,6 +314,7 @@ export default function Home() {
   const currentWeek = isoWeek(data.meetingDate);
   const currentWeekYear = isoWeekYear(data.meetingDate);
   const currentWeekVersions = archive.filter((item) => item.week === currentWeek && item.year === currentWeekYear);
+  const jiraPeople = useMemo(() => groupJiraPeople(data.jira), [data.jira]);
 
   const loadMarket = useCallback(async (nextMarket: string, loadLatest = true, marketOverride?: Market) => {
     const requestId = ++archiveRequest.current;
@@ -312,38 +383,57 @@ export default function Home() {
   const updateDossier = (id: string, patch: Partial<Dossier>) => setData((current) => ({ ...current, dossiers: current.dossiers.map((item) => item.id === id ? { ...item, ...patch } : item) }));
   const updateOperation = (id: string, patch: Partial<CommercialOperation>) => setData((current) => ({ ...current, operations: current.operations.map((item) => item.id === id ? { ...item, ...patch } : item) }));
   const updateTariff = (id: string, patch: Partial<Tariff>) => setData((current) => ({ ...current, tariffs: current.tariffs.map((item) => item.id === id ? { ...item, ...patch } : item) }));
-  const updateJira = (id: string, patch: Partial<JiraTicket>) => setData((current) => ({ ...current, jira: current.jira.map((item) => item.id === id ? { ...item, ...patch } : item) }));
   const addDossier = () => setData((current) => ({ ...current, dossiers: [...current.dossiers, { id: uid(), title: "", universe: "", reference: "", status: "En cours", owner: "", action: "", deadline: "", progress: 0, comment: "" }] }));
   const addOperation = () => setData((current) => ({ ...current, operations: [...current.operations, { id: uid(), name: "", month: "", state: "En cours", summary: "", steps: [["Réception de la trame", "À faire"], ["Complétude de la trame", "À faire"], ["Intégration tarif achat", "À faire"], ["Contrôle tarif achat", "À faire"], ["Tarif vente", "À faire"]] }] }));
   const addTariff = () => setData((current) => ({ ...current, tariffs: [...current.tariffs, { id: uid(), code: "", supplier: "", month: "", state: "À préparer", receptionDate: "", dueDate: "", owner: "", comment: "" }] }));
-  const addJira = () => setData((current) => ({ ...current, jira: [...current.jira, { id: uid(), key: "", summary: "", status: "À qualifier", priority: "Moyenne", assignee: "", lastActivity: "", link: "", comment: "", count: 1 }] }));
+  const addJira = () => setData((current) => {
+    const existing = new Set(current.jira.map((item) => item.assignee));
+    let suffix = 1;
+    let assignee = "Nouvelle personne";
+    while (existing.has(assignee)) assignee = `Nouvelle personne ${++suffix}`;
+    return { ...current, jira: [...current.jira, { id: uid(), key: "", summary: "Synthèse manuelle", status: "À faire", priority: "", assignee, lastActivity: "", link: "", comment: "Saisie manuelle", count: 1 }] };
+  });
+  const renameJiraPerson = (assignee: string, nextName: string) => setData((current) => ({ ...current, jira: current.jira.map((item) => (item.assignee.trim() || "Non assigné") === assignee ? { ...item, assignee: nextName } : item) }));
+  const removeJiraPerson = (assignee: string) => setData((current) => ({ ...current, jira: current.jira.filter((item) => (item.assignee.trim() || "Non assigné") !== assignee) }));
+  const setJiraPersonCount = (assignee: string, status: string, value: number) => setData((current) => {
+    const count = Math.max(0, Math.round(value || 0));
+    const isPerson = (item: JiraTicket) => (item.assignee.trim() || "Non assigné") === assignee;
+    const matches = current.jira.filter((item) => isPerson(item) && item.status === status);
+    if (!count) return { ...current, jira: current.jira.filter((item) => !(isPerson(item) && item.status === status)) };
+    if (matches.length) {
+      const keptId = matches[0].id;
+      return { ...current, jira: current.jira.filter((item) => !(isPerson(item) && item.status === status) || item.id === keptId).map((item) => item.id === keptId ? { ...item, count } : item) };
+    }
+    return { ...current, jira: [...current.jira, { id: uid(), key: "", summary: "Synthèse manuelle", status, priority: "", assignee, lastActivity: "", link: "", comment: "Saisie manuelle", count }] };
+  });
 
   const importTable = (kind: "tariffs" | "jira", text: string) => {
-    if (kind === "jira") {
-      const summary = parseJiraAssigneeSummary(text);
-      if (summary.people) {
-        const jira = summary.items.map((item) => ({
-          id: uid(),
-          key: "",
-          summary: "Synthèse de la file Jira",
-          status: item.status,
-          priority: "",
-          assignee: item.assignee,
-          lastActivity: "",
-          link: item.link,
-          comment: "Import du tableau récapitulatif Jira",
-          count: item.count,
-        }));
-        setData((current) => ({ ...current, jira }));
-        return { count: summary.people, message: `${summary.people} personne${summary.people > 1 ? "s" : ""} · ${summary.tickets} tickets rattachés à « ${market.name} ».` };
-      }
-    }
     const parsed = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => line.split(line.includes("\t") ? "\t" : ";").map((cell) => cell.trim())).filter((cells) => cells.length > 1);
     const rows = parsed.filter((cells, index) => !(index === 0 && /(fournisseur|supplier|r[eé]sum[eé]|summary|cl[eé]|ticket)/i.test(cells.join(" "))));
     if (!rows.length) return { count: 0 };
     if (kind === "tariffs") setData((current) => ({ ...current, tariffs: [...current.tariffs, ...rows.map((cells) => ({ id: uid(), code: cells[0] || "", supplier: cells[1] || "", month: cells[2] || "", state: cells[3] || "À préparer", receptionDate: cells[4] || "", dueDate: cells[5] || "", owner: cells[6] || "", comment: cells[7] || "" }))] }));
     else setData((current) => ({ ...current, jira: [...current.jira, ...rows.map((cells) => ({ id: uid(), key: cells[0] || "", summary: cells[1] || "", status: cells[2] || "À qualifier", priority: cells[3] || "Moyenne", assignee: cells[4] || "", lastActivity: cells[5] || "", link: cells[6] || "", comment: cells[7] || "", count: 1 }))] }));
     return { count: rows.length };
+  };
+  const importJiraSummary = (summary: JiraSummaryImport, selectedPeople: string[]) => {
+    const selected = new Set(selectedPeople);
+    const selectedRows = summary.people.filter((person) => selected.has(person.assignee));
+    if (!selectedRows.length) return { count: 0 };
+    const jira = summary.items.filter((item) => selected.has(item.assignee)).map((item) => ({
+      id: uid(),
+      key: "",
+      summary: "Synthèse de la file Jira",
+      status: item.status,
+      priority: "",
+      assignee: item.assignee,
+      lastActivity: "",
+      link: item.link,
+      comment: "Import du tableau récapitulatif Jira",
+      count: item.count,
+    }));
+    const tickets = selectedRows.reduce((sum, person) => sum + person.total, 0);
+    setData((current) => ({ ...current, jira }));
+    return { count: selectedRows.length, message: `${selectedRows.length} personne${selectedRows.length > 1 ? "s" : ""} · ${tickets} tickets rattachés à « ${market.name} ».` };
   };
   const download = (name: string, content: string, type: string) => { const url = URL.createObjectURL(new Blob([content], { type })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 500); };
   const exportJson = (record?: PointRecord) => {
@@ -450,7 +540,11 @@ export default function Home() {
 
     {section === "tariffs" && <section className="editor-section"><SectionTitle eyebrow="04 · Extraction manuelle" title="Évolutions tarifaires" detail="Colle directement ton extraction ou complète les lignes à la main." action={<div className="title-actions"><PasteImporter kind="tariffs" onImport={(text) => importTable("tariffs", text)}/><button className="primary-button" onClick={addTariff}><Icon name="plus"/> Ajouter</button></div>}/><div className="surface data-table-wrap"><table className="data-table"><thead><tr><th>Code</th><th>Fournisseur</th><th>Mois</th><th>État</th><th>Réception trame</th><th>Responsable</th><th>Commentaire</th><th/></tr></thead><tbody>{data.tariffs.map((item) => <tr key={item.id}><td><input value={item.code} onChange={(e) => updateTariff(item.id, { code: e.target.value })}/></td><td><input value={item.supplier} onChange={(e) => updateTariff(item.id, { supplier: e.target.value })}/></td><td><input value={item.month} onChange={(e) => updateTariff(item.id, { month: e.target.value })}/></td><td><input value={item.state} onChange={(e) => updateTariff(item.id, { state: e.target.value })}/></td><td><input type="date" value={item.receptionDate} onChange={(e) => updateTariff(item.id, { receptionDate: e.target.value })}/></td><td><input value={item.owner} onChange={(e) => updateTariff(item.id, { owner: e.target.value })}/></td><td><input value={item.comment} onChange={(e) => updateTariff(item.id, { comment: e.target.value })}/></td><td><button className="icon-button subtle" aria-label="Supprimer" onClick={() => setData((current) => ({ ...current, tariffs: current.tariffs.filter((row) => row.id !== item.id) }))}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!data.tariffs.length && <div className="table-empty">Aucune évolution tarifaire. Utilise « Coller un tableau » ou « Ajouter ».</div>}</div><div className="rule-note"><Icon name="alert"/><div><strong>Vigilances automatiques</strong><span>Du 8 au 14 : trame à sécuriser · après le 15 : KO sans trame · trame reçue depuis plus de 5 jours : traitement à contrôler.</span></div></div></section>}
 
-    {section === "jira" && <section className="editor-section"><SectionTitle eyebrow="05 · Extraction manuelle" title="Tickets Jira par personne" detail={`Colle le tableau récapitulatif complet. Chaque personne détectée sera rattachée au marché actif : ${market.name}.`} action={<div className="title-actions"><PasteImporter kind="jira" marketName={market.name} onImport={(text) => importTable("jira", text)}/><button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter</button></div>}/><div className="jira-import-note"><Icon name="ticket"/><div><strong>Import d’un instantané complet</strong><span>Un nouveau collage Jira remplace le précédent relevé du marché actif afin d’éviter les doublons. Les liens Jira de chaque statut sont conservés.</span></div></div><div className="surface data-table-wrap"><table className="data-table jira-data-table"><thead><tr><th>Personne</th><th>Statut</th><th>Nombre</th><th>Résumé</th><th>Dernière activité</th><th>Lien Jira</th><th>Commentaire</th><th/></tr></thead><tbody>{data.jira.map((item) => <tr key={item.id}><td><input value={item.assignee} onChange={(e) => updateJira(item.id, { assignee: e.target.value })}/></td><td><input value={item.status} onChange={(e) => updateJira(item.id, { status: e.target.value })}/></td><td><input type="number" min="1" value={jiraItemCount(item)} onChange={(e) => updateJira(item.id, { count: Math.max(1, Number(e.target.value) || 1) })}/></td><td><input value={item.summary} onChange={(e) => updateJira(item.id, { summary: e.target.value })}/></td><td><input type="date" value={item.lastActivity} onChange={(e) => updateJira(item.id, { lastActivity: e.target.value })}/></td><td>{item.link ? <a className="jira-link" href={item.link} target="_blank" rel="noreferrer">Ouvrir le filtre</a> : <input value={item.link} placeholder="Lien" onChange={(e) => updateJira(item.id, { link: e.target.value })}/>}</td><td><input value={item.comment} onChange={(e) => updateJira(item.id, { comment: e.target.value })}/></td><td><button className="icon-button subtle" aria-label="Supprimer" onClick={() => setData((current) => ({ ...current, jira: current.jira.filter((row) => row.id !== item.id) }))}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!data.jira.length && <div className="table-empty">Aucun ticket Jira. Colle le tableau complet ou ajoute une ligne.</div>}</div></section>}
+    {section === "jira" && <section className="editor-section">
+      <SectionTitle eyebrow="05 · Extraction manuelle" title="Tickets Jira par personne" detail={`Colle le tableau tabulé complet, contrôle l’aperçu puis choisis les personnes à rattacher à ${market.name}.`} action={<div className="title-actions"><JiraPasteImporter key={marketId} marketId={marketId} marketName={market.name} onImport={importJiraSummary}/><button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter une personne</button></div>}/>
+      <div className="jira-import-note"><Icon name="ticket"/><div><strong>Un instantané complet, sans doublons</strong><span>Chaque import remplace le précédent relevé Jira de ce marché. Ta sélection de personnes est mémorisée séparément pour chaque marché et les liens Jira restent accessibles.</span></div></div>
+      <div className="surface data-table-wrap jira-summary-wrap"><table className="data-table jira-person-table"><thead><tr><th>Personne</th>{JIRA_SUMMARY_STATUSES.map((status) => <th key={status}>{status}</th>)}<th>Total</th><th/></tr></thead><tbody>{jiraPeople.map((person) => <tr key={person.assignee}><th scope="row"><input value={person.assignee} aria-label={`Personne ${person.assignee}`} onChange={(event) => renameJiraPerson(person.assignee, event.target.value)}/></th>{JIRA_SUMMARY_STATUSES.map((status) => { const statusItems = person.items.filter((item) => item.status === status); const count = statusItems.reduce((sum, item) => sum + jiraItemCount(item), 0); const link = statusItems.find((item) => item.link)?.link; return <td key={status}><div className="jira-count-cell"><input type="number" min="0" value={count} aria-label={`${status} pour ${person.assignee}`} onChange={(event) => setJiraPersonCount(person.assignee, status, Number(event.target.value))}/>{link && <a href={link} target="_blank" rel="noreferrer" title={`Ouvrir le filtre « ${status} »`} aria-label={`Ouvrir le filtre ${status} de ${person.assignee}`}>↗</a>}</div></td>; })}<td className="jira-person-total"><strong>{person.total}</strong><small>{jiraStatusSummary(person.items)}</small></td><td><button className="icon-button subtle" aria-label={`Supprimer ${person.assignee}`} onClick={() => removeJiraPerson(person.assignee)}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!jiraPeople.length && <div className="table-empty">Aucun ticket Jira. Importe le tableau complet ou ajoute une personne.</div>}</div>
+    </section>}
 
     {section === "versions" && <section className="editor-section"><SectionTitle eyebrow="07 · Registre en ligne" title="Sauvegardes & versions" detail="Chaque sauvegarde est identifiée par l’année ISO, la semaine et la version : par exemple 2027 · S02 · V2." action={<button className="primary-button" disabled={saving || !ready} onClick={saveVersion}><Icon name="check"/> {saving ? "Enregistrement…" : "Créer une nouvelle version"}</button>}/><div className="surface version-summary"><div className="version-week"><span>Référence active</span><strong>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</strong><small>{currentWeekVersions.length ? `${currentWeekVersions.length} version${currentWeekVersions.length > 1 ? "s" : ""} déjà enregistrée${currentWeekVersions.length > 1 ? "s" : ""}` : "Aucune version enregistrée"}</small></div><div className="version-next"><span>Prochaine sauvegarde</span><strong>V{Math.max(0, ...currentWeekVersions.map((item) => item.version)) + 1}</strong><small>Une nouvelle version est ajoutée, sans écraser les précédentes.</small></div><div className="version-actions"><button className="secondary-button" onClick={() => fileInput.current?.click()}><Icon name="upload"/> Importer JSON</button><button className="secondary-button" onClick={() => exportJson()}><Icon name="download"/> Exporter le brouillon</button></div></div>{archiveError && <div className="archive-message error"><Icon name="alert"/><span>{archiveError}</span></div>}{archiveLoading ? <div className="archive-message"><span>Chargement du registre en ligne…</span></div> : archive.length ? <div className="archive-list">{archive.map((record) => <article className={`surface archive-row ${activeVersion === record.version && record.week === currentWeek && record.year === currentWeekYear && !isDirty ? "active" : ""}`} key={record.id}><div className="archive-version"><span>{record.year} · S{String(record.week).padStart(2, "0")}</span><strong>V{record.version}</strong><small>ISO</small></div><div className="archive-copy"><span>{market.name}</span><strong>{dateLabel(record.meetingDate)}</strong><small>Enregistré le {new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z")).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</small></div><div className="archive-actions"><button className="secondary-button" onClick={() => exportJson(record)}><Icon name="download"/> JSON</button><button className="primary-button" onClick={() => loadRecord(record)}><Icon name="upload"/> Charger</button></div></article>)}</div> : !archiveError && <div className="surface archive-empty"><Icon name="download" size={28}/><strong>Aucune version en ligne</strong><span>Crée la première version de ce marché. Une autre sauvegarde sur la même année et la même semaine deviendra V2.</span></div>}</section>}
 
