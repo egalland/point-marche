@@ -53,3 +53,26 @@ test("keeps a reported remainder as other Jira statuses", () => {
   assert.equal(result.tickets, 5);
   assert.equal(other?.count, 2);
 });
+
+test("parses detailed Jira tickets, USERCODEs and activity dates", () => {
+  const table = [
+    "ClÃ© de ticket\tID de ticket\tÃ‰tat\tRÃ©sumÃ©\tCrÃ©ation\tPersonne assignÃ©e\tMise Ã  jour",
+    "GLOBAL-12472\t1638106\tA faire\tQUINC : code 1017244 SINTO\t12/08/2026 12:27\tB4166056\t12/08/2026 14:17",
+    "GLOBAL-11835\t1575181\tRÃ©ouvert\tBOIC : Mise Ã  jour incidence transport\t02/06/2026 11:30\tJ9535152\t25/08/2026 09:44",
+  ].join("\n");
+
+  const result = parser.parseJiraAssigneeSummary(table);
+
+  assert.equal(result.mode, "detailed");
+  assert.equal(result.format, "tabulated");
+  assert.equal(result.personCount, 2);
+  assert.equal(result.tickets, 2);
+  assert.equal(result.detailedTickets[0].key, "GLOBAL-12472");
+  assert.equal(result.detailedTickets[0].internalId, "1638106");
+  assert.equal(result.detailedTickets[0].assigneeUserCode, "B4166056");
+  assert.equal(result.detailedTickets[0].createdAt, "2026-08-12T12:27:00");
+  assert.equal(result.detailedTickets[0].updatedAt, "2026-08-12T14:17:00");
+  assert.equal(result.detailedTickets[0].link, "https://jira.example.test/browse/GLOBAL-12472");
+  assert.equal(result.detailedTickets[1].status, "Réouvert");
+  assert.match(result.detailedTickets[1].summary, /Mise à jour/);
+});

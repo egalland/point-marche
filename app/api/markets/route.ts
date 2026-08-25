@@ -24,6 +24,11 @@ function cleanHex(value: unknown) {
   return /^#[0-9A-F]{6}$/.test(hex) ? hex : "";
 }
 
+function cleanDays(value: unknown, fallback: number) {
+  const days = Number(value);
+  return Number.isInteger(days) && days >= 1 && days <= 365 ? days : fallback;
+}
+
 async function requireEditor() {
   const user = await getEditorUser();
   return user ? null : Response.json({ error: "Connecte-toi pour modifier les marchés." }, { status: 401 });
@@ -52,9 +57,11 @@ export async function POST(request: Request) {
   try {
     const denied = await requireEditor();
     if (denied) return denied;
-    const body = await request.json() as { name?: unknown; shortCode?: unknown; tone?: unknown; colorHex?: unknown };
+    const body = await request.json() as { name?: unknown; shortCode?: unknown; tone?: unknown; colorHex?: unknown; jiraWarningDays?: unknown; jiraCriticalDays?: unknown };
     const name = cleanName(body.name);
     if (!name) return Response.json({ error: "Le nom du marché est requis." }, { status: 400 });
+    const jiraWarningDays = Math.min(364, cleanDays(body.jiraWarningDays, 10));
+    const jiraCriticalDays = Math.min(365, Math.max(jiraWarningDays + 1, cleanDays(body.jiraCriticalDays, 20)));
 
     const db = getDb();
     const [positionResult] = await db.select({ value: max(marketDefinitions.position) }).from(marketDefinitions);
@@ -65,6 +72,8 @@ export async function POST(request: Request) {
         shortCode: cleanShort(body.shortCode, name),
         tone: cleanTone(body.tone),
         colorHex: cleanHex(body.colorHex),
+        jiraWarningDays,
+        jiraCriticalDays,
         position: Number(positionResult?.value ?? -1) + 1,
         isActive: true,
         updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -77,6 +86,8 @@ export async function POST(request: Request) {
       shortCode: cleanShort(body.shortCode, name),
       tone: cleanTone(body.tone),
       colorHex: cleanHex(body.colorHex),
+      jiraWarningDays,
+      jiraCriticalDays,
       position: Number(positionResult?.value ?? -1) + 1,
     }).returning();
     return Response.json({ market }, { status: 201 });
@@ -89,10 +100,12 @@ export async function PATCH(request: Request) {
   try {
     const denied = await requireEditor();
     if (denied) return denied;
-    const body = await request.json() as { id?: unknown; name?: unknown; shortCode?: unknown; tone?: unknown; colorHex?: unknown };
+    const body = await request.json() as { id?: unknown; name?: unknown; shortCode?: unknown; tone?: unknown; colorHex?: unknown; jiraWarningDays?: unknown; jiraCriticalDays?: unknown };
     const id = typeof body.id === "string" ? body.id.trim() : "";
     const name = cleanName(body.name);
     if (!id || !name) return Response.json({ error: "Identifiant et nom du marché requis." }, { status: 400 });
+    const jiraWarningDays = Math.min(364, cleanDays(body.jiraWarningDays, 10));
+    const jiraCriticalDays = Math.min(365, Math.max(jiraWarningDays + 1, cleanDays(body.jiraCriticalDays, 20)));
 
     const db = getDb();
     const [market] = await db.update(marketDefinitions).set({
@@ -100,6 +113,8 @@ export async function PATCH(request: Request) {
       shortCode: cleanShort(body.shortCode, name),
       tone: cleanTone(body.tone),
       colorHex: cleanHex(body.colorHex),
+      jiraWarningDays,
+      jiraCriticalDays,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     }).where(and(eq(marketDefinitions.id, id), eq(marketDefinitions.isActive, true))).returning();
     if (!market) return Response.json({ error: "Marché introuvable." }, { status: 404 });

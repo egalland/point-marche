@@ -12,7 +12,7 @@ export type GlobalDirectoryUser = {
   id: string;
   name: string;
   email: string;
-  jiraName: string;
+  usercode: string;
   role: GlobalRole;
   marketIds: string[];
 };
@@ -35,4 +35,21 @@ export function roleMailMode(role: GlobalRole): "to" | "cc" | "none" {
 
 export function roleLabel(role: GlobalRole) {
   return GLOBAL_ROLE_OPTIONS.find((option) => option.id === role)?.label ?? "Autre rôle";
+}
+
+export function buildMarketJql(users: GlobalDirectoryUser[], marketId: string) {
+  const usercodes = Array.from(new Set(users
+    .filter((user) => user.marketIds.includes(marketId) && /^[A-Z]\d{7}$/i.test(user.usercode))
+    .map((user) => user.usercode.toUpperCase())))
+    .sort();
+  if (!usercodes.length) return "";
+  return `project = "JSD-Distribution Matériaux Bois Panneaux"
+AND "Groupes d'affectation" in (
+    "JSD-GLOBAL [JSD-GLOBAL]",
+    "JSD-GLOBAL-APPRO [JSD-GLOBAL-APPRO]",
+    "JSD-GLOBAL-CODIF [JSD-GLOBAL-CODIF]",
+    "JSD-GLOBAL-TARIF [JSD-GLOBAL-TARIF]"
+)
+AND statusCategory != Done
+AND assignee in (${usercodes.join(", ")})`;
 }

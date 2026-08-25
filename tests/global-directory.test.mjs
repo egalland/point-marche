@@ -22,3 +22,19 @@ test("keeps the Tarif manager in copy only and other roles inactive", () => {
   assert.equal(directory.roleUsesAutomaticJira("autre"), false);
   assert.equal(directory.roleMailMode("autre"), "none");
 });
+
+test("builds the Jira query from valid USERCODEs of the selected market only", () => {
+  const users = [
+    { id: "1", name: "John DOE", email: "john@example.test", usercode: "A1234567", role: "chef-produit", marketIds: ["market-a"] },
+    { id: "2", name: "Jane DOE", email: "jane@example.test", usercode: "B7654321", role: "chef-marche", marketIds: ["market-a"] },
+    { id: "3", name: "Alex MARTIN", email: "alex@example.test", usercode: "C1111111", role: "chef-produit", marketIds: ["market-b"] },
+    { id: "4", name: "Invalid", email: "invalid@example.test", usercode: "Nom Jira", role: "autre", marketIds: ["market-a"] },
+  ];
+
+  const jql = directory.buildMarketJql(users, "market-a");
+
+  assert.match(jql, /project = "JSD-Distribution Matériaux Bois Panneaux"/);
+  assert.match(jql, /assignee in \(A1234567, B7654321\)/);
+  assert.doesNotMatch(jql, /C1111111|J9535152|B4166056|Nom Jira/);
+  assert.equal(directory.buildMarketJql(users, "unknown"), "");
+});

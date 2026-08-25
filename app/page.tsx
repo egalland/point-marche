@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent, type ReactNode } from "react";
-import { GLOBAL_ROLE_OPTIONS, roleLabel, roleMailMode, type GlobalDirectoryUser, type GlobalRole } from "../lib/global-directory";
+import { buildMarketJql, GLOBAL_ROLE_OPTIONS, roleLabel, roleMailMode, type GlobalDirectoryUser, type GlobalRole } from "../lib/global-directory";
 import { JIRA_SUMMARY_STATUSES, parseJiraAssigneeSummary, type JiraSummaryImport } from "../lib/jira-import";
 
 type Tone = "mint" | "violet" | "aqua" | "peach" | "red";
@@ -11,23 +11,23 @@ type CarryoverFields = { sourceId?: string; carriedFromYear?: number; carriedFro
 type Dossier = { id: string; title: string; universe: string; reference: string; status: string; owner: string; action: string; deadline: string; progress: number; comment: string } & CarryoverFields;
 type CommercialOperation = { id: string; name: string; month: string; state: string; summary: string; steps: [string, string][] } & CarryoverFields;
 type Tariff = { id: string; code: string; supplier: string; month: string; state: string; receptionDate: string; dueDate: string; owner: string; comment: string };
-type JiraTicket = { id: string; key: string; summary: string; status: string; priority: string; assignee: string; lastActivity: string; link: string; comment: string; count?: number };
+type JiraTicket = { id: string; key: string; internalId?: string; summary: string; status: string; priority: string; assignee: string; assigneeUserCode?: string; createdAt?: string; lastActivity: string; link: string; comment: string; count?: number };
 type PointData = { pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; tariffs: Tariff[]; jira: JiraTicket[]; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
 type AlertItem = { title: string; detail: string; severity: "warning" | "danger" };
 type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
-type Market = { id: string; name: string; short: string; tone: ThemeKey; colorHex: string; position: number };
+type Market = { id: string; name: string; short: string; tone: ThemeKey; colorHex: string; position: number; jiraWarningDays: number; jiraCriticalDays: number };
 type PointRecord = { id: string; marketId: string; year: number; week: number; meetingDate: string; pointName: string; themeColor: ThemeKey; data: PointData; createdAt: string };
 type ImportOutcome = { count: number; message?: string };
 type JiraPersonGroup = { assignee: string; items: JiraTicket[]; total: number };
 type JiraWeekPayload = { snapshot: { year: number; week: number; rawText: string; summary: JiraSummaryImport; updatedAt: string } | null; assignments: Record<string, string[]>; error?: string };
 type SessionPayload = { user: { displayName: string; username: string } | null };
-type DirectoryDraft = { name: string; email: string; jiraName: string; role: GlobalRole; marketIds: string[] };
+type DirectoryDraft = { name: string; email: string; usercode: string; role: GlobalRole; marketIds: string[] };
 
 const defaultMarkets: Market[] = [
-  { id: "revetements-menuiserie", name: "Revêtements & Menuiserie", short: "REV–MEN", tone: "mint", colorHex: "", position: 0 },
-  { id: "bois-amex", name: "Bois amin / AMEX", short: "BOIS", tone: "peach", colorHex: "", position: 1 },
-  { id: "outillage-quincaillerie", name: "Outillage & Quincaillerie", short: "OUT–QUIN", tone: "aqua", colorHex: "", position: 2 },
-  { id: "panneaux", name: "Panneaux", short: "PAN", tone: "violet", colorHex: "", position: 3 },
+  { id: "revetements-menuiserie", name: "Revêtements & Menuiserie", short: "REV–MEN", tone: "mint", colorHex: "", position: 0, jiraWarningDays: 10, jiraCriticalDays: 20 },
+  { id: "bois-amex", name: "Bois amin / AMEX", short: "BOIS", tone: "peach", colorHex: "", position: 1, jiraWarningDays: 10, jiraCriticalDays: 20 },
+  { id: "outillage-quincaillerie", name: "Outillage & Quincaillerie", short: "OUT–QUIN", tone: "aqua", colorHex: "", position: 2, jiraWarningDays: 10, jiraCriticalDays: 20 },
+  { id: "panneaux", name: "Panneaux", short: "PAN", tone: "violet", colorHex: "", position: 3, jiraWarningDays: 10, jiraCriticalDays: 20 },
 ];
 
 const themes: { id: ThemeKey; label: string; accent: string; soft: string }[] = [
@@ -40,7 +40,7 @@ const themes: { id: ThemeKey; label: string; accent: string; soft: string }[] = 
 
 const statusOptions = ["Dans les délais", "En cours", "En attente", "À surveiller", "Action requise", "Bloquant", "Terminé"];
 const stepOptions = ["À faire", "En attente", "En cours", "Fait", "Non applicable"];
-const emptyDirectoryDraft = (): DirectoryDraft => ({ name: "", email: "", jiraName: "", role: "chef-produit", marketIds: [] });
+const emptyDirectoryDraft = (): DirectoryDraft => ({ name: "", email: "", usercode: "", role: "chef-produit", marketIds: [] });
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const isoToday = () => new Date().toISOString().slice(0, 10);
 const validHex = (value: string) => /^#[0-9A-F]{6}$/i.test(value.trim());
@@ -87,9 +87,9 @@ function initialData(marketId = "revetements-menuiserie", marketOverride?: Marke
       ["A1170", "BEL’M", "Septembre 2026", "À préparer", "", "", "", ""],
     ].map(([code, supplier, month, state, receptionDate, dueDate, owner, comment]) => ({ id: uid(), code, supplier, month, state, receptionDate, dueDate, owner, comment })),
     jira: [
-      ["MAR-101", "Contrôle règle tarifaire", "En attente d’un tiers", "Moyenne", "Louise Pepin", "", "", ""],
-      ["MAR-102", "Écart de promotion", "En cours", "Haute", "Baptiste Plaisir", "", "", ""],
-      ["MAR-103", "Mise à jour fournisseur", "En attente de changement", "Moyenne", "Sarah Daniel", "", "", ""],
+      ["GLOBAL-10001", "Contrôle règle tarifaire", "En attente d’un tiers", "Moyenne", "John DOE", "", "", ""],
+      ["GLOBAL-10002", "Écart de promotion", "En cours", "Haute", "Jane DOE", "", "", ""],
+      ["GLOBAL-10003", "Mise à jour fournisseur", "En attente de changement", "Moyenne", "Alex MARTIN", "", "", ""],
     ].map(([key, summary, status, priority, assignee, lastActivity, link, comment]) => ({ id: uid(), key, summary, status, priority, assignee, lastActivity, link, comment })),
   };
 }
@@ -124,9 +124,9 @@ async function fetchPointRecords(marketId: string, marketOverride?: Market): Pro
 
 async function fetchMarkets(): Promise<Market[]> {
   const response = await fetch("/api/markets", { cache: "no-store" });
-  const payload = await response.json() as { markets?: { id: string; name: string; shortCode: string; tone: ThemeKey; colorHex?: string; position: number }[]; error?: string };
+  const payload = await response.json() as { markets?: { id: string; name: string; shortCode: string; tone: ThemeKey; colorHex?: string; position: number; jiraWarningDays?: number; jiraCriticalDays?: number }[]; error?: string };
   if (!response.ok) throw new Error(payload.error || "Impossible de charger les marchés.");
-  return (payload.markets ?? []).map((market) => ({ id: market.id, name: market.name, short: market.shortCode, tone: market.tone, colorHex: normalizeHex(market.colorHex), position: market.position }));
+  return (payload.markets ?? []).map((market) => ({ id: market.id, name: market.name, short: market.shortCode, tone: market.tone, colorHex: normalizeHex(market.colorHex), position: market.position, jiraWarningDays: Number(market.jiraWarningDays) || 10, jiraCriticalDays: Number(market.jiraCriticalDays) || 20 }));
 }
 
 async function fetchDirectoryUsers(): Promise<GlobalDirectoryUser[]> {
@@ -238,7 +238,8 @@ function weeksForMonth(monthString: string) {
   return weeks;
 }
 function dateLabel(value: string) { if (!value) return "Date à définir"; return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T12:00:00`)); }
-function daysBetween(from: string, to: string) { if (!from || !to) return 0; return Math.floor((new Date(`${to}T12:00:00`).valueOf() - new Date(`${from}T12:00:00`).valueOf()) / 86400000); }
+function dateValue(value: string) { return new Date(value.includes("T") ? value : `${value}T12:00:00`).valueOf(); }
+function daysBetween(from: string, to: string) { if (!from || !to) return 0; return Math.max(0, Math.floor((dateValue(to) - dateValue(from)) / 86400000)); }
 function isClosed(status: string) { return /(termin|cl[oô]tur|r[eé]solu|annul)/i.test(status); }
 function isOperationClosed(operation: CommercialOperation) {
   if (isClosed(operation.state)) return true;
@@ -265,24 +266,36 @@ function groupJiraPeople(items: JiraTicket[]): JiraPersonGroup[] {
     total: personItems.reduce((sum, item) => sum + jiraItemCount(item), 0),
   })).sort((a, b) => b.total - a.total || a.assignee.localeCompare(b.assignee, "fr"));
 }
-function jiraTicketsFromSummary(summary: JiraSummaryImport, selectedPeople: string[]) {
+function normalizeJiraSummary(summary: JiraSummaryImport): JiraSummaryImport {
+  const detailedTickets = Array.isArray(summary.detailedTickets) ? summary.detailedTickets : [];
+  return { ...summary, detailedTickets, mode: summary.mode ?? (detailedTickets.length ? "detailed" : "summary") };
+}
+function jiraTicketsFromSummary(summaryInput: JiraSummaryImport, selectedPeople: string[], marketId: string) {
+  const summary = normalizeJiraSummary(summaryInput);
+  if (summary.detailedTickets.length) {
+    return summary.detailedTickets.filter((ticket) => ticket.marketId === marketId).map((ticket) => ({
+      id: uid(), key: ticket.key, internalId: ticket.internalId, summary: ticket.summary, status: ticket.status, priority: "",
+      assignee: ticket.assigneeName || ticket.assigneeUserCode, assigneeUserCode: ticket.assigneeUserCode, createdAt: ticket.createdAt,
+      lastActivity: ticket.updatedAt, link: ticket.link, comment: "Import Jira détaillé", count: 1,
+    }));
+  }
   const selected = new Set(selectedPeople);
   return summary.items.filter((item) => selected.has(item.assignee)).map((item) => ({
     id: uid(), key: "", summary: "Synthèse de la file Jira", status: item.status, priority: "", assignee: item.assignee,
     lastActivity: "", link: item.link, comment: "Tableau Jira hebdomadaire", count: item.count,
   }));
 }
-async function fetchJiraWeek(year: number, week: number): Promise<JiraWeekPayload> {
-  const response = await fetch(`/api/jira-week?year=${year}&week=${week}`, { cache: "no-store" });
+async function fetchJiraWeek(year: number, week: number, marketId: string): Promise<JiraWeekPayload> {
+  const response = await fetch(`/api/jira-week?marketId=${encodeURIComponent(marketId)}&year=${year}&week=${week}`, { cache: "no-store" });
   const payload = await response.json() as JiraWeekPayload;
   if (!response.ok) throw new Error(payload.error || "Impossible de charger le tableau Jira hebdomadaire.");
   return payload;
 }
 async function applyJiraWeek(data: PointData, marketId: string) {
   try {
-    const payload = await fetchJiraWeek(isoWeekYear(data.meetingDate), isoWeek(data.meetingDate));
+    const payload = await fetchJiraWeek(isoWeekYear(data.meetingDate), isoWeek(data.meetingDate), marketId);
     if (!payload.snapshot) return data;
-    return { ...data, jira: jiraTicketsFromSummary(payload.snapshot.summary, payload.assignments[marketId] ?? []) };
+    return { ...data, jira: jiraTicketsFromSummary(payload.snapshot.summary, payload.assignments[marketId] ?? [], marketId) };
   } catch {
     return data;
   }
@@ -308,85 +321,145 @@ function PasteImporter({ kind, marketName, onImport }: { kind: "tariffs" | "jira
   return <div className={`paste-importer ${open ? "is-open" : ""}`}><button className="secondary-button" onClick={() => setOpen((value) => !value)}><Icon name="copy" /> Coller un tableau</button>{open && <div className="paste-panel"><div><strong>Import rapide des {label}</strong><span>{kind === "jira" ? "Colle le tableau récapitulatif complet : toutes les personnes et tous les statuts seront reconnus." : "Copie les lignes depuis Excel, avec ou sans en-tête."}</span></div>{kind === "jira" && marketName && <div className="paste-market-target"><Icon name="check" size={14}/><span>Marché cible</span><strong>{marketName}</strong></div>}<code>{columns}</code><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={kind === "jira" ? "Colle ici le tableau Jira complet, tel qu’il est copié…" : "Colle ici les lignes séparées par des tabulations ou des points-virgules…"} /><div className="paste-actions"><span>{message}</span><button className="primary-button small" onClick={() => { const result = onImport(text); setMessage(result.message ?? (result.count ? `${result.count} ligne${result.count > 1 ? "s" : ""} importée${result.count > 1 ? "s" : ""}.` : "Aucune ligne reconnue.")); if (result.count) setText(""); }}>Importer</button></div></div>}</div>;
 }
 
-function JiraPasteImporter({ marketId, marketName, markets, year, week, onImport }: { marketId: string; marketName: string; markets: Market[]; year: number; week: number; onImport: (summary: JiraSummaryImport, selectedPeople: string[]) => ImportOutcome }) {
+function JiraPasteImporter({ marketId, marketName, directoryUsers, year, week, onImport }: { marketId: string; marketName: string; directoryUsers: GlobalDirectoryUser[]; year: number; week: number; onImport: (summary: JiraSummaryImport, selectedPeople: string[]) => ImportOutcome }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [preview, setPreview] = useState<JiraSummaryImport>(() => parseJiraAssigneeSummary(""));
-  const [assignments, setAssignments] = useState<Record<string, string[]>>({});
-  const [mappingMarket, setMappingMarket] = useState(marketId);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [message, setMessage] = useState("");
-  const selectedPeople = useMemo(() => assignments[mappingMarket] ?? [], [assignments, mappingMarket]);
-  const selectedSet = useMemo(() => new Set(selectedPeople), [selectedPeople]);
-  const selectedTickets = preview.people.filter((person) => selectedSet.has(person.assignee)).reduce((sum, person) => sum + person.total, 0);
+  const marketPeople = useMemo(() => directoryUsers.filter((user) => user.marketIds.includes(marketId) && /^[A-Z]\d{7}$/i.test(user.usercode)), [directoryUsers, marketId]);
+  const personByUserCode = useMemo(() => new Map(marketPeople.map((person) => [person.usercode.toUpperCase(), person])), [marketPeople]);
+  const jql = useMemo(() => buildMarketJql(directoryUsers, marketId), [directoryUsers, marketId]);
+  const recognizedTickets = useMemo(() => preview.detailedTickets.filter((ticket) => personByUserCode.has(ticket.assigneeUserCode.toUpperCase())), [personByUserCode, preview.detailedTickets]);
+  const recognizedPeople = useMemo(() => Array.from(new Set(recognizedTickets.map((ticket) => ticket.assigneeUserCode.toUpperCase()))).map((usercode) => {
+    const person = personByUserCode.get(usercode);
+    const tickets = recognizedTickets.filter((ticket) => ticket.assigneeUserCode.toUpperCase() === usercode);
+    return { usercode, name: person?.name ?? usercode, tickets };
+  }).sort((a, b) => b.tickets.length - a.tickets.length || a.name.localeCompare(b.name, "fr")), [personByUserCode, recognizedTickets]);
+  const unknownUserCodes = useMemo(() => Array.from(new Set(preview.detailedTickets.map((ticket) => ticket.assigneeUserCode.toUpperCase()).filter((usercode) => !personByUserCode.has(usercode)))), [personByUserCode, preview.detailedTickets]);
 
   useEffect(() => {
     let active = true;
-    void fetchJiraWeek(year, week).then((payload) => {
+    void fetchJiraWeek(year, week, marketId).then((payload) => {
       if (!active) return;
-      setAssignments(payload.assignments ?? {});
       if (payload.snapshot) {
         setText(payload.snapshot.rawText);
-        setPreview(payload.snapshot.summary);
-        setMessage(`Tableau global déjà enregistré pour ${year} · S${String(week).padStart(2, "0")}.`);
+        setPreview(normalizeJiraSummary(payload.snapshot.summary));
+        setMessage(`Import déjà enregistré pour ${marketName} · ${year} · S${String(week).padStart(2, "0")}.`);
       } else {
         setText("");
         setPreview(parseJiraAssigneeSummary(""));
-        setMessage("Aucun tableau global enregistré pour cette semaine.");
+        setMessage("Aucun import Jira enregistré pour ce marché et cette semaine.");
       }
     }).catch((error) => { if (active) setMessage(error instanceof Error ? error.message : "Chargement impossible."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [year, week]);
+  }, [marketId, marketName, year, week]);
 
   const updateText = (value: string) => { setText(value); setMessage(""); setPreview(parseJiraAssigneeSummary(value)); };
-  const setPeopleForMarket = (next: string[]) => setAssignments((current) => ({ ...current, [mappingMarket]: next }));
-  const togglePerson = (assignee: string) => setPeopleForMarket(selectedSet.has(assignee) ? selectedPeople.filter((name) => name !== assignee) : [...selectedPeople, assignee]);
-  const saveGlobalTable = async () => {
-    if (!preview.personCount || saving) return;
+  const copyJql = async () => {
+    if (!jql) return;
+    try {
+      await navigator.clipboard.writeText(jql);
+    } catch {
+      const input = document.createElement("textarea");
+      input.value = jql;
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      input.remove();
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  };
+  const saveMarketTable = async () => {
+    if (!recognizedTickets.length || saving) return;
     setSaving(true);
     setMessage("");
     try {
-      const response = await fetch("/api/jira-week", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ year, week, rawText: text, assignments }) });
+      const response = await fetch("/api/jira-week", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ marketId, year, week, rawText: text }) });
       const payload = await response.json() as JiraWeekPayload;
       if (!response.ok || !payload.snapshot) throw new Error(payload.error || "Enregistrement impossible.");
-      setAssignments(payload.assignments);
-      const result = onImport(payload.snapshot.summary, payload.assignments[marketId] ?? []);
-      setMessage(result.message ?? `Tableau et affectations enregistrés pour ${year} · S${String(week).padStart(2, "0")}.`);
+      const result = onImport(normalizeJiraSummary(payload.snapshot.summary), payload.assignments[marketId] ?? marketPeople.map((person) => person.usercode));
+      setPreview(normalizeJiraSummary(payload.snapshot.summary));
+      setMessage(result.message ?? `Import enregistré pour ${marketName} · ${year} · S${String(week).padStart(2, "0")}.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Enregistrement impossible."); }
     finally { setSaving(false); }
   };
-  const formatLabel = preview.format === "tabulated" ? "Tableau tabulé détecté" : preview.format === "markdown" ? "Tableau Jira détecté" : preview.format === "semicolon" ? "Tableau séparé par ; détecté" : "En attente du tableau";
+  const formatLabel = preview.format === "tabulated" ? "Export tabulé détecté" : preview.format === "markdown" ? "Tableau Jira détecté" : preview.format === "semicolon" ? "Tableau séparé par ; détecté" : "En attente de l’export";
 
   return <div className={`paste-importer jira-paste-importer ${open ? "is-open" : ""}`}>
-    <button type="button" className="secondary-button" onClick={() => setOpen((value) => !value)}><Icon name="copy" /> Tableau Jira de la semaine</button>
+    <button type="button" className="secondary-button" onClick={() => setOpen((value) => !value)}><Icon name="copy" /> Importer les tickets Jira</button>
     {open && <div className="paste-panel jira-paste-panel">
-      <div className="jira-import-heading"><div><strong>Tableau Jira global · {year} · S{String(week).padStart(2, "0")}</strong><span>Colle une seule fois le tableau complet avec tout le monde, puis affecte les personnes à chaque marché.</span></div><div className="paste-market-target"><Icon name="check" size={14}/><span>Marché affiché</span><strong>{marketName}</strong></div></div>
-      <code>Personne assignée → À faire → Réouvert → En cours → Attente client → Attente tiers → Attente changement → Total</code>
-      <textarea value={text} disabled={loading} onChange={(event) => updateText(event.target.value)} placeholder="Colle ici le tableau Jira tabulé complet…" aria-label="Tableau Jira tabulé complet de la semaine" />
-      <div className={`jira-detection ${preview.personCount ? "is-valid" : ""}`}><span><Icon name={preview.personCount ? "check" : "copy"} size={15}/> {loading ? "Chargement du tableau hebdomadaire…" : formatLabel}</span><strong>{preview.personCount ? `${preview.personCount} personne${preview.personCount > 1 ? "s" : ""} · ${preview.tickets} tickets` : "Aucune ligne reconnue"}</strong></div>
-      {preview.personCount > 0 && <div className="jira-preview jira-market-mapping">
-        <div className="jira-preview-toolbar"><div><strong>Affectations automatiques par marché</strong><span>Choisis un marché, puis coche les personnes qui lui correspondent. Ces choix seront repris les semaines suivantes.</span></div></div>
-        <div className="jira-market-tabs" role="tablist" aria-label="Marchés pour les affectations Jira">{markets.map((item) => <button type="button" role="tab" aria-selected={mappingMarket === item.id} className={mappingMarket === item.id ? "active" : ""} key={item.id} onClick={() => setMappingMarket(item.id)}><span>{item.short}</span><b>{(assignments[item.id] ?? []).filter((name) => preview.people.some((person) => person.assignee === name)).length}</b></button>)}</div>
-        <div className="jira-person-checklist">{preview.people.map((person) => <label className={selectedSet.has(person.assignee) ? "selected" : ""} key={person.assignee}><input type="checkbox" checked={selectedSet.has(person.assignee)} onChange={() => togglePerson(person.assignee)}/><span><strong>{person.assignee}</strong><small>{person.statuses.filter((status) => status.count).map((status) => `${status.status} ${status.count}`).join(" · ")}</small></span><b>{person.total}</b></label>)}</div>
-        <div className="jira-selection-summary"><div><span>{markets.find((item) => item.id === mappingMarket)?.name}</span><strong>{selectedPeople.length} personne{selectedPeople.length > 1 ? "s" : ""} · {selectedTickets} tickets</strong></div><div className="jira-bulk-actions"><button type="button" onClick={() => setPeopleForMarket(preview.people.map((person) => person.assignee))}>Tout cocher</button><button type="button" onClick={() => setPeopleForMarket([])}>Tout décocher</button></div></div>
+      <div className="jira-import-heading"><div><strong>Import Jira · {marketName}</strong><span>{year} · S{String(week).padStart(2, "0")} · rattachement automatique par USERCODE</span></div><div className="paste-market-target"><Icon name="check" size={14}/><span>Personnes configurées</span><strong>{marketPeople.length}</strong></div></div>
+      <section className={`jira-query-card ${jql ? "" : "is-empty"}`}><div className="jira-query-heading"><div><span>1 · Requête prête pour Jira</span><strong>{jql ? `${marketPeople.length} USERCODE du marché inclus` : "Aucun USERCODE disponible"}</strong></div><button type="button" className="secondary-button" disabled={!jql} onClick={copyJql}><Icon name={copied ? "check" : "copy"} size={15}/> {copied ? "Requête copiée" : "Copier la requête"}</button></div>{jql ? <pre className="jira-query-code">{jql}</pre> : <p>Ajoute d’abord les personnes et leur USERCODE dans l’annuaire GLOBAL de ce marché.</p>}</section>
+      <div className="jira-import-step"><span>2 · Colle l’export détaillé</span><code>Clé de ticket → ID → État → Résumé → Création → Personne assignée (USERCODE) → Mise à jour</code></div>
+      <textarea value={text} disabled={loading} onChange={(event) => updateText(event.target.value)} placeholder="Colle ici l’export Jira tabulé détaillé…" aria-label="Export Jira tabulé détaillé de la semaine" />
+      <div className={`jira-detection ${preview.mode === "detailed" && preview.detailedTickets.length ? "is-valid" : ""}`}><span><Icon name={preview.mode === "detailed" && preview.detailedTickets.length ? "check" : "copy"} size={15}/> {loading ? "Chargement de l’import hebdomadaire…" : formatLabel}</span><strong>{preview.mode === "detailed" && preview.detailedTickets.length ? `${preview.detailedTickets.length} ticket${preview.detailedTickets.length > 1 ? "s" : ""} détaillé${preview.detailedTickets.length > 1 ? "s" : ""}` : preview.personCount ? "Ancien récapitulatif détecté · export détaillé requis" : "Aucune ligne reconnue"}</strong></div>
+      {preview.detailedTickets.length > 0 && <div className="jira-preview jira-auto-preview">
+        <div className="jira-preview-toolbar"><div><strong>Prévisualisation automatique</strong><span>Seules les personnes de {marketName} qui ont au moins un ticket seront affichées dans le point.</span></div><b>{recognizedTickets.length} / {preview.detailedTickets.length} tickets reconnus</b></div>
+        {recognizedPeople.length ? <div className="jira-preview-persons">{recognizedPeople.map((person) => <article key={person.usercode}><span>{person.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span><div><strong>{person.name}</strong><small>{person.usercode} · {jiraStatusSummary(person.tickets.map((ticket) => ({ id: ticket.key, key: ticket.key, summary: ticket.summary, status: ticket.status, priority: "", assignee: person.name, lastActivity: ticket.updatedAt, link: ticket.link, comment: "", count: 1 })))}</small></div><b>{person.tickets.length}</b></article>)}</div> : <div className="jira-query-empty">Aucun ticket ne correspond aux USERCODE enregistrés pour ce marché.</div>}
+        {unknownUserCodes.length > 0 && <div className="jira-unknown"><Icon name="alert" size={15}/><span><strong>{unknownUserCodes.length} USERCODE non rattaché{unknownUserCodes.length > 1 ? "s" : ""}</strong> · {unknownUserCodes.join(", ")} · ces tickets ne seront pas affichés.</span></div>}
       </div>}
-      <div className="paste-actions"><span>{message}</span><button type="button" className="primary-button small" disabled={!preview.personCount || saving || loading} onClick={saveGlobalTable}><Icon name="check" size={15}/> {saving ? "Enregistrement…" : "Enregistrer le tableau et les affectations"}</button></div>
+      <div className="paste-actions"><span>{message}</span><button type="button" className="primary-button small" disabled={!recognizedTickets.length || saving || loading} onClick={saveMarketTable}><Icon name="check" size={15}/> {saving ? "Enregistrement…" : "Enregistrer l’import de ce marché"}</button></div>
     </div>}
   </div>;
 }
 
-function buildAlerts(data: PointData): AlertItem[] {
+function buildAlerts(data: PointData, market: Market): AlertItem[] {
   const alerts: AlertItem[] = []; const pointDate = data.meetingDate || isoToday(); const day = new Date(`${pointDate}T12:00:00`).getDate();
   data.dossiers.forEach((item) => { if (isClosed(item.status)) return; if (/bloqu/i.test(item.status)) alerts.push({ title: item.title || "Dossier", detail: item.comment || "Dossier bloquant", severity: "danger" }); else if (item.deadline && daysBetween(item.deadline, pointDate) > 0) alerts.push({ title: item.title || "Dossier", detail: `Échéance dépassée depuis ${daysBetween(item.deadline, pointDate)} jour(s)`, severity: "danger" }); else if (/(surveill|action)/i.test(item.status)) alerts.push({ title: item.title || "Dossier", detail: item.comment || item.action || item.status, severity: "warning" }); });
   data.tariffs.forEach((item) => { if (isClosed(item.state)) return; if (!item.receptionDate && day >= 15) alerts.push({ title: item.supplier || "Évolution tarifaire", detail: "Trame non reçue après le 15", severity: "danger" }); else if (!item.receptionDate && day >= 8) alerts.push({ title: item.supplier || "Évolution tarifaire", detail: "Trame à sécuriser avant le 15", severity: "warning" }); else if (item.receptionDate && daysBetween(item.receptionDate, pointDate) > 5 && !/(termin|fait|valid)/i.test(item.state)) alerts.push({ title: item.supplier || "Évolution tarifaire", detail: `Trame reçue depuis ${daysBetween(item.receptionDate, pointDate)} jours · traitement à contrôler`, severity: "warning" }); });
-  data.jira.forEach((item) => { if (!isClosed(item.status) && item.lastActivity && daysBetween(item.lastActivity, pointDate) > 10) alerts.push({ title: item.key || "Ticket Jira", detail: `Aucune activité depuis ${daysBetween(item.lastActivity, pointDate)} jours`, severity: "warning" }); });
-  return alerts.slice(0, 12);
+  const warningDays = Math.max(1, market.jiraWarningDays || 10);
+  const criticalDays = Math.max(warningDays + 1, market.jiraCriticalDays || 20);
+  const jiraAlerts = data.jira.filter((item) => !isClosed(item.status) && item.lastActivity)
+    .map((item) => ({ item, inactivity: daysBetween(item.lastActivity, pointDate) }))
+    .filter(({ inactivity }) => inactivity >= warningDays)
+    .sort((a, b) => b.inactivity - a.inactivity)
+    .map(({ item, inactivity }): AlertItem => ({
+      title: item.key || item.summary || "Ticket Jira",
+      detail: `Sans activité Jira depuis ${inactivity} jour${inactivity > 1 ? "s" : ""}${item.assignee ? ` · ${item.assignee}` : ""}`,
+      severity: inactivity >= criticalDays ? "danger" : "warning",
+    }));
+  return [...jiraAlerts, ...alerts].sort((a, b) => Number(b.severity === "danger") - Number(a.severity === "danger")).slice(0, 12);
 }
 
-function PreviewDashboard({ data, market }: { data: PointData; market: Market }) {
-  const alerts = useMemo(() => buildAlerts(data), [data]);
+function JiraVolumePulse({ data, archive, market }: { data: PointData; archive: PointRecord[]; market: Market }) {
+  const pointYear = isoWeekYear(data.meetingDate);
+  const pointWeek = isoWeek(data.meetingDate);
+  const activeTickets = data.jira.filter((item) => !isClosed(item.status));
+  const currentVolume = activeTickets.reduce((sum, item) => sum + jiraItemCount(item), 0);
+  const history = archive
+    .filter((record) => record.year < pointYear || (record.year === pointYear && record.week < pointWeek))
+    .sort((a, b) => a.year - b.year || a.week - b.week)
+    .filter((record, index, rows) => rows.findIndex((candidate) => candidate.year === record.year && candidate.week === record.week) === index)
+    .slice(-3)
+    .map((record) => ({ label: `S${String(record.week).padStart(2, "0")}`, value: record.data.jira.filter((item) => !isClosed(item.status)).reduce((sum, item) => sum + jiraItemCount(item), 0) }));
+  const points = [...history, { label: `S${String(pointWeek).padStart(2, "0")}`, value: currentVolume }];
+  const maxVolume = Math.max(1, ...points.map((point) => point.value));
+  const previousVolume = history.at(-1)?.value;
+  const delta = previousVolume === undefined ? null : currentVolume - previousVolume;
+  const warningDays = Math.max(1, market.jiraWarningDays || 10);
+  const criticalDays = Math.max(warningDays + 1, market.jiraCriticalDays || 20);
+  const inactivity = activeTickets.filter((item) => item.lastActivity).map((item) => daysBetween(item.lastActivity, data.meetingDate));
+  const warningCount = inactivity.filter((days) => days >= warningDays && days < criticalDays).length;
+  const criticalCount = inactivity.filter((days) => days >= criticalDays).length;
+  const statusTotals: { status: string; value: number }[] = JIRA_SUMMARY_STATUSES.map((status) => ({ status, value: activeTickets.filter((item) => item.status === status).reduce((sum, item) => sum + jiraItemCount(item), 0) })).filter((item) => item.value);
+  const represented = statusTotals.reduce((sum, item) => sum + item.value, 0);
+  if (currentVolume > represented) statusTotals.push({ status: "Autres", value: currentVolume - represented });
+  return <section className="jira-volume-pulse">
+    <div className="jira-volume-heading"><div><span>Volume de tickets ouverts</span><strong>Évolution hebdomadaire</strong></div><div className={`jira-volume-delta ${delta === null ? "neutral" : delta > 0 ? "up" : delta < 0 ? "down" : "neutral"}`}><small>vs semaine précédente</small><strong>{delta === null ? "—" : `${delta > 0 ? "+" : ""}${delta}`}</strong></div></div>
+    <div className="jira-volume-content"><div className="jira-volume-bars" aria-label="Évolution du volume de tickets Jira">{points.map((point, index) => <div className={`jira-volume-bar ${index === points.length - 1 ? "current" : ""}`} key={`${point.label}-${index}`}><span><i style={{ height: `${Math.max(8, (point.value / maxVolume) * 100)}%` }}/></span><b>{point.value}</b><small>{point.label}</small></div>)}</div><div className="jira-volume-stats"><article><span>Total actuel</span><strong>{currentVolume}</strong><small>{activeTickets.length} ligne{activeTickets.length > 1 ? "s" : ""} détaillée{activeTickets.length > 1 ? "s" : ""}</small></article><article className="warning"><span>À surveiller</span><strong>{warningCount}</strong><small>{warningDays} à {criticalDays - 1} j sans activité</small></article><article className="critical"><span>Critiques</span><strong>{criticalCount}</strong><small>{criticalDays} j ou plus sans activité</small></article></div></div>
+    <div className="jira-status-visual"><div>{statusTotals.length ? statusTotals.map((item, index) => <i key={item.status} title={`${item.status} : ${item.value}`} className={`segment segment-${index % 6}`} style={{ width: `${(item.value / Math.max(1, currentVolume)) * 100}%` }}/>) : <i className="segment empty"/>}</div><p>{statusTotals.length ? statusTotals.map((item) => <span key={item.status}><i className={`segment-${statusTotals.indexOf(item) % 6}`}/>{item.status} <b>{item.value}</b></span>) : <span>Aucun ticket actif</span>}</p></div>
+  </section>;
+}
+
+function PreviewDashboard({ data, market, archive }: { data: PointData; market: Market; archive: PointRecord[] }) {
+  const alerts = useMemo(() => buildAlerts(data, market), [data, market]);
   const activeJira = data.jira.filter((item) => !isClosed(item.status));
   const activeJiraCount = activeJira.reduce((sum, item) => sum + jiraItemCount(item), 0);
   const metrics = [[data.dossiers.filter((item) => !isClosed(item.status)).length, "Dossiers suivis", "folder", "mint"], [data.tariffs.length, "Évolutions", "trend", "violet"], [activeJiraCount, "Tickets Jira", "ticket", "aqua"], [alerts.length, "Vigilances", "alert", "peach"]] as const;
@@ -399,6 +472,7 @@ function PreviewDashboard({ data, market }: { data: PointData; market: Market })
     <header className="report-hero"><div><div className="market-badge"><i/> MARKET PULSE <b>/</b> {market.short}</div><h1>Point marché</h1><p><strong>{market.name}</strong><span>Dossiers · opérations commerciales · évolutions · Jira</span></p></div><div className="week-card"><strong><small>{isoWeekYear(data.meetingDate)} ·</small>S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong><i/><div><b>{dateLabel(data.meetingDate)}</b><span>Année et semaine ISO</span></div></div></header>
     <section className="report-metrics">{metrics.map(([value, label, icon, tone], index) => <article className={`report-metric tone-${tone}`} key={label}><span>0{index + 1}</span><div className="report-metric-icon"><Icon name={icon}/></div><strong>{value}</strong><small>{label}</small></article>)}</section>
     <section className="report-priority"><span>Priorité de la semaine</span><strong>{data.priority || "Aucune priorité renseignée."}</strong></section>
+    <JiraVolumePulse data={data} archive={archive} market={market}/>
     <div className="report-grid"><article className="report-focus"><div className="report-heading"><span>01</span><div><small>Dossiers</small><h2>En cours</h2></div><b>{data.dossiers.length} suivi{data.dossiers.length > 1 ? "s" : ""}</b></div>
       {data.dossiers.length ? <div className="report-dossiers">{data.dossiers.map((item, index) => <div className="report-dossier" key={item.id}><span className={`status-dot tone-${toneForStatus(item.status)}`}/><code>{String(index + 1).padStart(2, "0")}</code><div><strong>{item.title || "Dossier sans titre"}</strong><small>{[item.universe, item.reference, item.owner].filter(Boolean).join(" · ") || "Contexte à compléter"}</small></div><p>{item.action || item.comment || "Prochaine action à compléter."}</p><span className={`report-pill tone-${toneForStatus(item.status)}`}>{item.status}</span></div>)}</div> : <div className="report-empty">Aucun dossier renseigné</div>}
       <div className="report-subheading">Opérations commerciales (promo)</div>{data.operations.length ? <div className="report-simulations">{data.operations.map((item, index) => <section className={`report-simulation simulation-${index % 2 ? "violet" : "mint"}`} key={item.id}><div><code>{String.fromCharCode(65 + index)}</code><span className={`report-pill tone-${toneForStatus(item.state)}`}>{item.state}</span></div><small>{item.month || "Mois à définir"}</small><h3>{item.name || "Opération sans titre"}</h3><p>{item.summary}</p><div>{item.steps.map(([label, state]) => <div className="report-step" key={label}><span>{label}</span><strong className={`tone-text-${toneForStatus(state)}`}><i/>{state}</strong></div>)}</div></section>)}</div> : <div className="report-empty">Aucune opération commerciale renseignée</div>}
@@ -411,7 +485,7 @@ function PreviewDashboard({ data, market }: { data: PointData; market: Market })
 }
 
 function buildMailHtml(data: PointData, market: Market) {
-  const alerts = buildAlerts(data); const activeJiraItems = data.jira.filter((item) => !isClosed(item.status)); const activeJira = activeJiraItems.reduce((sum, item) => sum + jiraItemCount(item), 0);
+  const alerts = buildAlerts(data, market); const activeJiraItems = data.jira.filter((item) => !isClosed(item.status)); const activeJira = activeJiraItems.reduce((sum, item) => sum + jiraItemCount(item), 0);
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
   const accent = normalizeHex(data.customColor) || theme.accent;
   const dossierRows = data.dossiers.map((item) => `<tr><td style="padding:12px 14px;border-bottom:1px solid #DDE7E3"><b style="color:#10201D">${escapeHtml(item.title || "Dossier")}</b><br><span style="color:#64736F;font-size:11px">${escapeHtml([item.universe, item.reference].filter(Boolean).join(" · "))}</span></td><td style="padding:12px 14px;border-bottom:1px solid #DDE7E3;color:#41534E;font-size:12px">${escapeHtml(item.action || item.comment || "—")}</td><td style="padding:12px 14px;border-bottom:1px solid #DDE7E3;text-align:right"><span style="display:inline-block;padding:6px 9px;border-radius:99px;background:#E7EEE9;color:#253E36;font-size:10px;font-weight:700">${escapeHtml(item.status)}</span></td></tr>`).join("");
@@ -466,7 +540,7 @@ export default function Home() {
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
   const accent = normalizeHex(data.customColor) || theme.accent;
   const themeStyle = { "--accent": accent, "--accent-soft": normalizeHex(data.customColor) ? hexSoft(data.customColor) : theme.soft } as CSSProperties;
-  const alerts = useMemo(() => buildAlerts(data), [data]);
+  const alerts = useMemo(() => buildAlerts(data, market), [data, market]);
   const mailHtml = useMemo(() => buildMailHtml(data, market), [data, market]);
   const isDirty = pointSignature(marketId, data) !== lastSavedSignature;
   const currentWeek = isoWeek(data.meetingDate);
@@ -475,6 +549,7 @@ export default function Home() {
   const previousPoint = archive.find((item) => item.year < currentWeekYear || (item.year === currentWeekYear && item.week < currentWeek));
   const calendarWeeks = useMemo(() => weeksForMonth(calendarMonth), [calendarMonth]);
   const jiraPeople = useMemo(() => groupJiraPeople(data.jira), [data.jira]);
+  const jiraActivityRows = useMemo(() => data.jira.filter((item) => item.key).map((item) => ({ item, inactivity: item.lastActivity ? daysBetween(item.lastActivity, data.meetingDate) : null })).sort((a, b) => (b.inactivity ?? -1) - (a.inactivity ?? -1)), [data.jira, data.meetingDate]);
   const automaticMailToUsers = directoryUsers.filter((user) => user.marketIds.includes(marketId) && roleMailMode(user.role) === "to");
   const automaticMailCcUsers = directoryUsers.filter((user) => roleMailMode(user.role) === "cc");
   const carryoverSelectedCount = Object.values(carryoverSelection).filter(Boolean).length;
@@ -656,10 +731,10 @@ export default function Home() {
     return { count: rows.length };
   };
   const importJiraSummary = (summary: JiraSummaryImport, selectedPeople: string[]) => {
-    const selectedRows = summary.people.filter((person) => selectedPeople.includes(person.assignee));
-    if (!selectedRows.length) return { count: 0 };
-    const jira = jiraTicketsFromSummary(summary, selectedPeople);
-    const tickets = selectedRows.reduce((sum, person) => sum + person.total, 0);
+    const jira = jiraTicketsFromSummary(summary, selectedPeople, marketId);
+    if (!jira.length) return { count: 0 };
+    const selectedRows = groupJiraPeople(jira);
+    const tickets = jira.reduce((sum, item) => sum + jiraItemCount(item), 0);
     setData((current) => ({ ...current, jira }));
     return { count: selectedRows.length, message: `${selectedRows.length} personne${selectedRows.length > 1 ? "s" : ""} · ${tickets} tickets automatiquement rattachés à « ${market.name} ».` };
   };
@@ -722,9 +797,9 @@ export default function Home() {
     try {
       const index = marketOptions.length + 1;
       const response = await fetch("/api/markets", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: `Nouveau marché ${index}`, shortCode: `MARCHÉ-${index}`, tone: themes[index % themes.length].id, colorHex: "" }) });
-      const payload = await response.json() as { market?: { id: string; name: string; shortCode: string; tone: ThemeKey; colorHex?: string; position: number }; error?: string };
+      const payload = await response.json() as { market?: { id: string; name: string; shortCode: string; tone: ThemeKey; colorHex?: string; position: number; jiraWarningDays: number; jiraCriticalDays: number }; error?: string };
       if (!response.ok || !payload.market) throw new Error(payload.error || "Création impossible.");
-      const created: Market = { id: payload.market.id, name: payload.market.name, short: payload.market.shortCode, tone: payload.market.tone, colorHex: normalizeHex(payload.market.colorHex), position: payload.market.position };
+      const created: Market = { id: payload.market.id, name: payload.market.name, short: payload.market.shortCode, tone: payload.market.tone, colorHex: normalizeHex(payload.market.colorHex), position: payload.market.position, jiraWarningDays: payload.market.jiraWarningDays, jiraCriticalDays: payload.market.jiraCriticalDays };
       setMarketOptions((current) => [...current, created].sort((a, b) => a.position - b.position));
       setToast("Marché ajouté. Tu peux maintenant modifier son nom.");
     } catch (error) { setToast(error instanceof Error ? error.message : "Création du marché impossible."); }
@@ -736,10 +811,10 @@ export default function Home() {
     if (draft.colorHex && !validHex(draft.colorHex)) { setToast("La couleur du marché doit suivre le format #RRGGBB."); return; }
     setMarketSavingId(id);
     try {
-      const response = await fetch("/api/markets", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, name: draft.name, shortCode: draft.short, tone: draft.tone, colorHex: draft.colorHex }) });
-      const payload = await response.json() as { market?: { id: string; name: string; shortCode: string; tone: ThemeKey; colorHex?: string; position: number }; error?: string };
+      const response = await fetch("/api/markets", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, name: draft.name, shortCode: draft.short, tone: draft.tone, colorHex: draft.colorHex, jiraWarningDays: draft.jiraWarningDays, jiraCriticalDays: draft.jiraCriticalDays }) });
+      const payload = await response.json() as { market?: { id: string; name: string; shortCode: string; tone: ThemeKey; colorHex?: string; position: number; jiraWarningDays: number; jiraCriticalDays: number }; error?: string };
       if (!response.ok || !payload.market) throw new Error(payload.error || "Modification impossible.");
-      const saved: Market = { id: payload.market.id, name: payload.market.name, short: payload.market.shortCode, tone: payload.market.tone, colorHex: normalizeHex(payload.market.colorHex), position: payload.market.position };
+      const saved: Market = { id: payload.market.id, name: payload.market.name, short: payload.market.shortCode, tone: payload.market.tone, colorHex: normalizeHex(payload.market.colorHex), position: payload.market.position, jiraWarningDays: payload.market.jiraWarningDays, jiraCriticalDays: payload.market.jiraCriticalDays };
       setMarketOptions((current) => current.map((item) => item.id === id ? saved : item));
       if (id === marketId) setData((current) => ({ ...current, themeColor: saved.tone, customColor: saved.colorHex, mail: { ...current.mail, subject: /^Point marché —/.test(current.mail.subject) ? `Point marché — ${saved.name}` : current.mail.subject } }));
       setToast(`Marché « ${saved.name} » enregistré.`);
@@ -766,8 +841,6 @@ export default function Home() {
     finally { setMarketSavingId(""); }
   };
   const updateDirectoryUser = (id: string, patch: Partial<GlobalDirectoryUser>) => setDirectoryUsers((current) => current.map((user) => user.id === id ? { ...user, ...patch } : user));
-  const toggleDirectoryMarket = (userId: string, selectedMarket: string) => setDirectoryUsers((current) => current.map((user) => user.id !== userId ? user : { ...user, marketIds: user.marketIds.includes(selectedMarket) ? user.marketIds.filter((id) => id !== selectedMarket) : [...user.marketIds, selectedMarket] }));
-  const toggleNewDirectoryMarket = (selectedMarket: string) => setNewDirectoryUser((current) => ({ ...current, marketIds: current.marketIds.includes(selectedMarket) ? current.marketIds.filter((id) => id !== selectedMarket) : [...current.marketIds, selectedMarket] }));
   const acceptDirectoryPayload = (users: GlobalDirectoryUser[]) => {
     setDirectoryUsers(users);
     setDirectoryRevision((current) => current + 1);
@@ -893,10 +966,20 @@ export default function Home() {
     {section === "markets" && <section className="editor-section"><SectionTitle eyebrow="02 · Administration" title="Gérer les marchés" detail="Modifie le nom affiché, le code court et la couleur par défaut, ou ajoute un nouveau marché." action={<button className="primary-button" disabled={creatingMarket} onClick={createMarket}><Icon name="plus"/> {creatingMarket ? "Ajout…" : "Ajouter un marché"}</button>}/><div className="market-admin-note"><Icon name="alert"/><div><strong>Suppression sans perte d’historique</strong><span>Un marché supprimé disparaît de la liste active, mais ses points hebdomadaires restent conservés.</span></div></div><div className="market-admin-list">{marketOptions.map((item, index) => { const marketAccent = normalizeHex(item.colorHex) || themes.find((option) => option.id === item.tone)?.accent || themes[0].accent; return <article className={`surface market-admin-card ${item.id === marketId ? "active" : ""}`} key={item.id}><div className="market-admin-index" style={{ "--swatch": marketAccent } as CSSProperties}><i/><span>{String(index + 1).padStart(2, "0")}</span></div><div className="market-admin-fields"><TextField label="Nom du marché" value={item.name} onChange={(name) => updateMarketDraft(item.id, { name })}/><TextField label="Code court" value={item.short} onChange={(short) => updateMarketDraft(item.id, { short })} placeholder="EX. BOIS"/><label className="field"><span>Palette par défaut</span><select value={item.tone} onChange={(event) => updateMarketDraft(item.id, { tone: event.target.value as ThemeKey, colorHex: "" })}>{themes.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label><label className="field market-hex-field"><span>Hex personnalisé</span><div><input type="color" value={marketAccent} aria-label={`Couleur de ${item.name}`} onChange={(event) => updateMarketDraft(item.id, { colorHex: event.target.value.toUpperCase() })}/><input value={item.colorHex} maxLength={7} placeholder="#RRGGBB" onChange={(event) => updateMarketDraft(item.id, { colorHex: event.target.value.toUpperCase() })}/></div></label></div><div className="market-admin-actions">{item.id === marketId && <span>Marché actif</span>}<button className="secondary-button" disabled={Boolean(marketSavingId)} onClick={() => saveMarket(item.id)}><Icon name="check"/> {marketSavingId === item.id ? "Enregistrement…" : "Enregistrer"}</button><button className="icon-button danger" disabled={Boolean(marketSavingId)} aria-label={`Supprimer ${item.name}`} title="Supprimer de la liste active" onClick={() => deleteMarket(item.id)}><Icon name="trash"/></button></div></article>; })}</div></section>}
 
     {section === "users" && <section className="editor-section">
-      <SectionTitle eyebrow="02 · Annuaire interne" title="Utilisateurs GLOBAL" detail="Associe les personnes aux marchés existants. Un changement de nom du marché conserve automatiquement les liens."/>
-      <div className="directory-rule-grid"><article><Icon name="ticket"/><div><strong>Jira automatique</strong><span>Chefs de produit, chefs de marché et analystes tarif/référentiel sont affectés à leurs marchés via leur nom Jira.</span></div></article><article><Icon name="mail"/><div><strong>Mail automatique</strong><span>Ces rôles sont destinataires principaux ; l’unique manager Tarif est ajouté en copie.</span></div></article><article><Icon name="lock"/><div><strong>Administration unique</strong><span>L’annuaire ne change pas la connexion partagée GLOBAL actuellement utilisée.</span></div></article></div>
-      <article className="surface directory-create-card"><div className="directory-card-heading"><span className="directory-avatar"><Icon name="plus"/></span><div><strong>Ajouter une personne</strong><small>Nom, adresse mail, identité Jira et rôle métier</small></div></div><div className="directory-fields"><TextField label="Nom complet" value={newDirectoryUser.name} onChange={(name) => setNewDirectoryUser((current) => ({ ...current, name, jiraName: current.jiraName || name }))} placeholder="Louise PEPIN"/><TextField label="Adresse e-mail" type="email" value={newDirectoryUser.email} onChange={(email) => setNewDirectoryUser((current) => ({ ...current, email }))} placeholder="person@example.test"/><TextField label="Nom dans Jira" value={newDirectoryUser.jiraName} onChange={(jiraName) => setNewDirectoryUser((current) => ({ ...current, jiraName }))} placeholder="Louise Pepin"/><label className="field"><span>Rôle</span><select value={newDirectoryUser.role} onChange={(event) => setNewDirectoryUser((current) => ({ ...current, role: event.target.value as GlobalRole, marketIds: event.target.value === "manager-tarif" ? [] : current.marketIds }))}>{GLOBAL_ROLE_OPTIONS.map((role) => <option key={role.id} value={role.id}>{role.label}</option>)}</select></label></div>{newDirectoryUser.role !== "manager-tarif" ? <div className="directory-market-picker"><span>Marchés associés</span><div>{marketOptions.map((item) => <button type="button" className={newDirectoryUser.marketIds.includes(item.id) ? "selected" : ""} key={item.id} onClick={() => toggleNewDirectoryMarket(item.id)}><i style={{ "--swatch": normalizeHex(item.colorHex) || themes.find((themeOption) => themeOption.id === item.tone)?.accent || themes[0].accent } as CSSProperties}/>{item.name}</button>)}</div></div> : <div className="directory-manager-note"><Icon name="mail" size={15}/> Le manager Tarif sera automatiquement ajouté en copie de tous les mails.</div>}<div className="directory-card-actions"><span>{roleMailMode(newDirectoryUser.role) === "to" ? "Jira + destinataire principal" : roleMailMode(newDirectoryUser.role) === "cc" ? "Copie automatique" : "Association conservée sans automatisation"}</span><button className="primary-button" disabled={directorySavingId === "new" || !newDirectoryUser.name || !newDirectoryUser.email} onClick={createDirectoryUser}><Icon name="plus"/> {directorySavingId === "new" ? "Ajout…" : "Ajouter à l’annuaire"}</button></div></article>
-      {!directoryReady ? <div className="archive-message"><span>Chargement de l’annuaire GLOBAL…</span></div> : directoryUsers.length ? <div className="directory-list">{directoryUsers.map((user) => <article className="surface directory-user-card" key={user.id}><div className="directory-card-heading"><span className="directory-avatar">{user.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span><div><strong>{user.name || "Utilisateur GLOBAL"}</strong><small>{roleLabel(user.role)}</small></div><div className="directory-automation-badges">{roleMailMode(user.role) === "to" && <><span className="jira">Jira auto</span><span className="mail">Mail À</span></>}{roleMailMode(user.role) === "cc" && <span className="mail">Mail copie</span>}{roleMailMode(user.role) === "none" && <span>En réserve</span>}</div></div><div className="directory-fields"><TextField label="Nom complet" value={user.name} onChange={(name) => updateDirectoryUser(user.id, { name })}/><TextField label="Adresse e-mail" type="email" value={user.email} onChange={(email) => updateDirectoryUser(user.id, { email })}/><TextField label="Nom dans Jira" value={user.jiraName} onChange={(jiraName) => updateDirectoryUser(user.id, { jiraName })}/><label className="field"><span>Rôle</span><select value={user.role} onChange={(event) => updateDirectoryUser(user.id, { role: event.target.value as GlobalRole, marketIds: event.target.value === "manager-tarif" ? [] : user.marketIds })}>{GLOBAL_ROLE_OPTIONS.map((role) => <option key={role.id} value={role.id}>{role.label}</option>)}</select></label></div>{user.role !== "manager-tarif" ? <div className="directory-market-picker"><span>Marchés associés</span><div>{marketOptions.map((item) => <button type="button" className={user.marketIds.includes(item.id) ? "selected" : ""} key={item.id} onClick={() => toggleDirectoryMarket(user.id, item.id)}><i style={{ "--swatch": normalizeHex(item.colorHex) || themes.find((themeOption) => themeOption.id === item.tone)?.accent || themes[0].accent } as CSSProperties}/>{item.name}</button>)}</div></div> : <div className="directory-manager-note"><Icon name="mail" size={15}/> Manager Tarif unique · copie automatique de tous les mails</div>}<div className="directory-card-actions"><span>{user.marketIds.length ? `${user.marketIds.length} marché${user.marketIds.length > 1 ? "s" : ""} lié${user.marketIds.length > 1 ? "s" : ""}` : user.role === "manager-tarif" ? "Périmètre transversal Tarif" : "Aucun marché associé"}</span><div><button className="secondary-button" disabled={Boolean(directorySavingId)} onClick={() => saveDirectoryUser(user.id)}><Icon name="check"/> {directorySavingId === user.id ? "Enregistrement…" : "Enregistrer"}</button><button className="icon-button danger" disabled={Boolean(directorySavingId)} aria-label={`Retirer ${user.name}`} onClick={() => deleteDirectoryUser(user.id)}><Icon name="trash"/></button></div></div></article>)}</div> : <div className="surface archive-empty"><Icon name="user" size={28}/><strong>Annuaire GLOBAL vide</strong><span>Ajoute les chefs de produit, chefs de marché, analystes et le manager Tarif.</span></div>}
+      <SectionTitle eyebrow="02 · Annuaire interne" title="Utilisateurs GLOBAL" detail="Chaque personne opérationnelle est liée à un seul marché existant. Le lien reste valide si le marché change de nom."/>
+      <div className="directory-rule-grid"><article><Icon name="ticket"/><div><strong>Jira par USERCODE</strong><span>La requête et l’import utilisent le USERCODE pour rattacher automatiquement les tickets au bon marché.</span></div></article><article><Icon name="mail"/><div><strong>Mail automatique</strong><span>Les rôles opérationnels sont destinataires principaux ; l’unique manager Tarif est ajouté en copie.</span></div></article><article><Icon name="lock"/><div><strong>Connexion inchangée</strong><span>L’édition reste protégée par le compte interne GLOBAL partagé.</span></div></article></div>
+      <article className="surface directory-create-card">
+        <div className="directory-card-heading"><span className="directory-avatar"><Icon name="plus"/></span><div><strong>Ajouter une personne</strong><small>Exemple neutre : John DOE · J1234567</small></div></div>
+        <div className="directory-fields"><TextField label="Nom complet" value={newDirectoryUser.name} onChange={(name) => setNewDirectoryUser((current) => ({ ...current, name }))} placeholder="John DOE"/><TextField label="Adresse e-mail" type="email" value={newDirectoryUser.email} onChange={(email) => setNewDirectoryUser((current) => ({ ...current, email }))} placeholder="person@example.test"/><TextField label="USERCODE Jira" value={newDirectoryUser.usercode} onChange={(usercode) => setNewDirectoryUser((current) => ({ ...current, usercode: usercode.toUpperCase() }))} placeholder="J1234567"/><label className="field"><span>Rôle</span><select value={newDirectoryUser.role} onChange={(event) => setNewDirectoryUser((current) => ({ ...current, role: event.target.value as GlobalRole, marketIds: event.target.value === "manager-tarif" ? [] : current.marketIds }))}>{GLOBAL_ROLE_OPTIONS.map((role) => <option key={role.id} value={role.id}>{role.label}</option>)}</select></label></div>
+        {newDirectoryUser.role !== "manager-tarif" ? <label className="directory-market-select"><span>Marché de la personne</span><select value={newDirectoryUser.marketIds[0] ?? ""} onChange={(event) => setNewDirectoryUser((current) => ({ ...current, marketIds: event.target.value ? [event.target.value] : [] }))}><option value="">Sélectionner un marché…</option>{marketOptions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><small>Un seul marché pilote la requête Jira et les destinataires du mail.</small></label> : <div className="directory-manager-note"><Icon name="mail" size={15}/> Le manager Tarif sera automatiquement ajouté en copie de tous les mails.</div>}
+        <div className="directory-card-actions"><span>{roleMailMode(newDirectoryUser.role) === "to" ? "Jira + destinataire principal" : roleMailMode(newDirectoryUser.role) === "cc" ? "Copie automatique" : "Personne conservée sans automatisation"}</span><button className="primary-button" disabled={directorySavingId === "new" || !newDirectoryUser.name || !newDirectoryUser.email || (roleMailMode(newDirectoryUser.role) === "to" && (!/^[A-Z]\d{7}$/.test(newDirectoryUser.usercode) || !newDirectoryUser.marketIds[0]))} onClick={createDirectoryUser}><Icon name="plus"/> {directorySavingId === "new" ? "Ajout…" : "Ajouter à l’annuaire"}</button></div>
+      </article>
+      {!directoryReady ? <div className="archive-message"><span>Chargement de l’annuaire GLOBAL…</span></div> : directoryUsers.length ? <div className="directory-list">{directoryUsers.map((user) => <article className="surface directory-user-card" key={user.id}>
+        <div className="directory-card-heading"><span className="directory-avatar">{user.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span><div><strong>{user.name || "Utilisateur GLOBAL"}</strong><small>{roleLabel(user.role)}</small></div><div className="directory-automation-badges">{roleMailMode(user.role) === "to" && <><span className="jira">Jira auto</span><span className="mail">Mail À</span></>}{roleMailMode(user.role) === "cc" && <span className="mail">Mail copie</span>}{roleMailMode(user.role) === "none" && <span>En réserve</span>}</div></div>
+        <div className="directory-fields"><TextField label="Nom complet" value={user.name} onChange={(name) => updateDirectoryUser(user.id, { name })}/><TextField label="Adresse e-mail" type="email" value={user.email} onChange={(email) => updateDirectoryUser(user.id, { email })}/><TextField label="USERCODE Jira" value={user.usercode} onChange={(usercode) => updateDirectoryUser(user.id, { usercode: usercode.toUpperCase() })} placeholder="J1234567"/><label className="field"><span>Rôle</span><select value={user.role} onChange={(event) => updateDirectoryUser(user.id, { role: event.target.value as GlobalRole, marketIds: event.target.value === "manager-tarif" ? [] : user.marketIds })}>{GLOBAL_ROLE_OPTIONS.map((role) => <option key={role.id} value={role.id}>{role.label}</option>)}</select></label></div>
+        {user.role !== "manager-tarif" ? <label className="directory-market-select"><span>Marché de la personne</span><select value={user.marketIds[0] ?? ""} onChange={(event) => updateDirectoryUser(user.id, { marketIds: event.target.value ? [event.target.value] : [] })}><option value="">Sélectionner un marché…</option>{marketOptions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><small>{user.usercode && !/^[A-Z]\d{7}$/.test(user.usercode) ? "Remplace l’ancienne identité Jira par un USERCODE valide." : "Le changement de nom du marché ne casse pas ce lien."}</small></label> : <div className="directory-manager-note"><Icon name="mail" size={15}/> Manager Tarif unique · copie automatique de tous les mails</div>}
+        <div className="directory-card-actions"><span>{user.marketIds[0] ? marketOptions.find((item) => item.id === user.marketIds[0])?.name ?? "Marché lié" : user.role === "manager-tarif" ? "Périmètre transversal Tarif" : "Aucun marché associé"}</span><div><button className="secondary-button" disabled={Boolean(directorySavingId) || (roleMailMode(user.role) === "to" && (!/^[A-Z]\d{7}$/.test(user.usercode) || !user.marketIds[0]))} onClick={() => saveDirectoryUser(user.id)}><Icon name="check"/> {directorySavingId === user.id ? "Enregistrement…" : "Enregistrer"}</button><button className="icon-button danger" disabled={Boolean(directorySavingId)} aria-label={`Retirer ${user.name}`} onClick={() => deleteDirectoryUser(user.id)}><Icon name="trash"/></button></div></div>
+      </article>)}</div> : <div className="surface archive-empty"><Icon name="user" size={28}/><strong>Annuaire GLOBAL vide</strong><span>Ajoute les personnes du marché avec leur USERCODE ; les exemples ne sont jamais préchargés.</span></div>}
     </section>}
 
     {section === "dossiers" && <section className="editor-section">
@@ -916,9 +999,12 @@ export default function Home() {
     {section === "tariffs" && <section className="editor-section"><SectionTitle eyebrow="04 · Extraction manuelle" title="Évolutions tarifaires" detail="Colle directement ton extraction ou complète les lignes à la main." action={<div className="title-actions"><PasteImporter kind="tariffs" onImport={(text) => importTable("tariffs", text)}/><button className="primary-button" onClick={addTariff}><Icon name="plus"/> Ajouter</button></div>}/><div className="surface data-table-wrap"><table className="data-table"><thead><tr><th>Code</th><th>Fournisseur</th><th>Mois</th><th>État</th><th>Réception trame</th><th>Responsable</th><th>Commentaire</th><th/></tr></thead><tbody>{data.tariffs.map((item) => <tr key={item.id}><td><input value={item.code} onChange={(e) => updateTariff(item.id, { code: e.target.value })}/></td><td><input value={item.supplier} onChange={(e) => updateTariff(item.id, { supplier: e.target.value })}/></td><td><input value={item.month} onChange={(e) => updateTariff(item.id, { month: e.target.value })}/></td><td><input value={item.state} onChange={(e) => updateTariff(item.id, { state: e.target.value })}/></td><td><input type="date" value={item.receptionDate} onChange={(e) => updateTariff(item.id, { receptionDate: e.target.value })}/></td><td><input value={item.owner} onChange={(e) => updateTariff(item.id, { owner: e.target.value })}/></td><td><input value={item.comment} onChange={(e) => updateTariff(item.id, { comment: e.target.value })}/></td><td><button className="icon-button subtle" aria-label="Supprimer" onClick={() => setData((current) => ({ ...current, tariffs: current.tariffs.filter((row) => row.id !== item.id) }))}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!data.tariffs.length && <div className="table-empty">Aucune évolution tarifaire. Utilise « Coller un tableau » ou « Ajouter ».</div>}</div><div className="rule-note"><Icon name="alert"/><div><strong>Vigilances automatiques</strong><span>Du 8 au 14 : trame à sécuriser · après le 15 : KO sans trame · trame reçue depuis plus de 5 jours : traitement à contrôler.</span></div></div></section>}
 
     {section === "jira" && <section className="editor-section">
-      <SectionTitle eyebrow="05 · Tableau hebdomadaire global" title="Tickets Jira par personne" detail={`Colle une fois le tableau complet de la semaine, puis contrôle les personnes associées à chaque marché. La vue ${market.name} se met à jour automatiquement.`} action={<div className="title-actions"><JiraPasteImporter key={`${currentWeekYear}-${currentWeek}-${marketId}-${directoryRevision}`} marketId={marketId} marketName={market.name} markets={marketOptions} year={currentWeekYear} week={currentWeek} onImport={importJiraSummary}/><button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter une personne</button></div>}/>
-      <div className="jira-import-note"><Icon name="ticket"/><div><strong>Un tableau conservé par semaine, des affectations durables par marché</strong><span>Les noms Jira associés dans l’annuaire GLOBAL sont précochés automatiquement. Les autres personnes restent sélectionnables marché par marché, sans doublons.</span></div></div>
+      <SectionTitle eyebrow="05 · Activité Jira" title="Tickets ouverts du marché" detail={`La requête est construite depuis les USERCODE de ${market.name}. À l’import, seules les personnes ayant des tickets apparaissent.`} action={<div className="title-actions"><JiraPasteImporter key={`${currentWeekYear}-${currentWeek}-${marketId}-${directoryRevision}`} marketId={marketId} marketName={market.name} directoryUsers={directoryUsers} year={currentWeekYear} week={currentWeek} onImport={importJiraSummary}/><button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter une synthèse</button></div>}/>
+      <div className="jira-import-note"><Icon name="ticket"/><div><strong>Rattachement automatique par USERCODE</strong><span>Aucun préfixe de ticket n’est utilisé pour déterminer le marché. L’annuaire est la seule source d’affectation.</span></div></div>
+      <JiraVolumePulse data={data} archive={archive} market={market}/>
+      <div className="surface jira-alert-settings"><div><span><Icon name="alert" size={16}/> Alertes sur la dernière modification</span><strong>Seuils propres à {market.name}</strong><small>Ces repères signalent une absence d’activité ; ils ne mesurent pas le temps de résolution.</small></div><label><span>À surveiller après</span><div><input type="number" min="1" max="364" value={market.jiraWarningDays} onChange={(event) => { const warning = Math.max(1, Math.min(364, Number(event.target.value) || 1)); updateMarketDraft(marketId, { jiraWarningDays: warning, jiraCriticalDays: Math.max(warning + 1, market.jiraCriticalDays) }); }}/><b>jours</b></div></label><label><span>Critique après</span><div><input type="number" min={market.jiraWarningDays + 1} max="365" value={market.jiraCriticalDays} onChange={(event) => updateMarketDraft(marketId, { jiraCriticalDays: Math.max(market.jiraWarningDays + 1, Math.min(365, Number(event.target.value) || market.jiraWarningDays + 1)) })}/><b>jours</b></div></label><button className="secondary-button" disabled={Boolean(marketSavingId)} onClick={() => saveMarket(marketId)}><Icon name="check" size={15}/> {marketSavingId === marketId ? "Enregistrement…" : "Enregistrer les seuils"}</button></div>
       <div className="surface data-table-wrap jira-summary-wrap"><table className="data-table jira-person-table"><thead><tr><th>Personne</th>{JIRA_SUMMARY_STATUSES.map((status) => <th key={status}>{status}</th>)}<th>Total</th><th/></tr></thead><tbody>{jiraPeople.map((person) => <tr key={person.assignee}><th scope="row"><input value={person.assignee} aria-label={`Personne ${person.assignee}`} onChange={(event) => renameJiraPerson(person.assignee, event.target.value)}/></th>{JIRA_SUMMARY_STATUSES.map((status) => { const statusItems = person.items.filter((item) => item.status === status); const count = statusItems.reduce((sum, item) => sum + jiraItemCount(item), 0); const link = statusItems.find((item) => item.link)?.link; return <td key={status}><div className="jira-count-cell"><input type="number" min="0" value={count} aria-label={`${status} pour ${person.assignee}`} onChange={(event) => setJiraPersonCount(person.assignee, status, Number(event.target.value))}/>{link && <a href={link} target="_blank" rel="noreferrer" title={`Ouvrir le filtre « ${status} »`} aria-label={`Ouvrir le filtre ${status} de ${person.assignee}`}>↗</a>}</div></td>; })}<td className="jira-person-total"><strong>{person.total}</strong><small>{jiraStatusSummary(person.items)}</small></td><td><button className="icon-button subtle" aria-label={`Supprimer ${person.assignee}`} onClick={() => removeJiraPerson(person.assignee)}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!jiraPeople.length && <div className="table-empty">Aucun ticket Jira. Importe le tableau complet ou ajoute une personne.</div>}</div>
+      {jiraActivityRows.length > 0 && <div className="surface data-table-wrap jira-ticket-detail-wrap"><div className="jira-detail-heading"><div><span>Détail des tickets</span><strong>Priorité visuelle par dernière modification</strong></div><small>Création affichée à titre de contexte uniquement.</small></div><table className="data-table jira-ticket-table"><thead><tr><th>Ticket</th><th>État</th><th>Résumé</th><th>Personne</th><th>Création</th><th>Dernière modification</th><th>Signal</th></tr></thead><tbody>{jiraActivityRows.map(({ item, inactivity }) => { const signal = inactivity === null ? "neutral" : inactivity >= market.jiraCriticalDays ? "critical" : inactivity >= market.jiraWarningDays ? "warning" : "fresh"; return <tr className={`jira-ticket-${signal}`} key={item.id}><td>{item.link ? <a href={item.link} target="_blank" rel="noreferrer">{item.key} ↗</a> : <strong>{item.key}</strong>}{item.internalId && <small>ID {item.internalId}</small>}</td><td><span className={`report-pill tone-${toneForStatus(item.status)}`}>{item.status}</span></td><td><strong>{item.summary || "Sans résumé"}</strong></td><td><strong>{item.assignee || "Non assigné"}</strong>{item.assigneeUserCode && <small>{item.assigneeUserCode}</small>}</td><td>{item.createdAt ? dateLabel(item.createdAt.slice(0, 10)) : "—"}</td><td>{item.lastActivity ? dateLabel(item.lastActivity.slice(0, 10)) : "—"}</td><td><span className={`jira-activity-signal ${signal}`}>{inactivity === null ? "Non daté" : inactivity === 0 ? "Aujourd’hui" : `${inactivity} j sans activité`}</span></td></tr>; })}</tbody></table></div>}
     </section>}
 
     {section === "saved" && <section className="editor-section"><SectionTitle eyebrow="07 · Registre en ligne" title="Points enregistrés" detail="Un seul point est conservé par marché et par semaine. Sauvegarder met à jour le point existant." action={<button className="primary-button" disabled={saving || !ready} onClick={savePoint}><Icon name="check"/> {saving ? "Enregistrement…" : "Sauvegarder ce point"}</button>}/><div className="surface version-summary"><div className="version-week"><span>Semaine active</span><strong>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</strong><small>{currentWeekPoint ? `Point enregistré le ${new Date(currentWeekPoint.createdAt.replace(" ", "T") + (currentWeekPoint.createdAt.includes("Z") ? "" : "Z")).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}` : "Aucun point enregistré pour cette semaine"}</small></div><div className="version-next"><span>Fonctionnement</span><strong>{currentWeekPoint ? "Mise à jour" : "Création"}</strong><small>{currentWeekPoint ? "La sauvegarde remplace le contenu enregistré pour cette semaine." : "La première sauvegarde créera le point de cette semaine."}</small></div><div className="version-actions"><button className="secondary-button" onClick={() => fileInput.current?.click()}><Icon name="upload"/> Importer JSON</button><button className="secondary-button" onClick={() => exportJson()}><Icon name="download"/> Exporter le brouillon</button></div></div>{archiveError && <div className="archive-message error"><Icon name="alert"/><span>{archiveError}</span></div>}{archiveLoading ? <div className="archive-message"><span>Chargement des points enregistrés…</span></div> : archive.length ? <div className="archive-list">{archive.map((record) => <article className={`surface archive-row ${activeRecordId === record.id && !isDirty ? "active" : ""}`} key={record.id}><div className="archive-version"><span>{record.year}</span><strong>S{String(record.week).padStart(2, "0")}</strong><small>ISO</small></div><div className="archive-copy"><span>{market.name}</span><strong>{dateLabel(record.meetingDate)}</strong><small>Enregistré le {new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z")).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</small></div><div className="archive-actions"><button className="secondary-button" onClick={() => exportJson(record)}><Icon name="download"/> JSON</button><button className="primary-button" onClick={() => loadRecord(record)}><Icon name="upload"/> Charger</button></div></article>)}</div> : !archiveError && <div className="surface archive-empty"><Icon name="download" size={28}/><strong>Aucun point enregistré</strong><span>Sauvegarde le premier point hebdomadaire de ce marché.</span></div>}</section>}
@@ -948,7 +1034,7 @@ export default function Home() {
     <div id="top" className="top-strip"><span className="live-dot"/><strong>{market.short}</strong><i/>{isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}<i/>{dateLabel(data.meetingDate)}<i/>{isDirty ? "Brouillon" : activeRecordId ? "Enregistré" : "Non enregistré"}<b>{alerts.length ? `${alerts.length} vigilance${alerts.length > 1 ? "s" : ""}` : "Aucune vigilance"}</b></div>
     {view !== "mail" && periodNavigator}
     {view === "edit" && session.user && renderEditor()}
-    {view === "read" && <main className="preview-page"><div className="preview-toolbar"><div><span>Lecture générale</span><strong>Choisis le marché et la semaine dans le calendrier ci-dessus.</strong></div><button className="secondary-button" onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> {session.user ? "Modifier ce point" : "Connexion GLOBAL pour modifier"}</button></div>{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>La lecture affiche le brouillon disponible ; une sauvegarde créera le point de cette semaine.</span></div></div>}<PreviewDashboard data={data} market={market}/></main>}
+    {view === "read" && <main className="preview-page"><div className="preview-toolbar"><div><span>Lecture générale</span><strong>Choisis le marché et la semaine dans le calendrier ci-dessus.</strong></div><button className="secondary-button" onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> {session.user ? "Modifier ce point" : "Connexion GLOBAL pour modifier"}</button></div>{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>La lecture affiche le brouillon disponible ; une sauvegarde créera le point de cette semaine.</span></div></div>}<PreviewDashboard data={data} market={market} archive={archive}/></main>}
     {view === "mail" && <main className="mail-page"><div className="mail-toolbar"><div><span>Aperçu Outlook</span><strong>Statique, responsive et sans script.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { setSection("mail"); chooseView("edit"); }}><Icon name={session.user ? "edit" : "lock"}/> Paramètres</button><button className="secondary-button" onClick={() => download(`point-marche-mail-${marketId}-${data.meetingDate}.html`, mailHtml, "text/html;charset=utf-8")}><Icon name="download"/> Télécharger HTML</button><button className="primary-button" onClick={copyMail}><Icon name="copy"/> Copier pour Outlook</button></div></div><div className="mail-frame-wrap"><iframe title="Aperçu du mail Outlook" srcDoc={mailHtml}/></div></main>}
     {carryoverOpen && previousPoint && <div className="login-backdrop" onMouseDown={() => setCarryoverOpen(false)}><section className="carryover-dialog" role="dialog" aria-modal="true" aria-labelledby="carryover-title" onMouseDown={(event) => event.stopPropagation()}>
       <button className="login-close" type="button" aria-label="Fermer" onClick={() => setCarryoverOpen(false)}>×</button>
