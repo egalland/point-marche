@@ -22,6 +22,13 @@
       "when": 1787654194596,
       "tag": "0002_nasty_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1787662281711,
+      "tag": "0003_narrow_swarm",
+      "breakpoints": true
     }
   ]
 }

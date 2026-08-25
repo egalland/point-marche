@@ -1,0 +1,164 @@
+import { and, asc, eq, or, sql } from "drizzle-orm";
+import { getDb } from "../../../db";
+import { globalUserMarkets, globalUsers, jiraMarketAssignments, marketDefinitions } from "../../../db/schema";
+import { isGlobalRole, roleUsesAutomaticJira, type GlobalRole } from "../../../lib/global-directory";
+import { getEditorUser } from "../../simple-auth";
+
+type UserPayload = { id?: unknown; name?: unknown; email?: unknown; jiraName?: unknown; role?: unknown; marketIds?: unknown };
+
+async function requireEditor() {
+  const editor = await getEditorUser();
+  return editor ? null : Response.json({ error: "Connecte-toi pour gérer l’annuaire GLOBAL." }, { status: 401 });
+}
+
+function cleanText(value: unknown, maxLength = 100) {
+  return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, maxLength) : "";
+}
+
+function cleanEmail(value: unknown) {
+  const email = typeof value === "string" ? value.trim().toLocaleLowerCase("fr-FR").slice(0, 180) : "";
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
+function cleanRole(value: unknown): GlobalRole {
+  return typeof value === "string" && isGlobalRole(value) ? value : "autre";
+}
+
+function cleanMarketIds(value: unknown) {
+  return Array.isArray(value) ? Array.from(new Set(value.filter((item): item is string => typeof item === "string" && item.trim()).map((item) => item.trim()))) : [];
+}
+
+async function validateMarkets(marketIds: string[]) {
+  if (!marketIds.length) return [];
+  const db = getDb();
+  const rows = await db.select({ id: marketDefinitions.id }).from(marketDefinitions).where(eq(marketDefinitions.isActive, true));
+  const active = new Set(rows.map((row) => row.id));
+  return marketIds.filter((id) => active.has(id));
+}
+
+async function ensureSingleTariffManager(role: GlobalRole, currentId = "") {
+  if (role !== "manager-tarif") return null;
+  const db = getDb();
+  const [manager] = await db.select({ id: globalUsers.id }).from(globalUsers)
+    .where(and(eq(globalUsers.role, "manager-tarif"), eq(globalUsers.isActive, true))).limit(1);
+  return manager && manager.id !== currentId ? Response.json({ error: "Un manager Tarif est déjà renseigné." }, { status: 409 }) : null;
+}
+
+async function syncLinks(userId: string, oldJiraName: string, jiraName: string, oldRole: GlobalRole, role: GlobalRole, marketIds: string[]) {
+  const db = getDb();
+  await db.delete(globalUserMarkets).where(eq(globalUserMarkets.userId, userId));
+  if (marketIds.length) {
+    await db.insert(globalUserMarkets).values(marketIds.map((marketId) => ({ id: crypto.randomUUID(), userId, marketId }))).onConflictDoNothing();
+  }
+  if (roleUsesAutomaticJira(oldRole) || roleUsesAutomaticJira(role)) {
+    await db.delete(jiraMarketAssignments).where(oldJiraName === jiraName
+      ? eq(jiraMarketAssignments.assignee, jiraName)
+      : or(eq(jiraMarketAssignments.assignee, oldJiraName), eq(jiraMarketAssignments.assignee, jiraName)));
+  }
+  if (roleUsesAutomaticJira(role) && marketIds.length) {
+    await db.insert(jiraMarketAssignments).values(marketIds.map((marketId) => ({ id: crypto.randomUUID(), marketId, assignee: jiraName }))).onConflictDoNothing();
+  }
+}
+
+async function serializeDirectory() {
+  const db = getDb();
+  const [users, links] = await Promise.all([
+    db.select().from(globalUsers).where(eq(globalUsers.isActive, true)).orderBy(asc(globalUsers.name)),
+    db.select().from(globalUserMarkets).orderBy(asc(globalUserMarkets.marketId)),
+  ]);
+  return users.map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    jiraName: user.jiraName,
+    role: user.role,
+    marketIds: links.filter((link) => link.userId === user.id).map((link) => link.marketId),
+  }));
+}
+
+function routeError(error: unknown) {
+  const message = error instanceof Error ? error.message : "Erreur inattendue";
+  if (/unique|constraint/i.test(message)) return "Cette adresse e-mail existe déjà dans l’annuaire.";
+  if (/no such table|global_users|global_user_markets/i.test(message)) return "L’annuaire GLOBAL n’est pas encore disponible.";
+  return message;
+}
+
+export async function GET() {
+  try {
+    const denied = await requireEditor();
+    if (denied) return denied;
+    return Response.json({ users: await serializeDirectory() }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    return Response.json({ error: routeError(error) }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const denied = await requireEditor();
+    if (denied) return denied;
+    const body = await request.json() as UserPayload;
+    const name = cleanText(body.name);
+    const email = cleanEmail(body.email);
+    const jiraName = cleanText(body.jiraName) || name;
+    const role = cleanRole(body.role);
+    const marketIds = role === "manager-tarif" ? [] : await validateMarkets(cleanMarketIds(body.marketIds));
+    if (!name || !email || !jiraName) return Response.json({ error: "Nom, adresse e-mail et nom Jira sont requis." }, { status: 400 });
+    const db = getDb();
+    const [knownEmail] = await db.select().from(globalUsers).where(eq(globalUsers.email, email)).limit(1);
+    if (knownEmail?.isActive) return Response.json({ error: "Cette adresse e-mail existe déjà dans l’annuaire." }, { status: 409 });
+    const managerConflict = await ensureSingleTariffManager(role, knownEmail?.id ?? "");
+    if (managerConflict) return managerConflict;
+    const id = knownEmail?.id ?? crypto.randomUUID();
+    const [created] = knownEmail
+      ? await db.update(globalUsers).set({ name, jiraName, role, isActive: true, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(globalUsers.id, id)).returning()
+      : await db.insert(globalUsers).values({ id, name, email, jiraName, role }).returning();
+    await syncLinks(id, knownEmail?.jiraName ?? jiraName, jiraName, cleanRole(knownEmail?.role ?? role), role, marketIds);
+    return Response.json({ user: { ...created, marketIds }, users: await serializeDirectory() }, { status: 201 });
+  } catch (error) {
+    return Response.json({ error: routeError(error) }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const denied = await requireEditor();
+    if (denied) return denied;
+    const body = await request.json() as UserPayload;
+    const id = cleanText(body.id, 80);
+    const name = cleanText(body.name);
+    const email = cleanEmail(body.email);
+    const jiraName = cleanText(body.jiraName) || name;
+    const role = cleanRole(body.role);
+    const marketIds = role === "manager-tarif" ? [] : await validateMarkets(cleanMarketIds(body.marketIds));
+    if (!id || !name || !email || !jiraName) return Response.json({ error: "Utilisateur, nom, adresse e-mail et nom Jira sont requis." }, { status: 400 });
+    const managerConflict = await ensureSingleTariffManager(role, id);
+    if (managerConflict) return managerConflict;
+    const db = getDb();
+    const [existing] = await db.select().from(globalUsers).where(and(eq(globalUsers.id, id), eq(globalUsers.isActive, true))).limit(1);
+    if (!existing) return Response.json({ error: "Utilisateur introuvable." }, { status: 404 });
+    const [updated] = await db.update(globalUsers).set({ name, email, jiraName, role, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(globalUsers.id, id)).returning();
+    await syncLinks(id, existing.jiraName, jiraName, cleanRole(existing.role), role, marketIds);
+    return Response.json({ user: { ...updated, marketIds }, users: await serializeDirectory() });
+  } catch (error) {
+    return Response.json({ error: routeError(error) }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const denied = await requireEditor();
+    if (denied) return denied;
+    const id = new URL(request.url).searchParams.get("id")?.trim() ?? "";
+    if (!id) return Response.json({ error: "Utilisateur requis." }, { status: 400 });
+    const db = getDb();
+    const [existing] = await db.select().from(globalUsers).where(and(eq(globalUsers.id, id), eq(globalUsers.isActive, true))).limit(1);
+    if (!existing) return Response.json({ error: "Utilisateur introuvable." }, { status: 404 });
+    await db.delete(globalUserMarkets).where(eq(globalUserMarkets.userId, id));
+    if (roleUsesAutomaticJira(cleanRole(existing.role))) await db.delete(jiraMarketAssignments).where(eq(jiraMarketAssignments.assignee, existing.jiraName));
+    await db.update(globalUsers).set({ isActive: false, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(globalUsers.id, id));
+    return Response.json({ removedId: id, users: await serializeDirectory() });
+  } catch (error) {
+    return Response.json({ error: routeError(error) }, { status: 500 });
+  }
+}
