@@ -1,7 +1,10 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
-import { runWithRuntimeEnv } from "../lib/runtime-env";
+import { runWithRuntimeEnv, type RuntimeEnv } from "../lib/runtime-env";
+
+type Fetcher = { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> };
+type D1Database = NonNullable<RuntimeEnv["DB"]>;
 
 interface Env {
   ASSETS: Fetcher;

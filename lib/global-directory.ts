@@ -17,19 +17,19 @@ export type GlobalDirectoryUser = {
   marketIds: string[];
 };
 
-const automatedRoles = new Set<GlobalRole>(["chef-produit", "chef-marche", "analyste-tarif-referentiel"]);
+const jiraRoles = new Set<GlobalRole>(["chef-produit", "chef-marche"]);
+const primaryMailRoles = new Set<GlobalRole>(["chef-produit", "chef-marche", "analyste-tarif-referentiel", "manager-tarif"]);
 
 export function isGlobalRole(value: string): value is GlobalRole {
   return GLOBAL_ROLE_OPTIONS.some((option) => option.id === value);
 }
 
 export function roleUsesAutomaticJira(role: GlobalRole) {
-  return automatedRoles.has(role);
+  return jiraRoles.has(role);
 }
 
 export function roleMailMode(role: GlobalRole): "to" | "cc" | "none" {
-  if (role === "manager-tarif") return "cc";
-  if (automatedRoles.has(role)) return "to";
+  if (primaryMailRoles.has(role)) return "to";
   return "none";
 }
 
@@ -39,7 +39,7 @@ export function roleLabel(role: GlobalRole) {
 
 export function buildMarketJql(users: GlobalDirectoryUser[], marketId: string) {
   const usercodes = Array.from(new Set(users
-    .filter((user) => user.marketIds.includes(marketId) && /^[A-Z]\d{7}$/i.test(user.usercode))
+    .filter((user) => roleUsesAutomaticJira(user.role) && user.marketIds.includes(marketId) && /^[A-Z]\d{7}$/i.test(user.usercode))
     .map((user) => user.usercode.toUpperCase())))
     .sort();
   if (!usercodes.length) return "";
