@@ -1,6 +1,6 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, or, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { globalUserMarkets, globalUsers, jiraMarketAssignments, jiraMarketWeeklySnapshots, jiraWeeklySnapshots, marketDefinitions } from "../../../db/schema";
+import { globalUserMarkets, globalUsers, jiraMarketWeeklySnapshots, jiraWeeklySnapshots, marketDefinitions } from "../../../db/schema";
 import { parseJiraAssigneeSummary, type JiraSummaryImport } from "../../../lib/jira-import";
 import { getEditorUser } from "../../simple-auth";
 
@@ -14,8 +14,9 @@ function routeError(error: unknown) {
   return message;
 }
 
-function assignmentMap(rows: (typeof jiraMarketAssignments.$inferSelect)[]) {
+function assignmentMap(rows: { marketId: string; assignee: string }[]) {
   return rows.reduce<Record<string, string[]>>((result, row) => {
+    if (!/^[A-Z]\d{7}$/i.test(row.assignee)) return result;
     result[row.marketId] = [...(result[row.marketId] ?? []), row.assignee];
     return result;
   }, {});
@@ -42,8 +43,11 @@ export async function GET(request: Request) {
     const db = getDb();
     const [marketSnapshot] = await db.select().from(jiraMarketWeeklySnapshots)
       .where(and(eq(jiraMarketWeeklySnapshots.marketId, marketId), eq(jiraMarketWeeklySnapshots.year, year), eq(jiraMarketWeeklySnapshots.week, week))).limit(1);
-    const assignments = await db.select().from(jiraMarketAssignments)
-      .orderBy(asc(jiraMarketAssignments.marketId), asc(jiraMarketAssignments.assignee));
+    const assignments = await db.select({ marketId: globalUserMarkets.marketId, assignee: globalUsers.usercode })
+      .from(globalUserMarkets)
+      .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
+      .where(and(eq(globalUsers.isActive, true), or(eq(globalUsers.role, "chef-produit"), eq(globalUsers.role, "chef-marche"))))
+      .orderBy(asc(globalUserMarkets.marketId), asc(globalUsers.usercode));
     if (marketSnapshot) {
       return Response.json({
         snapshot: serializedSnapshot(marketSnapshot, JSON.parse(marketSnapshot.payload) as JiraSummaryImport),
@@ -89,9 +93,13 @@ export async function POST(request: Request) {
     const directory = await db.select({ usercode: globalUsers.usercode, name: globalUsers.name })
       .from(globalUserMarkets)
       .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
-      .where(and(eq(globalUserMarkets.marketId, marketId), eq(globalUsers.isActive, true)));
+      .where(and(
+        eq(globalUserMarkets.marketId, marketId),
+        eq(globalUsers.isActive, true),
+        or(eq(globalUsers.role, "chef-produit"), eq(globalUsers.role, "chef-marche")),
+      ));
     const directoryByUserCode = new Map(directory.map((person) => [person.usercode.toUpperCase(), person]));
-    if (!directoryByUserCode.size) return Response.json({ error: "Ajoute d’abord les personnes et leurs USERCODE dans l’annuaire de ce marché." }, { status: 409 });
+    if (!directoryByUserCode.size) return Response.json({ error: "Ajoute d’abord un chef de produit ou un chef de marché avec son USERCODE dans l’annuaire." }, { status: 409 });
 
     const summary: JiraSummaryImport = {
       ...parsed,

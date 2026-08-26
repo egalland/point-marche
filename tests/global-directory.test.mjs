@@ -9,16 +9,18 @@ const output = ts.transpileModule(source, {
 }).outputText;
 const directory = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
 
-test("maps GLOBAL operational roles to Jira and primary mail recipients", () => {
-  for (const role of ["chef-produit", "chef-marche", "analyste-tarif-referentiel"]) {
+test("limits Jira automation to product and market leads", () => {
+  for (const role of ["chef-produit", "chef-marche"]) {
     assert.equal(directory.roleUsesAutomaticJira(role), true);
     assert.equal(directory.roleMailMode(role), "to");
   }
+  assert.equal(directory.roleUsesAutomaticJira("analyste-tarif-referentiel"), false);
+  assert.equal(directory.roleMailMode("analyste-tarif-referentiel"), "to");
 });
 
-test("keeps the Tarif manager in copy only and other roles inactive", () => {
+test("keeps the Tarif manager in the main mail and other roles inactive", () => {
   assert.equal(directory.roleUsesAutomaticJira("manager-tarif"), false);
-  assert.equal(directory.roleMailMode("manager-tarif"), "cc");
+  assert.equal(directory.roleMailMode("manager-tarif"), "to");
   assert.equal(directory.roleUsesAutomaticJira("autre"), false);
   assert.equal(directory.roleMailMode("autre"), "none");
 });
@@ -29,12 +31,13 @@ test("builds the Jira query from valid USERCODEs of the selected market only", (
     { id: "2", name: "Jane DOE", email: "jane@example.test", usercode: "B7654321", role: "chef-marche", marketIds: ["market-a"] },
     { id: "3", name: "Alex MARTIN", email: "alex@example.test", usercode: "C1111111", role: "chef-produit", marketIds: ["market-b"] },
     { id: "4", name: "Invalid", email: "invalid@example.test", usercode: "Nom Jira", role: "autre", marketIds: ["market-a"] },
+    { id: "5", name: "Analyst", email: "analyst@example.test", usercode: "D2222222", role: "analyste-tarif-referentiel", marketIds: ["market-a"] },
   ];
 
   const jql = directory.buildMarketJql(users, "market-a");
 
   assert.match(jql, /project = "JSD-Distribution Matériaux Bois Panneaux"/);
   assert.match(jql, /assignee in \(A1234567, B7654321\)/);
-  assert.doesNotMatch(jql, /C1111111|J9535152|B4166056|Nom Jira/);
+  assert.doesNotMatch(jql, /C1111111|D2222222|J9535152|B4166056|Nom Jira/);
   assert.equal(directory.buildMarketJql(users, "unknown"), "");
 });
