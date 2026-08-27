@@ -105,6 +105,21 @@ export const globalUsers = sqliteTable("global_users", {
   index("global_users_jira_name_idx").on(table.usercode),
 ]);
 
+export const jiraAnalystWeeklySnapshots = sqliteTable("jira_analyst_weekly_snapshots", {
+  id: text("id").primaryKey(),
+  analystId: text("analyst_id").notNull().references(() => globalUsers.id, { onDelete: "cascade" }),
+  year: integer("year").notNull(),
+  week: integer("week").notNull(),
+  rawText: text("raw_text").notNull(),
+  payload: text("payload").notNull(),
+  updatedBy: text("updated_by").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("jira_analyst_weekly_snapshots_analyst_period_idx").on(table.analystId, table.year, table.week),
+  index("jira_analyst_weekly_snapshots_analyst_updated_idx").on(table.analystId, table.updatedAt),
+]);
+
 export const globalUserMarkets = sqliteTable("global_user_markets", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => globalUsers.id, { onDelete: "cascade" }),

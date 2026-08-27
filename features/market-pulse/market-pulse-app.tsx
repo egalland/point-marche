@@ -777,6 +777,7 @@ export function MarketPulseApp() {
   const archiveRequest = useRef(0);
   const confirmResolver = useRef<((confirmed: boolean) => void) | null>(null);
   const market = marketOptions.find((item) => item.id === marketId) ?? marketOptions[0] ?? defaultMarkets[0];
+  const marketPlannerTagsKey = market.plannerTags.join("|");
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
   const accent = normalizeHex(data.customColor) || theme.accent;
   const themeStyle = { "--accent": accent, "--accent-soft": normalizeHex(data.customColor) ? hexSoft(data.customColor) : theme.soft } as CSSProperties;
@@ -916,6 +917,11 @@ export function MarketPulseApp() {
     const timer = window.setTimeout(() => setData((current) => applyDirectoryMail(current, marketId, directoryUsers)), 0);
     return () => window.clearTimeout(timer);
   }, [data, directoryReady, directoryUsers, marketId, session.user]);
+  useEffect(() => {
+    if (!session.user || !ready || !plannerReady || !plannerTasks.length) return;
+    const timer = window.setTimeout(() => setData((current) => ({ ...current, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate), plannerTasks) })), 0);
+    return () => window.clearTimeout(timer);
+  }, [data.meetingDate, market, marketPlannerTagsKey, plannerReady, plannerTasks, ready, session.user]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(timer); }, [toast]);
   useEffect(() => {
     if (!isDirty || (view !== "edit" && view !== "settings")) return;

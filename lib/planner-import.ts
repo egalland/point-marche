@@ -96,11 +96,40 @@ function splitMarkdownRow(line: string) {
   return line.trim().replace(/^\|/, "").replace(/\|\s*$/, "").split("|").map((cell) => cell.trim());
 }
 
-function splitRow(line: string) {
-  if (line.includes("\t")) return line.split("\t").map((cell) => cell.trim());
-  if (line.trim().startsWith("|")) return splitMarkdownRow(line);
-  if (line.includes(";")) return line.split(";").map((cell) => cell.trim());
-  return [];
+function splitDelimitedRows(text: string, delimiter: "\t" | ";") {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  const pushRow = () => {
+    row.push(cell.trim());
+    if (row.some(Boolean)) rows.push(row);
+    row = [];
+    cell = "";
+  };
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === '"' && (quoted || !cell)) {
+      if (quoted && text[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else quoted = !quoted;
+      continue;
+    }
+    if (!quoted && character === delimiter) {
+      row.push(cell.trim());
+      cell = "";
+      continue;
+    }
+    if (!quoted && (character === "\n" || character === "\r")) {
+      if (character === "\r" && text[index + 1] === "\n") index += 1;
+      pushRow();
+      continue;
+    }
+    cell += character;
+  }
+  if (cell || row.length) pushRow();
+  return rows;
 }
 
 function isSeparatorRow(cells: string[]) {
@@ -112,6 +141,23 @@ function detectedFormat(text: string): PlannerImport["format"] {
   if (text.split(/\r?\n/).some((line) => line.trim().startsWith("|"))) return "markdown";
   if (text.includes(";")) return "semicolon";
   return "unknown";
+}
+
+function tableRows(text: string, format: PlannerImport["format"]) {
+  if (format === "tabulated") return splitDelimitedRows(text, "\t");
+  if (format === "semicolon") return splitDelimitedRows(text, ";");
+  if (format === "markdown") return text.split(/\r?\n/).filter((line) => line.trim().startsWith("|")).map(splitMarkdownRow);
+  return [];
+}
+
+function mergeContinuationRows(rows: string[][], expectedColumns: number) {
+  return rows.reduce<string[][]>((result, row) => {
+    const previous = result.at(-1);
+    if (previous && previous.length >= expectedColumns && row.length === 1) {
+      previous[expectedColumns - 1] = [previous[expectedColumns - 1], row[0]].filter(Boolean).join("\n");
+    } else result.push(row);
+    return result;
+  }, []);
 }
 
 function isoDate(value: string) {
@@ -175,18 +221,30 @@ function parseChecklistCount(value: string) {
   return match ? { completed: Number(match[1]), total: Number(match[2]) } : { completed: 0, total: 0 };
 }
 
-function metricLine(comments: string, matcher: RegExp) {
-  return comments.split(/\n/).find((line) => matcher.test(normalized(line)))?.split(":").slice(1).join(":").trim() ?? "";
+const metricPatterns = {
+  purchases12m: String.raw`achats?\s*12\s*m(?:g)?`,
+  supplierCode: String.raw`code\s+fournisseur`,
+  announcedVariation: String.raw`annonc(?:e|é|ée)`,
+  globalVariation: String.raw`variation\s+global`,
+  weightedVariation: String.raw`variation\s+pond[ée]r[ée]e`,
+  tariffStructure: String.raw`structure\s+tarifaire`,
+};
+
+const metricBoundary = `(?:${Object.values(metricPatterns).join("|")})`;
+
+function metricValue(comments: string, pattern: string) {
+  const compact = cleanCell(comments).replace(/\n/g, " ");
+  return compact.match(new RegExp(`${pattern}\\s*:\\s*(.*?)(?=\\s*${metricBoundary}\\s*:|$)`, "i"))?.[1]?.trim() ?? "";
 }
 
-function parseMetrics(comments: string): PlannerTaskMetrics {
+export function parsePlannerTaskMetrics(comments: string): PlannerTaskMetrics {
   return {
-    purchases12m: numberValue(metricLine(comments, /^achats? 12 mg\b/)),
-    supplierCode: metricLine(comments, /^code fournisseur\b/).toUpperCase(),
-    announcedVariation: numberValue(metricLine(comments, /^annonce\b/)),
-    globalVariation: numberValue(metricLine(comments, /^variation global\b/)),
-    weightedVariation: numberValue(metricLine(comments, /^variation ponderee\b/)),
-    tariffStructure: metricLine(comments, /^structure tarifaire\b/),
+    purchases12m: numberValue(metricValue(comments, metricPatterns.purchases12m)),
+    supplierCode: metricValue(comments, metricPatterns.supplierCode).toUpperCase(),
+    announcedVariation: numberValue(metricValue(comments, metricPatterns.announcedVariation)),
+    globalVariation: numberValue(metricValue(comments, metricPatterns.globalVariation)),
+    weightedVariation: numberValue(metricValue(comments, metricPatterns.weightedVariation)),
+    tariffStructure: metricValue(comments, metricPatterns.tariffStructure),
   };
 }
 
@@ -207,9 +265,12 @@ function findColumn(headers: string[], candidates: RegExp[], fallback = -1) {
 
 export function parsePlannerTasks(text: string): PlannerImport {
   const repaired = repairText(text).replace(/\u00a0/g, " ");
-  const rows = repaired.split(/\r?\n/).map(splitRow).filter((cells) => cells.length > 1 && !isSeparatorRow(cells));
+  const format = detectedFormat(repaired);
+  const rawRows = tableRows(repaired, format).filter((cells) => cells.length && !isSeparatorRow(cells));
+  const preliminaryHeaderIndex = rawRows.findIndex((cells) => cells.some((cell) => /^id de tache$/.test(normalized(cell))) && cells.some((cell) => /^nom de tache$/.test(normalized(cell))));
+  const rows = preliminaryHeaderIndex >= 0 ? mergeContinuationRows(rawRows, rawRows[preliminaryHeaderIndex].length) : rawRows;
   const headerIndex = rows.findIndex((cells) => cells.some((cell) => /^id de tache$/.test(normalized(cell))) && cells.some((cell) => /^nom de tache$/.test(normalized(cell))));
-  if (headerIndex < 0) return { format: detectedFormat(repaired), tasks: [], ignoredRows: rows.length };
+  if (headerIndex < 0) return { format, tasks: [], ignoredRows: rows.length };
   const headers = rows[headerIndex];
   const columns = {
     id: findColumn(headers, [/^id de tache$/]),
@@ -266,12 +327,12 @@ export function parsePlannerTasks(text: string): PlannerImport {
       checklist,
       labels: cell(row, columns.labels).split(/[;,]/).map((label) => label.trim().toUpperCase()).filter(Boolean),
       comments,
-      metrics: parseMetrics(comments),
+      metrics: parsePlannerTaskMetrics(comments),
       workflowState: workflowState(cell(row, columns.status), checklist),
       registrySource: "planner-import",
     } satisfies PlannerTask;
   }).filter((task) => task !== null);
-  return { format: detectedFormat(repaired), tasks, ignoredRows };
+  return { format, tasks, ignoredRows };
 }
 
 export function plannerTaskMonthLabel(task: PlannerTask) {
