@@ -35,6 +35,22 @@ export const weeklyPoints = sqliteTable("weekly_points", {
   index("weekly_points_market_created_idx").on(table.marketId, table.createdAt),
 ]);
 
+export const analystWeeklyPoints = sqliteTable("analyst_weekly_points", {
+  id: text("id").primaryKey(),
+  analystId: text("analyst_id").notNull(),
+  year: integer("year").notNull(),
+  week: integer("week").notNull(),
+  meetingDate: text("meeting_date").notNull(),
+  periodFrom: text("period_from").notNull(),
+  periodTo: text("period_to").notNull(),
+  payload: text("payload").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("analyst_weekly_points_analyst_period_idx").on(table.analystId, table.year, table.week),
+  index("analyst_weekly_points_analyst_updated_idx").on(table.analystId, table.updatedAt),
+]);
+
 export const jiraWeeklySnapshots = sqliteTable("jira_weekly_snapshots", {
   id: text("id").primaryKey(),
   year: integer("year").notNull(),
