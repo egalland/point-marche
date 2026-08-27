@@ -3,7 +3,7 @@ import { getDb } from "../../../db";
 import { weeklyPoints } from "../../../db/schema";
 import type { PlannerTask } from "../../../lib/planner-import";
 import { loadPlannerRegistry } from "../../../lib/planner-registry-server";
-import { enrichPointPlannerHistory } from "../../../lib/point-planner-enrichment";
+import { enrichMarketPointFromPlanner, enrichPointPlannerHistory } from "../../../lib/point-planner-enrichment";
 import { getEditorUser } from "../../simple-auth";
 
 type SavePointRequest = {
@@ -29,7 +29,7 @@ function isoWeekParts(dateString: string) {
   return { year, week: 1 + Math.round((target.valueOf() - firstThursday.valueOf()) / 604800000) };
 }
 
-function serializePoint(row: typeof weeklyPoints.$inferSelect, tasks: PlannerTask[] = []) {
+function serializePoint(row: typeof weeklyPoints.$inferSelect, tasks: PlannerTask[] = [], marketTags: string[] = []) {
   return {
     id: row.id,
     marketId: row.marketId,
@@ -38,7 +38,7 @@ function serializePoint(row: typeof weeklyPoints.$inferSelect, tasks: PlannerTas
     meetingDate: row.meetingDate,
     pointName: row.pointName,
     themeColor: row.themeColor,
-    data: enrichPointPlannerHistory(JSON.parse(row.payload), tasks),
+    data: marketTags.length ? enrichMarketPointFromPlanner(JSON.parse(row.payload), tasks, marketTags) : enrichPointPlannerHistory(JSON.parse(row.payload), tasks),
     createdAt: row.createdAt,
   };
 }
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
       const key = `${row.year}-${row.week}`;
       if (!latestByWeek.has(key)) latestByWeek.set(key, row);
     });
-    return Response.json({ points: Array.from(latestByWeek.values(), (row) => serializePoint(row, registry.tasks)) });
+    return Response.json({ points: Array.from(latestByWeek.values(), (row) => serializePoint(row, registry.tasks, registry.tagsByMarket[marketId] ?? [])) });
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });
   }

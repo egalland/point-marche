@@ -10,7 +10,10 @@ function transpile(path) {
 }
 
 const variationsUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/supplier-variations.ts")).toString("base64")}`;
-const enrichmentSource = transpile("../lib/point-planner-enrichment.ts").replace('from "./supplier-variations"', `from "${variationsUrl}"`);
+const plannerUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/planner-import.ts")).toString("base64")}`;
+const enrichmentSource = transpile("../lib/point-planner-enrichment.ts")
+  .replace('from "./planner-import"', `from "${plannerUrl}"`)
+  .replace('from "./supplier-variations"', `from "${variationsUrl}"`);
 const enrichment = await import(`data:text/javascript;base64,${Buffer.from(enrichmentSource).toString("base64")}`);
 
 function task(externalId, effectiveMonth, globalVariation, weightedVariation) {
@@ -61,4 +64,17 @@ test("enriches an archived point with the supplier variation history", () => {
   assert.equal(result.operations[0].plannerSource.metrics.globalVariation, 3.1);
   assert.deepEqual(result.operations[0].plannerSource.variationHistory.map((point) => point.period), ["2026-07", "2026-08"]);
   assert.equal(result.operations[0].plannerSource.supplierLabel, "FOURNISSEUR TEST");
+});
+
+test("injects missing current and next month Planner simulations into a market point", () => {
+  const payload = { meetingDate: "2026-08-27", operations: [{ id: "manual", name: "Suivi manuel" }] };
+  const july = task("july", "2026-07", 2.5, 2.2);
+  const august = task("august", "2026-08", 3.1, 2.8);
+  const september = task("september", "2026-09", 3.4, 3);
+  const otherMarket = { ...task("other", "2026-08", 4, 3.8), labels: ["PAN-GM"] };
+
+  const result = enrichment.enrichMarketPointFromPlanner(payload, [july, august, september, otherMarket], ["REV-PB"]);
+
+  assert.deepEqual(result.operations.map((operation) => operation.id), ["manual", "planner:august", "planner:september"]);
+  assert.equal(result.operations[1].plannerSource.variationHistory.length, 4);
 });

@@ -135,3 +135,70 @@ test("distinguishes a complete active task that still needs Planner closure", ()
   assert.equal(task.recurring, true);
   assert.equal(planner.plannerTaskMonthLabel(task), "Juillet 2026");
 });
+
+test("parses supplier metrics when Planner flattens the comments into one line", () => {
+  const row = [
+    "flat-comments",
+    "2026-08-AOUT-EXEMPLE",
+    "Tarif vente",
+    "",
+    "Non démarrées",
+    "Moyen",
+    "",
+    "John DOE",
+    "2026-08-01",
+    "2026-08-20",
+    "",
+    "false",
+    "false",
+    "",
+    "",
+    "0/0",
+    "",
+    "REV-PB",
+    "Achats 12 mG : 89 613,02 € Code Fournisseur : D6218 Annoncé : 4% Variation GLOBAL : 3,53% Variation pondérée : 3,36% Structure tarifaire : PAB + Remise CGV CPV",
+  ];
+
+  const task = planner.parsePlannerTasks(exportTable([row])).tasks[0];
+
+  assert.equal(task.metrics.purchases12m, 89613.02);
+  assert.equal(task.metrics.supplierCode, "D6218");
+  assert.equal(task.metrics.announcedVariation, 4);
+  assert.equal(task.metrics.globalVariation, 3.53);
+  assert.equal(task.metrics.weightedVariation, 3.36);
+  assert.equal(task.metrics.tariffStructure, "PAB + Remise CGV CPV");
+});
+
+test("keeps quoted and unquoted multiline Planner comments in their task row", () => {
+  const prefix = [
+    "multiline-comments",
+    "2026-09-SEPTEMBRE-EXEMPLE",
+    "Tarif vente",
+    "",
+    "Non démarrées",
+    "Moyen",
+    "",
+    "Jane DOE",
+    "2026-08-10",
+    "2026-09-15",
+    "",
+    "false",
+    "false",
+    "",
+    "",
+    "0/0",
+    "",
+    "MEN-PB",
+  ];
+  const comments = "Achats 12 mG : 100 000 €\nCode Fournisseur : B1234\nVariation GLOBAL : 2,7%\nVariation pondérée : 2,4%";
+  const quoted = [headers.join("\t"), [...prefix, `"${comments}"`].join("\t")].join("\n");
+  const unquoted = [headers.join("\t"), [...prefix, comments].join("\t")].join("\n");
+
+  for (const text of [quoted, unquoted]) {
+    const result = planner.parsePlannerTasks(text);
+    assert.equal(result.tasks.length, 1);
+    assert.equal(result.tasks[0].metrics.supplierCode, "B1234");
+    assert.equal(result.tasks[0].metrics.globalVariation, 2.7);
+    assert.equal(result.tasks[0].metrics.weightedVariation, 2.4);
+  }
+});

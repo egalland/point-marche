@@ -26,6 +26,8 @@ export function PlannerImportDialog({ markets, onImport }: Props) {
     markets: markets.filter((market) => market.plannerTags.some((tag) => task.labels.map(normalized).includes(normalized(tag)))),
   })), [markets, parsed.tasks]);
   const unmatched = mapped.filter((item) => !item.markets.length).length;
+  const globalVariations = parsed.tasks.filter((task) => task.metrics.globalVariation !== null).length;
+  const weightedVariations = parsed.tasks.filter((task) => task.metrics.weightedVariation !== null).length;
   const submit = async () => {
     if (!parsed.tasks.length || saving) return;
     setSaving(true);
@@ -49,6 +51,8 @@ export function PlannerImportDialog({ markets, onImport }: Props) {
       <div className="planner-import-summary">
         <article><span>Tâches reconnues</span><strong>{parsed.tasks.length}</strong></article>
         <article><span>Marchés reconnus</span><strong>{new Set(mapped.flatMap((item) => item.markets.map((market) => market.id))).size}</strong></article>
+        <article><span>Variations GLOBAL</span><strong>{globalVariations}</strong></article>
+        <article><span>Variations pondérées</span><strong>{weightedVariations}</strong></article>
         <article className={unmatched ? "warning" : ""}><span>Sans tag paramétré</span><strong>{unmatched}</strong></article>
         <article><span>Lignes ignorées</span><strong>{parsed.ignoredRows}</strong></article>
       </div>

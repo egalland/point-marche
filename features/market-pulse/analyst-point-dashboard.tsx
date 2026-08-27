@@ -19,6 +19,8 @@ type Props = {
   onPlannerImport: (rawText: string) => Promise<{ imported: number; message: string }>;
 };
 
+type AnalystJiraSnapshot = { analystId: string; year: number; week: number; rawText: string; tickets: AnalystPointData["jira"]; updatedAt: string };
+
 const dossierStatuses = ["À faire", "En cours", "En attente", "Fait"];
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;
@@ -51,11 +53,20 @@ function automaticRecipients(data: AnalystPointData, analyst: GlobalDirectoryUse
   return { ...data, mail: { ...data.mail, to: Array.from(new Set([...manual, ...autoTo])).join("; "), autoTo } };
 }
 
-function JiraImporter({ analyst, pointDate, onImport }: { analyst: GlobalDirectoryUser; pointDate: string; onImport: (rawText: string) => number }) {
+async function fetchAnalystJiraSnapshot(analystId: string, meetingDate: string) {
+  const period = isoWeekParts(meetingDate);
+  const response = await fetch(`/api/analyst-jira?analystId=${encodeURIComponent(analystId)}&year=${period.year}&week=${period.week}`, { cache: "no-store" });
+  const payload = await response.json() as { snapshot?: AnalystJiraSnapshot | null; error?: string };
+  if (!response.ok) throw new Error(payload.error || "Chargement Jira impossible.");
+  return payload.snapshot ?? null;
+}
+
+function JiraImporter({ analyst, pointDate, onImport }: { analyst: GlobalDirectoryUser; pointDate: string; onImport: (rawText: string) => Promise<number> }) {
   const [open, setOpen] = useState(false);
   const [rawText, setRawText] = useState("");
   const [copied, setCopied] = useState(false);
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
   const jql = useMemo(() => buildAnalystJql(analyst), [analyst]);
   const parsed = useMemo(() => parseJiraAssigneeSummary(rawText), [rawText]);
   const tickets = useMemo(() => analystJiraTickets(rawText, analyst), [analyst, rawText]);
@@ -67,13 +78,13 @@ function JiraImporter({ analyst, pointDate, onImport }: { analyst: GlobalDirecto
   };
   return <>
     <button type="button" className="secondary-button" onClick={() => setOpen(true)}>Importer Jira</button>
-    <AppDialog open={open} onClose={() => setOpen(false)} labelledBy="analyst-jira-import-title" className="analyst-jira-import-dialog">
+    <AppDialog open={open} onClose={() => setOpen(false)} busy={saving} labelledBy="analyst-jira-import-title" className="analyst-jira-import-dialog">
       <div className="analyst-dialog-heading"><span>Tickets ouverts uniquement</span><h2 id="analyst-jira-import-title">Import Jira · {analyst.name}</h2><p>La requête exclut les tickets terminés. L’export est rapproché uniquement avec le USERCODE {analyst.usercode || "à renseigner"}.</p></div>
       <section className="jira-query-card"><div className="jira-query-heading"><div><span>Requête prête à copier</span><strong>{jql ? "USERCODE analyste inclus" : "USERCODE analyste manquant"}</strong></div><button type="button" className="secondary-button" disabled={!jql} onClick={copyJql}>{copied ? "Requête copiée" : "Copier la requête"}</button></div>{jql ? <pre className="jira-query-code">{jql}</pre> : <p>Ajoute un USERCODE valide dans l’annuaire GLOBAL.</p>}</section>
       <label className="analyst-import-paste"><span>Colle l’export détaillé Jira</span><textarea data-autofocus value={rawText} onChange={(event) => { setRawText(event.target.value); setMessage(""); }} placeholder="Clé · ID · État · Résumé · Création · USERCODE · Mise à jour…"/></label>
       <div className="analyst-import-summary"><span>{parsed.detailedTickets.length} ligne{parsed.detailedTickets.length > 1 ? "s" : ""} reconnue{parsed.detailedTickets.length > 1 ? "s" : ""}</span><strong>{tickets.length} ticket{tickets.length > 1 ? "s" : ""} ouvert{tickets.length > 1 ? "s" : ""} pour {analyst.name}</strong><small>Point de référence : {dateLabel(pointDate)}</small></div>
       {tickets.length > 0 && <div className="analyst-import-preview">{tickets.slice(0, 12).map((ticket) => <a href={ticket.link} target="_blank" rel="noreferrer" key={ticket.id}><span>{ticket.key}</span><strong>{ticket.summary}</strong><small>{ticket.status} · modifié le {dateLabel(ticket.updatedAt)}</small></a>)}</div>}
-      <div className="paste-actions"><span>{message}</span><div><button type="button" className="secondary-button" onClick={() => setOpen(false)}>Fermer</button><button type="button" className="primary-button" disabled={!tickets.length} onClick={() => { const count = onImport(rawText); setMessage(`${count} ticket${count > 1 ? "s" : ""} ajouté${count > 1 ? "s" : ""} au point.`); if (count) window.setTimeout(() => setOpen(false), 500); }}>Importer dans le point</button></div></div>
+      <div className="paste-actions"><span>{message}</span><div><button type="button" className="secondary-button" disabled={saving} onClick={() => setOpen(false)}>Fermer</button><button type="button" className="primary-button" disabled={saving || !tickets.length} onClick={async () => { setSaving(true); setMessage(""); try { const count = await onImport(rawText); setMessage(`${count} ticket${count > 1 ? "s" : ""} enregistré${count > 1 ? "s" : ""} pour cette semaine.`); if (count) window.setTimeout(() => setOpen(false), 500); } catch (error) { setMessage(error instanceof Error ? error.message : "Import Jira impossible."); } finally { setSaving(false); } }}>{saving ? "Enregistrement…" : "Importer dans le point"}</button></div></div>
     </AppDialog>
   </>;
 }
@@ -163,7 +174,8 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
       const period = isoWeekParts(previous.to);
       const matching = normalized.find((record) => record.year === period.year && record.week === period.week);
       const next = matching?.data ?? initialAnalystPoint(analyst, manager);
-      setData(automaticRecipients(next, analyst, manager));
+      const jiraSnapshot = await fetchAnalystJiraSnapshot(analyst.id, next.meetingDate).catch(() => null);
+      setData(automaticRecipients(jiraSnapshot ? { ...next, jira: jiraSnapshot.tickets } : next, analyst, manager));
       setActiveRecordId(matching?.id ?? "");
     }).catch((error) => { if (active) { setRecords([]); setData(initialAnalystPoint(analyst, manager)); setToast(error instanceof Error ? error.message : "Chargement impossible."); } }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -184,14 +196,30 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
   const groupedActivities = Array.from(new Map(stats.contributions.map((item) => [item.taskId, { taskId: item.taskId, taskName: item.taskName, date: item.date, activities: stats.contributions.filter((candidate) => candidate.taskId === item.taskId) }])).values()).sort((left, right) => right.date.localeCompare(left.date));
   const updateData = (patch: Partial<AnalystPointData>) => setData((current) => current ? { ...current, ...patch } : current);
   const updateDossier = (id: string, patch: Partial<AnalystDossier>) => updateData({ dossiers: data.dossiers.map((item) => item.id === id ? { ...item, ...patch } : item) });
-  const chooseWeek = (amount: number) => {
+  const chooseWeek = async (amount: number) => {
     const nextRange = shiftWeek(data.periodFrom, amount);
     const nextParts = isoWeekParts(nextRange.to);
     const saved = records.find((record) => record.year === nextParts.year && record.week === nextParts.week);
-    if (saved) { setData(automaticRecipients(saved.data, analyst, manager)); setActiveRecordId(saved.id); return; }
-    const next = initialAnalystPoint(analyst, manager);
-    next.periodFrom = nextRange.from; next.periodTo = nextRange.to; next.meetingDate = nextRange.to; next.preferences = data.preferences; next.mail = data.mail;
-    setData(automaticRecipients(next, analyst, manager)); setActiveRecordId("");
+    const next = saved?.data ?? initialAnalystPoint(analyst, manager);
+    if (!saved) { next.periodFrom = nextRange.from; next.periodTo = nextRange.to; next.meetingDate = nextRange.to; next.preferences = data.preferences; next.mail = data.mail; }
+    try {
+      const jiraSnapshot = await fetchAnalystJiraSnapshot(analyst.id, next.meetingDate);
+      setData(automaticRecipients(jiraSnapshot ? { ...next, jira: jiraSnapshot.tickets } : next, analyst, manager));
+      setActiveRecordId(saved?.id ?? "");
+    } catch (error) {
+      setData(automaticRecipients(next, analyst, manager));
+      setActiveRecordId(saved?.id ?? "");
+      setToast(error instanceof Error ? error.message : "Chargement Jira impossible.");
+    }
+  };
+
+  const importAnalystJira = async (rawText: string) => {
+    const currentPeriod = isoWeekParts(data.meetingDate);
+    const response = await fetch("/api/analyst-jira", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ analystId: analyst.id, year: currentPeriod.year, week: currentPeriod.week, rawText }) });
+    const payload = await response.json() as { snapshot?: AnalystJiraSnapshot; imported?: number; error?: string };
+    if (!response.ok || !payload.snapshot) throw new Error(payload.error || "Import Jira impossible.");
+    updateData({ jira: payload.snapshot.tickets });
+    return payload.imported ?? payload.snapshot.tickets.length;
   };
   const save = async () => {
     if (saving) return;
@@ -235,7 +263,7 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
 
     {mode === "read" && <div className="analyst-render-grid">{data.preferences.order.filter((module) => data.preferences.readModules[module] && (module !== "cycle20" || data.includeCycle20)).map((module) => <div key={module} className={`analyst-render-item width-${data.preferences.widths[module]}`}>{moduleContent[module]}</div>)}</div>}
 
-    {mode === "edit" && <div className="analyst-edit-layout"><section className="surface analyst-point-form"><header><div><span>Cadre du point</span><strong>Périodes et diffusion</strong></div><div><JiraImporter analyst={analyst} pointDate={data.meetingDate} onImport={(rawText) => { const jira = analystJiraTickets(rawText, analyst); updateData({ jira }); return jira.length; }}/><PlannerImportDialog markets={markets} onImport={onPlannerImport}/></div></header><div className="form-grid"><label className="field"><span>Du</span><SafeDateInput value={data.periodFrom} max={data.periodTo} onCommit={(periodFrom) => setPeriod({ periodFrom })}/></label><label className="field"><span>Au</span><SafeDateInput value={data.periodTo} min={data.periodFrom} onCommit={(periodTo) => setPeriod({ periodTo })}/></label><label className="field field-wide"><span>Message de synthèse</span><textarea value={data.note} onChange={(event) => updateData({ note: event.target.value })}/></label><label className="cycle-toggle field-wide"><input type="checkbox" checked={data.includeCycle20} onChange={(event) => updateData({ includeCycle20: event.target.checked })}/><span><strong>Afficher le repère 20 → 20</strong><small>{dateLabel(data.cycleFrom)} → {dateLabel(data.cycleTo)} · bloc séparé des totaux de la semaine</small></span></label>{data.includeCycle20 && <><label className="field"><span>Cycle du</span><SafeDateInput value={data.cycleFrom} max={data.cycleTo} onCommit={(cycleFrom) => updateData({ cycleFrom })}/></label><label className="field"><span>Cycle au</span><SafeDateInput value={data.cycleTo} min={data.cycleFrom} onCommit={(cycleTo) => updateData({ cycleTo })}/></label></>}<label className="field"><span>Alerte Jira après</span><input type="number" min="1" value={data.preferences.jiraWarningDays} onChange={(event) => updateData({ preferences: { ...data.preferences, jiraWarningDays: Math.max(1, Number(event.target.value) || 1), jiraCriticalDays: Math.max(Number(event.target.value) + 1, data.preferences.jiraCriticalDays) } })}/></label><label className="field"><span>Attention forte après</span><input type="number" min={data.preferences.jiraWarningDays + 1} value={data.preferences.jiraCriticalDays} onChange={(event) => updateData({ preferences: { ...data.preferences, jiraCriticalDays: Math.max(data.preferences.jiraWarningDays + 1, Number(event.target.value) || data.preferences.jiraWarningDays + 1) } })}/></label></div></section>
+    {mode === "edit" && <div className="analyst-edit-layout"><section className="surface analyst-point-form"><header><div><span>Cadre du point</span><strong>Périodes et diffusion</strong></div><div><JiraImporter analyst={analyst} pointDate={data.meetingDate} onImport={importAnalystJira}/><PlannerImportDialog markets={markets} onImport={onPlannerImport}/></div></header><div className="form-grid"><label className="field"><span>Du</span><SafeDateInput value={data.periodFrom} max={data.periodTo} onCommit={(periodFrom) => setPeriod({ periodFrom })}/></label><label className="field"><span>Au</span><SafeDateInput value={data.periodTo} min={data.periodFrom} onCommit={(periodTo) => setPeriod({ periodTo })}/></label><label className="field field-wide"><span>Message de synthèse</span><textarea value={data.note} onChange={(event) => updateData({ note: event.target.value })}/></label><label className="cycle-toggle field-wide"><input type="checkbox" checked={data.includeCycle20} onChange={(event) => updateData({ includeCycle20: event.target.checked })}/><span><strong>Afficher le repère 20 → 20</strong><small>{dateLabel(data.cycleFrom)} → {dateLabel(data.cycleTo)} · bloc séparé des totaux de la semaine</small></span></label>{data.includeCycle20 && <><label className="field"><span>Cycle du</span><SafeDateInput value={data.cycleFrom} max={data.cycleTo} onCommit={(cycleFrom) => updateData({ cycleFrom })}/></label><label className="field"><span>Cycle au</span><SafeDateInput value={data.cycleTo} min={data.cycleFrom} onCommit={(cycleTo) => updateData({ cycleTo })}/></label></>}<label className="field"><span>Alerte Jira après</span><input type="number" min="1" value={data.preferences.jiraWarningDays} onChange={(event) => updateData({ preferences: { ...data.preferences, jiraWarningDays: Math.max(1, Number(event.target.value) || 1), jiraCriticalDays: Math.max(Number(event.target.value) + 1, data.preferences.jiraCriticalDays) } })}/></label><label className="field"><span>Attention forte après</span><input type="number" min={data.preferences.jiraWarningDays + 1} value={data.preferences.jiraCriticalDays} onChange={(event) => updateData({ preferences: { ...data.preferences, jiraCriticalDays: Math.max(data.preferences.jiraWarningDays + 1, Number(event.target.value) || data.preferences.jiraWarningDays + 1) } })}/></label></div></section>
       <section className="analyst-edit-section"><div className="section-title"><div><span>Dossiers</span><h2>Suivis de la semaine</h2><p>Reporte les dossiers non terminés ou ajoute un nouveau suivi.</p></div><div className="title-actions"><button type="button" className="secondary-button" disabled={!previousRecord} onClick={carryPrevious}>Reprendre le précédent</button><button type="button" className="primary-button" onClick={() => updateData({ dossiers: [...data.dossiers, { id: uid(), title: "", status: "En cours", action: "", deadline: "", comment: "", progress: 0, showProgress: false }] })}>Ajouter un dossier</button></div></div><div className="record-stack">{data.dossiers.map((item) => dossierCard(item, true, (patch) => updateDossier(item.id, patch), () => updateData({ dossiers: data.dossiers.filter((row) => row.id !== item.id) })))}</div></section>
       <section className="surface analyst-mail-settings"><header><span>Destinataires automatiques</span><strong>{[analyst.name, manager?.name].filter(Boolean).join(" · ")}</strong><small>L’analyste et le manager Tarif sont destinataires principaux.</small></header><div className="form-grid"><label className="field field-wide"><span>À</span><input value={data.mail.to} onChange={(event) => updateData({ mail: { ...data.mail, to: event.target.value } })}/></label><label className="field field-wide"><span>Copie</span><input value={data.mail.cc} onChange={(event) => updateData({ mail: { ...data.mail, cc: event.target.value } })}/></label><label className="field field-wide"><span>Objet</span><input value={data.mail.subject} onChange={(event) => updateData({ mail: { ...data.mail, subject: event.target.value } })}/></label><label className="field field-wide"><span>Introduction</span><textarea value={data.mail.intro} onChange={(event) => updateData({ mail: { ...data.mail, intro: event.target.value } })}/></label></div></section>
       <section className="surface analyst-layout-settings"><ModuleLayoutEditor modules={analystPointModules} order={data.preferences.order} widths={data.preferences.widths} onChangeOrder={setLayoutOrder} onChangeWidth={setLayoutWidth}/><div className="analyst-visibility-grid">{(["readModules", "mailModules", "htmlModules"] as const).map((destination) => <article key={destination}><strong>{destination === "readModules" ? "Lecture" : destination === "mailModules" ? "Mail blanc" : "HTML interactif"}</strong>{analystPointModules.map((module) => <label key={module.id}><input type="checkbox" checked={data.preferences[destination][module.id]} onChange={(event) => setVisibility(destination, module.id, event.target.checked)}/><span>{module.label}</span></label>)}</article>)}</div></section>
