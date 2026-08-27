@@ -14,6 +14,8 @@ type Props = {
   onImport: (rawText: string) => Promise<{ imported: number; message: string }>;
 };
 
+type DetailSort = "date" | "analyst" | "specialty" | "task" | "market" | "step";
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -28,6 +30,34 @@ function daysAgo(amount: number) {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() - amount);
   return date.toISOString().slice(0, 10);
+}
+
+function isIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T12:00:00Z`);
+  return Number.isFinite(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+}
+
+function isoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function previousWeekRange() {
+  const current = new Date(`${today()}T12:00:00Z`);
+  const monday = new Date(current);
+  monday.setUTCDate(current.getUTCDate() - ((current.getUTCDay() + 6) % 7) - 7);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  return { from: isoDate(monday), to: isoDate(sunday) };
+}
+
+function lastCompletedCycle20() {
+  const current = new Date(`${today()}T12:00:00Z`);
+  const end = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 20, 12));
+  if (current < end) end.setUTCMonth(end.getUTCMonth() - 1);
+  const start = new Date(end);
+  start.setUTCMonth(start.getUTCMonth() - 1);
+  return { from: isoDate(start), to: isoDate(end) };
 }
 
 function percent(value: number) {
@@ -53,20 +83,48 @@ function delayMovementLabel(summary: PlannerDelaySummary) {
 
 export function AnalystStatsDashboard({ tasks, users, markets, updatedAt, onImport }: Props) {
   const analysts = useMemo(() => users.filter((user) => user.role === "analyste-tarif-referentiel").sort((left, right) => left.name.localeCompare(right.name, "fr")), [users]);
-  const [from, setFrom] = useState(() => monthsAgo(5));
-  const [to, setTo] = useState(today);
+  const initialFrom = useMemo(() => monthsAgo(5), []);
+  const initialTo = useMemo(() => today(), []);
+  const [from, setFrom] = useState(initialFrom);
+  const [to, setTo] = useState(initialTo);
+  const [appliedRange, setAppliedRange] = useState({ from: initialFrom, to: initialTo });
   const [marketId, setMarketId] = useState("all");
   const [specialty, setSpecialty] = useState<PlannerSpecialty | "all">("all");
   const [analystIds, setAnalystIds] = useState<string[]>([]);
-  const stats = useMemo(() => buildAnalystStats(tasks, users, markets, { from, to, marketId, specialty, analystIds }), [analystIds, from, marketId, markets, specialty, tasks, to, users]);
+  const [detailSort, setDetailSort] = useState<{ key: DetailSort; direction: "asc" | "desc" }>({ key: "date", direction: "desc" });
+  const stats = useMemo(() => buildAnalystStats(tasks, users, markets, { from: appliedRange.from, to: appliedRange.to, marketId, specialty, analystIds }), [analystIds, appliedRange, marketId, markets, specialty, tasks, users]);
   const maxMonth = Math.max(1, ...stats.monthly.map((item) => item.total));
   const maxAnalyst = Math.max(1, ...stats.byAnalyst.map((item) => item.total));
   const maxDelay = Math.max(1, ...stats.delaySummaries.flatMap((item) => [item.average ?? 0, item.previousAverage ?? 0]));
   const selectAnalyst = (id: string) => setAnalystIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
-  const applyPeriod = (period: "30d" | "3m" | "6m" | "year") => {
-    setTo(today());
-    setFrom(period === "30d" ? daysAgo(29) : period === "3m" ? monthsAgo(2) : period === "6m" ? monthsAgo(5) : `${new Date().getUTCFullYear()}-01-01`);
+  const setRange = (range: { from: string; to: string }) => {
+    setFrom(range.from);
+    setTo(range.to);
+    setAppliedRange(range);
   };
+  const applyPeriod = (period: "30d" | "3m" | "6m" | "year" | "previousWeek" | "cycle20") => {
+    const end = today();
+    if (period === "previousWeek") return setRange(previousWeekRange());
+    if (period === "cycle20") return setRange(lastCompletedCycle20());
+    setRange({ from: period === "30d" ? daysAgo(29) : period === "3m" ? monthsAgo(2) : period === "6m" ? monthsAgo(5) : `${new Date().getUTCFullYear()}-01-01`, to: end });
+  };
+  const updateFrom = (value: string) => {
+    setFrom(value);
+    if (isIsoDate(value) && value <= appliedRange.to) setAppliedRange((current) => ({ ...current, from: value }));
+  };
+  const updateTo = (value: string) => {
+    setTo(value);
+    if (isIsoDate(value) && value >= appliedRange.from) setAppliedRange((current) => ({ ...current, to: value }));
+  };
+  const toggleDetailSort = (key: DetailSort) => setDetailSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
+  const sortMark = (key: DetailSort) => detailSort.key === key ? detailSort.direction === "asc" ? " ↑" : " ↓" : "";
+  const sortedContributions = useMemo(() => stats.contributions.slice().sort((left, right) => {
+    const marketsFor = (ids: string[], tags: string[]) => ids.map((id) => markets.find((market) => market.id === id)?.name).filter(Boolean).join(" · ") || tags.join(" · ") || "Non rattaché";
+    const leftValue = detailSort.key === "date" ? left.date : detailSort.key === "analyst" ? left.analystName : detailSort.key === "specialty" ? left.specialty : detailSort.key === "task" ? left.taskName : detailSort.key === "market" ? marketsFor(left.marketIds, left.marketTags) : left.stepLabel;
+    const rightValue = detailSort.key === "date" ? right.date : detailSort.key === "analyst" ? right.analystName : detailSort.key === "specialty" ? right.specialty : detailSort.key === "task" ? right.taskName : detailSort.key === "market" ? marketsFor(right.marketIds, right.marketTags) : right.stepLabel;
+    const compared = leftValue.localeCompare(rightValue, "fr", { numeric: true, sensitivity: "base" });
+    return detailSort.direction === "asc" ? compared : -compared;
+  }), [detailSort, markets, stats.contributions]);
 
   return <main className="analyst-stats-page">
     <header className="stats-hero">
@@ -75,9 +133,9 @@ export function AnalystStatsDashboard({ tasks, users, markets, updatedAt, onImpo
     </header>
 
     <section className="surface stats-filters" aria-label="Filtres des statistiques">
-      <div className="stats-period-presets"><span>Période rapide</span><div><button type="button" onClick={() => applyPeriod("30d")}>30 jours</button><button type="button" onClick={() => applyPeriod("3m")}>3 mois</button><button type="button" onClick={() => applyPeriod("6m")}>6 mois</button><button type="button" onClick={() => applyPeriod("year")}>Cette année</button></div></div>
-      <label><span>Du</span><input type="date" value={from} max={to} onChange={(event) => setFrom(event.target.value)}/></label>
-      <label><span>Au</span><input type="date" value={to} min={from} onChange={(event) => setTo(event.target.value)}/></label>
+      <div className="stats-period-presets"><span>Période rapide</span><div><button type="button" onClick={() => applyPeriod("previousWeek")}>Semaine dernière</button><button type="button" onClick={() => applyPeriod("cycle20")}>Mois dernier · 20 au 20</button><button type="button" onClick={() => applyPeriod("30d")}>30 jours</button><button type="button" onClick={() => applyPeriod("3m")}>3 mois</button><button type="button" onClick={() => applyPeriod("6m")}>6 mois</button><button type="button" onClick={() => applyPeriod("year")}>Cette année</button></div></div>
+      <label><span>Du</span><input type="date" value={from} max={isIsoDate(to) ? to : undefined} onChange={(event) => updateFrom(event.target.value)} onBlur={() => { if (!isIsoDate(from)) setFrom(appliedRange.from); }}/></label>
+      <label><span>Au</span><input type="date" value={to} min={isIsoDate(from) ? from : undefined} onChange={(event) => updateTo(event.target.value)} onBlur={() => { if (!isIsoDate(to)) setTo(appliedRange.to); }}/></label>
       <label><span>Marché</span><select value={marketId} onChange={(event) => setMarketId(event.target.value)}><option value="all">Tous les marchés</option>{markets.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}</select></label>
       <div className="stats-specialty"><span>Spécialité</span><div>{(["all", "simulation", "control"] as const).map((value) => <button type="button" key={value} className={specialty === value ? "active" : ""} onClick={() => setSpecialty(value)}>{value === "all" ? "Tout" : value === "simulation" ? "Simulation" : "Contrôle"}</button>)}</div></div>
       <div className="stats-analysts"><div><span>Analystes</span><button type="button" onClick={() => setAnalystIds([])}>{analystIds.length ? "Revenir à tous" : "Tous actifs"}</button></div><div>{analysts.map((analyst) => <button type="button" key={analyst.id} className={!analystIds.length || analystIds.includes(analyst.id) ? "active" : ""} onClick={() => selectAnalyst(analyst.id)}>{analyst.name}</button>)}</div></div>
@@ -109,6 +167,6 @@ export function AnalystStatsDashboard({ tasks, users, markets, updatedAt, onImpo
 
     {stats.unmatchedNames.length > 0 && <section className="stats-quality-note"><strong>Noms non rapprochés de l’annuaire</strong><span>{stats.unmatchedNames.join(" · ")}. Les anciennes simulations restent comptées dans le total, sans provoquer d’erreur.</span></section>}
 
-    <section className="surface stats-detail"><header><div><span>Détail vérifiable</span><strong>{stats.contributions.length} activité{stats.contributions.length > 1 ? "s" : ""} dans la sélection</strong></div></header><div className="data-table-wrap"><table><thead><tr><th>Date</th><th>Analyste</th><th>Spécialité</th><th>Simulation</th><th>Marché</th><th>Étape</th></tr></thead><tbody>{stats.contributions.slice().sort((left, right) => right.date.localeCompare(left.date)).map((item, index) => <tr key={`${item.taskId}:${item.specialty}:${item.date}:${index}`}><td>{new Date(`${item.date}T12:00:00`).toLocaleDateString("fr-FR")}</td><td>{item.analystName}</td><td><span className={`stats-kind ${item.specialty}`}>{item.specialty === "simulation" ? "Simulation" : "Contrôle"}</span></td><td><strong>{item.taskName}</strong></td><td>{item.marketIds.map((id) => markets.find((market) => market.id === id)?.name).filter(Boolean).join(" · ") || item.marketTags.join(" · ") || "Non rattaché"}</td><td>{item.stepLabel || "Étape non renseignée"}</td></tr>)}</tbody></table>{!stats.contributions.length && <div className="table-empty">Aucune activité ne correspond à ces filtres.</div>}</div></section>
+    <section className="surface stats-detail"><header><div><span>Détail vérifiable</span><strong>{stats.contributions.length} activité{stats.contributions.length > 1 ? "s" : ""} dans la sélection</strong></div><small>Clique sur un en-tête pour trier.</small></header><div className="data-table-wrap"><table><thead><tr><th><button type="button" onClick={() => toggleDetailSort("date")}>Date{sortMark("date")}</button></th><th><button type="button" onClick={() => toggleDetailSort("analyst")}>Analyste{sortMark("analyst")}</button></th><th><button type="button" onClick={() => toggleDetailSort("specialty")}>Spécialité{sortMark("specialty")}</button></th><th><button type="button" onClick={() => toggleDetailSort("task")}>Simulation{sortMark("task")}</button></th><th><button type="button" onClick={() => toggleDetailSort("market")}>Marché{sortMark("market")}</button></th><th><button type="button" onClick={() => toggleDetailSort("step")}>Étape{sortMark("step")}</button></th></tr></thead><tbody>{sortedContributions.map((item, index) => <tr key={`${item.taskId}:${item.specialty}:${item.date}:${index}`}><td>{new Date(`${item.date}T12:00:00`).toLocaleDateString("fr-FR")}</td><td>{item.analystName}</td><td><span className={`stats-kind ${item.specialty}`}>{item.specialty === "simulation" ? "Simulation" : "Contrôle"}</span></td><td><strong>{item.taskName}</strong></td><td>{item.marketIds.map((id) => markets.find((market) => market.id === id)?.name).filter(Boolean).join(" · ") || item.marketTags.join(" · ") || "Non rattaché"}</td><td>{item.stepLabel || "Étape non renseignée"}</td></tr>)}</tbody></table>{!stats.contributions.length && <div className="table-empty">Aucune activité ne correspond à ces filtres.</div>}</div></section>
   </main>;
 }
