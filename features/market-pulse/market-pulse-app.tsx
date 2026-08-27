@@ -6,6 +6,7 @@ import { ModuleLayoutEditor, type ModuleWidth } from "@/components/module-layout
 import { buildMarketJql, GLOBAL_ROLE_OPTIONS, roleLabel, roleMailMode, roleUsesAutomaticJira, type GlobalDirectoryUser, type GlobalRole } from "@/lib/global-directory";
 import { JIRA_SUMMARY_STATUSES, parseJiraAssigneeSummary, type JiraSummaryImport } from "@/lib/jira-import";
 import { plannerTaskMonthLabel, type PlannerTask } from "@/lib/planner-import";
+import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 import { supplierSeriesForTask, type SupplierVariationPoint } from "@/lib/supplier-variations";
 import { AnalystPointDashboard } from "./analyst-point-dashboard";
 import { AnalystStatsDashboard } from "./analyst-stats-dashboard";
@@ -69,6 +70,7 @@ const allModulesVisible = (): ModuleVisibility => ({ jira: true, dossiers: true,
 const defaultModuleOrder: PointModule[] = ["jira", "dossiers", "operations", "alerts", "tariffs"];
 const defaultModuleWidths: Record<PointModule, ModuleWidth> = { jira: "full", dossiers: "full", operations: "full", alerts: "half", tariffs: "half" };
 const defaultPreferences = (): PointPreferences => ({ fontScale: "standard", density: "comfortable", readModules: allModulesVisible(), mailModules: allModulesVisible(), htmlModules: allModulesVisible(), moduleOrder: [...defaultModuleOrder], moduleWidths: { ...defaultModuleWidths } });
+const emptyPlannerRegistry = (): PlannerRegistrySummary => ({ imported: 0, archiveCandidates: 0, recovered: 0, enriched: 0, usableVariations: 0, withoutVariation: 0, withoutMonth: 0 });
 const emptyDirectoryDraft = (): DirectoryDraft => ({ name: "", email: "", usercode: "", plannerAlias: "", role: "chef-produit", marketIds: [] });
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const isoToday = () => new Date().toISOString().slice(0, 10);
@@ -185,9 +187,9 @@ async function fetchDirectoryUsers(): Promise<GlobalDirectoryUser[]> {
 
 async function fetchPlannerTasks() {
   const response = await fetch("/api/planner-tasks", { cache: "no-store" });
-  const payload = await response.json() as { tasks?: PlannerTask[]; updatedAt?: string; error?: string };
+  const payload = await response.json() as { tasks?: PlannerTask[]; registry?: PlannerRegistrySummary; updatedAt?: string; error?: string };
   if (!response.ok) throw new Error(payload.error || "Impossible de charger les simulations Planner.");
-  return { tasks: payload.tasks ?? [], updatedAt: payload.updatedAt ?? "" };
+  return { tasks: payload.tasks ?? [], registry: payload.registry ?? emptyPlannerRegistry(), updatedAt: payload.updatedAt ?? "" };
 }
 
 function emailList(value: string) {
@@ -246,7 +248,7 @@ function plannerTaskToOperation(task: PlannerTask, allTasks: PlannerTask[]): Com
 function plannerTasksForPoint(tasks: PlannerTask[], market: Market, meetingDate: string) {
   const currentMonth = safeIsoDate(meetingDate).slice(0, 7);
   const nextMonth = shiftMonth(`${currentMonth}-01`, 1).slice(0, 7);
-  return tasks.filter((task) => plannerTaskMatchesMarket(task, market) && (task.effectiveMonth === currentMonth || task.effectiveMonth === nextMonth));
+  return tasks.filter((task) => task.registrySource !== "point-recovery" && plannerTaskMatchesMarket(task, market) && (task.effectiveMonth === currentMonth || task.effectiveMonth === nextMonth));
 }
 
 function mergePlannerOperations(operations: CommercialOperation[], tasks: PlannerTask[], allTasks = tasks) {
@@ -766,6 +768,7 @@ export function MarketPulseApp() {
   const [plannerTasks, setPlannerTasks] = useState<PlannerTask[]>([]);
   const [plannerReady, setPlannerReady] = useState(false);
   const [plannerUpdatedAt, setPlannerUpdatedAt] = useState("");
+  const [plannerRegistry, setPlannerRegistry] = useState<PlannerRegistrySummary>(() => emptyPlannerRegistry());
   const [directorySavingId, setDirectorySavingId] = useState("");
   const [directoryEditor, setDirectoryEditor] = useState<DirectoryEditor | null>(null);
   const [directoryRevision, setDirectoryRevision] = useState(0);
@@ -904,9 +907,11 @@ export function MarketPulseApp() {
     try {
       const payload = await fetchPlannerTasks();
       setPlannerTasks(payload.tasks);
+      setPlannerRegistry(payload.registry);
       setPlannerUpdatedAt(payload.updatedAt);
     } catch (error) {
       setPlannerTasks([]);
+      setPlannerRegistry(emptyPlannerRegistry());
       setToast(error instanceof Error ? error.message : "Impossible de charger les simulations Planner.");
     } finally {
       setPlannerReady(true);
@@ -985,6 +990,7 @@ export function MarketPulseApp() {
     setPlannerTasks([]);
     setPlannerReady(false);
     setPlannerUpdatedAt("");
+    setPlannerRegistry(emptyPlannerRegistry());
     setView("read");
     setLoginPassword("");
     setToast("Déconnexion effectuée.");
@@ -1065,6 +1071,7 @@ export function MarketPulseApp() {
     if (!response.ok) throw new Error(payload.error || "Import Planner impossible.");
     const refreshed = await fetchPlannerTasks();
     setPlannerTasks(refreshed.tasks);
+    setPlannerRegistry(refreshed.registry);
     setPlannerUpdatedAt(refreshed.updatedAt);
     setPlannerReady(true);
     const relevant = plannerTasksForPoint(refreshed.tasks, market, data.meetingDate);
@@ -1426,7 +1433,7 @@ export function MarketPulseApp() {
     {(view === "read" || view === "edit") && periodNavigator}
     {(view === "edit" || view === "settings") && session.user && renderEditor()}
     {view === "read" && <main className="preview-page"><div className="preview-toolbar"><div><span>Lecture générale</span><strong>Choisis le marché et la semaine dans le calendrier ci-dessus.</strong></div><button className="secondary-button" onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> {session.user ? "Modifier ce point" : "Connexion GLOBAL pour modifier"}</button></div>{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Tu peux préparer puis sauvegarder le point de cette semaine." : "Aucun brouillon n’est affiché publiquement. Connecte-toi pour préparer cette semaine."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard data={data} market={market} archive={archive}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou connecte-toi pour la préparer.</p></div>}</main>}
-    {view === "stats" && session.user && (plannerReady && directoryReady ? <AnalystStatsDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} updatedAt={plannerUpdatedAt} onImport={importPlannerData}/> : <main className="analyst-stats-page"><div className="surface stats-loading"><span>Chargement de la source Planner et de l’annuaire GLOBAL…</span></div></main>)}
+    {view === "stats" && session.user && (plannerReady && directoryReady ? <AnalystStatsDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} registry={plannerRegistry} updatedAt={plannerUpdatedAt} onImport={importPlannerData}/> : <main className="analyst-stats-page"><div className="surface stats-loading"><span>Chargement de la source Planner et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "analyst" && session.user && (plannerReady && directoryReady ? <AnalystPointDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData}/> : <main className="analyst-point-page"><div className="surface stats-loading"><span>Chargement du point analyste, de Planner et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "mail" && <main className="mail-page">
       <div className="mail-toolbar"><div><span>Kit Outlook</span><strong>Le mail reste lisible seul, la pièce jointe conserve les interactions.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { setSection("mail"); chooseView("edit"); }}><Icon name={session.user ? "edit" : "lock"}/> Paramètres</button><button className="primary-button" onClick={copyMail}><Icon name="copy"/> Copier le corps du mail</button></div></div>

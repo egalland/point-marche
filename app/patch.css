@@ -197,6 +197,18 @@
 .analyst-mail-page { display: grid; gap: 15px; }
 .analyst-mail-page .html-attachment-card { width: 100%; }
 
+.supplier-source-note { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 19px; border-color: color-mix(in srgb,var(--accent) 24%,var(--line)); background: linear-gradient(135deg,var(--accent-soft),#ffffff02); }
+.supplier-source-note > div:first-child { display: grid; gap: 4px; max-width: 650px; }
+.supplier-source-note > div:first-child > span { color: var(--accent); font: 730 8px/1 var(--font-mono); text-transform: uppercase; }
+.supplier-source-note > div:first-child > strong { font-size: 14px; }
+.supplier-source-note > div:first-child > small { color: var(--muted); font-size: 8px; line-height: 1.5; }
+.supplier-source-note > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.supplier-source-note > div:last-child span { display: flex; align-items: baseline; gap: 5px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); background: #06101288; font-size: 8px; white-space: nowrap; }
+.supplier-source-note > div:last-child b { color: var(--text); font: 800 13px/1 var(--font-mono); }
+.supplier-source-note > div:last-child .recovered { color: var(--mint); border-color: rgba(114,245,197,.2); background: rgba(114,245,197,.06); }
+.supplier-source-note > div:last-child .warning { color: var(--peach); border-color: rgba(255,176,131,.2); background: rgba(255,176,131,.06); }
+.supplier-source-note > div:last-child .muted { opacity: .78; }
+
 .analyst-jira-import-dialog { width: min(900px,calc(100vw - 26px)); padding: 23px; }
 .analyst-dialog-heading { display: grid; gap: 5px; padding-right: 35px; }
 .analyst-dialog-heading > span { color: var(--aqua); font: 740 8px/1 var(--font-mono); text-transform: uppercase; }
@@ -239,6 +251,8 @@
   .supplier-dialog-stats, .analyst-point-kpis, .analyst-delay-grid, .analyst-visibility-grid, .analyst-history > div:last-child { grid-template-columns: 1fr 1fr; }
   .supplier-dashboard-filters { grid-template-columns: 1fr; }
   .supplier-dashboard-filters .stats-period-presets { grid-column: auto; }
+  .supplier-source-note { align-items: flex-start; flex-direction: column; }
+  .supplier-source-note > div:last-child { justify-content: flex-start; }
   .supplier-overall-chart > header { align-items: flex-start; flex-direction: column; }
   .supplier-overall-chart > header p { text-align: left; }
   .analyst-point-page { width: min(100% - 18px,1480px); }
