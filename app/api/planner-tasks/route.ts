@@ -1,16 +1,12 @@
-import { desc, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { marketDefinitions, plannerTasks, weeklyPoints } from "../../../db/schema";
+import { plannerTasks } from "../../../db/schema";
 import { parsePlannerTasks, type PlannerSpecialty, type PlannerTask } from "../../../lib/planner-import";
-import { mergePlannerTaskRegistry, recoverPlannerTasksFromPoints } from "../../../lib/planner-registry";
+import { loadPlannerRegistry } from "../../../lib/planner-registry-server";
 import { getEditorUser } from "../../simple-auth";
 
 function taskDate(task: PlannerTask, specialty: PlannerSpecialty) {
   return task.checklist.filter((item) => item.kind === specialty && item.date).map((item) => item.date).sort().at(-1) ?? "";
-}
-
-function serializeTask(row: typeof plannerTasks.$inferSelect) {
-  return JSON.parse(row.payload) as PlannerTask;
 }
 
 function routeError(error: unknown) {
@@ -19,33 +15,12 @@ function routeError(error: unknown) {
   return message;
 }
 
-function plannerTags(value: string) {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
-  } catch {
-    return [];
-  }
-}
-
 export async function GET() {
   try {
     const editor = await getEditorUser();
     if (!editor) return Response.json({ error: "Connecte-toi pour consulter les simulations Planner." }, { status: 401 });
-    const db = getDb();
-    const [rows, pointRows, marketRows] = await Promise.all([
-      db.select().from(plannerTasks).orderBy(desc(plannerTasks.effectiveMonth), desc(plannerTasks.updatedAt)).limit(5000),
-      db.select({ marketId: weeklyPoints.marketId, payload: weeklyPoints.payload, createdAt: weeklyPoints.createdAt }).from(weeklyPoints).orderBy(desc(weeklyPoints.createdAt)).limit(2000),
-      db.select({ id: marketDefinitions.id, plannerTags: marketDefinitions.plannerTags }).from(marketDefinitions),
-    ]);
-    const tagsByMarket = Object.fromEntries(marketRows.map((market) => [market.id, plannerTags(market.plannerTags)]));
-    const recovered = recoverPlannerTasksFromPoints(pointRows, tagsByMarket);
-    const registry = mergePlannerTaskRegistry(rows.map(serializeTask), recovered);
-    return Response.json({
-      tasks: registry.tasks,
-      registry: registry.summary,
-      updatedAt: [...rows.map((row) => row.updatedAt), ...pointRows.map((row) => row.createdAt)].sort().at(-1) ?? "",
-    }, { headers: { "Cache-Control": "no-store" } });
+    const registry = await loadPlannerRegistry();
+    return Response.json({ tasks: registry.tasks, registry: registry.summary, updatedAt: registry.updatedAt }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });
   }
