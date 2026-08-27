@@ -42,6 +42,7 @@ export type PlannerTask = {
   comments: string;
   metrics: PlannerTaskMetrics;
   workflowState: "active" | "completed" | "stopped" | "needs-closure";
+  registrySource?: "planner-import" | "point-recovery";
 };
 
 export type PlannerImport = {
@@ -267,8 +268,9 @@ export function parsePlannerTasks(text: string): PlannerImport {
       comments,
       metrics: parseMetrics(comments),
       workflowState: workflowState(cell(row, columns.status), checklist),
+      registrySource: "planner-import",
     } satisfies PlannerTask;
-  }).filter((task): task is PlannerTask => Boolean(task));
+  }).filter((task) => task !== null);
   return { format: detectedFormat(repaired), tasks, ignoredRows };
 }
 

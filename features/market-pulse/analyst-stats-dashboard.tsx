@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { buildAnalystStats, type AnalystStatsMarket, type PlannerDelaySummary } from "@/lib/analyst-stats";
 import type { GlobalDirectoryUser } from "@/lib/global-directory";
 import type { PlannerSpecialty, PlannerTask } from "@/lib/planner-import";
+import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 import { PlannerImportDialog } from "./planner-import-dialog";
 import { SupplierVariationDashboard } from "./supplier-variation-dashboard";
 
@@ -11,6 +12,7 @@ type Props = {
   tasks: PlannerTask[];
   users: GlobalDirectoryUser[];
   markets: AnalystStatsMarket[];
+  registry: PlannerRegistrySummary;
   updatedAt: string;
   onImport: (rawText: string) => Promise<{ imported: number; message: string }>;
 };
@@ -82,7 +84,7 @@ function delayMovementLabel(summary: PlannerDelaySummary) {
   return `${summary.movement > 0 ? "+" : ""}${daysLabel(summary.movement)} vs période précédente`;
 }
 
-export function AnalystStatsDashboard({ tasks, users, markets, updatedAt, onImport }: Props) {
+export function AnalystStatsDashboard({ tasks, users, markets, registry, updatedAt, onImport }: Props) {
   const analysts = useMemo(() => users.filter((user) => user.role === "analyste-tarif-referentiel").sort((left, right) => left.name.localeCompare(right.name, "fr")), [users]);
   const initialFrom = useMemo(() => monthsAgo(5), []);
   const initialTo = useMemo(() => today(), []);
@@ -131,12 +133,12 @@ export function AnalystStatsDashboard({ tasks, users, markets, updatedAt, onImpo
   return <main className="analyst-stats-page">
     <header className="stats-hero">
       <div><span>Activité tarif et référentiel</span><h1>Statistiques analystes</h1><p>Lecture descriptive des simulations et contrôles identifiés dans l’export Planner, sans objectif individuel.</p></div>
-      <div className="stats-hero-actions"><PlannerImportDialog markets={markets} onImport={onImport}/><div className="stats-freshness"><span>Dernier import</span><strong>{updatedAt ? new Date(updatedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "Aucun import"}</strong><small>{tasks.length} tâche{tasks.length > 1 ? "s" : ""} Planner disponible{tasks.length > 1 ? "s" : ""}</small></div><small>L’import actualise aussi les simulations du point actif.</small></div>
+      <div className="stats-hero-actions"><PlannerImportDialog markets={markets} onImport={onImport}/><div className="stats-freshness"><span>Source actualisée</span><strong>{updatedAt ? new Date(updatedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "Aucun import"}</strong><small>{tasks.length} tâche{tasks.length > 1 ? "s" : ""} Planner disponible{tasks.length > 1 ? "s" : ""}</small></div><small>L’import actualise aussi les simulations du point actif.</small></div>
     </header>
 
     <nav className="stats-view-tabs" aria-label="Vue des statistiques"><button type="button" className={statsView === "activity" ? "active" : ""} onClick={() => setStatsView("activity")}>Activité analystes</button><button type="button" className={statsView === "suppliers" ? "active" : ""} onClick={() => setStatsView("suppliers")}>Variations fournisseurs</button></nav>
 
-    {statsView === "suppliers" ? <SupplierVariationDashboard tasks={tasks} markets={markets}/> : <>
+    {statsView === "suppliers" ? <SupplierVariationDashboard tasks={tasks} markets={markets} registry={registry}/> : <>
 
     <section className="surface stats-filters" aria-label="Filtres des statistiques">
       <div className="stats-period-presets"><span>Période rapide</span><div><button type="button" onClick={() => applyPeriod("previousWeek")}>Semaine dernière</button><button type="button" onClick={() => applyPeriod("cycle20")}>Mois dernier · 20 au 20</button><button type="button" onClick={() => applyPeriod("30d")}>30 jours</button><button type="button" onClick={() => applyPeriod("3m")}>3 mois</button><button type="button" onClick={() => applyPeriod("6m")}>6 mois</button><button type="button" onClick={() => applyPeriod("year")}>Cette année</button></div></div>

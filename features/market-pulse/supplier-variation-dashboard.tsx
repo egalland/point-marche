@@ -4,6 +4,7 @@ import { useMemo, useState, type PointerEvent } from "react";
 import { AppDialog } from "@/components/app-dialog";
 import { averageVariation, buildSupplierVariations, type SupplierVariationPoint } from "@/lib/supplier-variations";
 import type { PlannerTask } from "@/lib/planner-import";
+import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 
 type Market = { id: string; name: string; plannerTags: string[] };
 type SeriesKey = "globalVariation" | "weightedVariation";
@@ -118,7 +119,7 @@ function aggregateMonthly(points: SupplierVariationPoint[]) {
   });
 }
 
-export function SupplierVariationDashboard({ tasks, markets }: { tasks: PlannerTask[]; markets: Market[] }) {
+export function SupplierVariationDashboard({ tasks, markets, registry }: { tasks: PlannerTask[]; markets: Market[]; registry: PlannerRegistrySummary }) {
   const allPoints = useMemo(() => buildSupplierVariations(tasks), [tasks]);
   const [from, setFrom] = useState(() => monthsAgo(5));
   const [to, setTo] = useState(today);
@@ -147,6 +148,7 @@ export function SupplierVariationDashboard({ tasks, markets }: { tasks: PlannerT
   const toggleSort = (key: typeof sort.key) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
   const mark = (key: typeof sort.key) => sort.key === key ? sort.direction === "asc" ? " ↑" : " ↓" : "";
   return <section className="supplier-dashboard">
+    <div className="surface supplier-source-note"><div><span>Source Planner consolidée</span><strong>Un seul registre pour les points et les statistiques</strong><small>Les simulations conservées dans les points marché complètent automatiquement l’import Planner, sans doublon grâce à l’ID de tâche.</small></div><div><span><b>{registry.imported}</b> importées</span><span className={registry.recovered ? "recovered" : ""}><b>{registry.recovered}</b> récupérées des points</span><span><b>{registry.usableVariations}</b> variations exploitables</span>{registry.enriched > 0 && <span className="recovered"><b>{registry.enriched}</b> complétées</span>}{registry.withoutVariation > 0 && <span className="muted"><b>{registry.withoutVariation}</b> sans variation</span>}{registry.withoutMonth > 0 && <span className="warning"><b>{registry.withoutMonth}</b> sans mois reconnu</span>}</div></div>
     <div className="surface supplier-dashboard-filters"><div className="stats-period-presets"><span>Période rapide</span><div><button type="button" onClick={() => applyPreset(1)}>1 mois</button><button type="button" onClick={() => applyPreset(3)}>3 mois</button><button type="button" onClick={() => applyPreset(6)}>6 mois</button><button type="button" onClick={() => applyPreset("year")}>Cette année</button></div></div><label><span>Du</span><input type="date" value={from} onChange={(event) => setFrom(event.target.value)}/></label><label><span>Au</span><input type="date" value={to} onChange={(event) => setTo(event.target.value)}/></label><label><span>Marché</span><select value={marketId} onChange={(event) => setMarketId(event.target.value)}><option value="all">Tous les marchés</option>{markets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label><span>Fournisseur</span><select value={supplierKey} onChange={(event) => setSupplierKey(event.target.value)}><option value="all">Tous les fournisseurs</option>{suppliers.map((item) => <option value={item.key} key={item.key}>{item.label}{item.code ? ` · ${item.code}` : ""}</option>)}</select></label></div>
     <div className="stats-kpis supplier-kpis"><article><span>Observations</span><strong>{filtered.length}</strong><small>{new Set(filtered.map((point) => point.supplierKey)).size} fournisseur{new Set(filtered.map((point) => point.supplierKey)).size > 1 ? "s" : ""}</small></article><article><span>Moyenne GLOBAL</span><strong>{percent(averageVariation(filtered, "globalVariation"))}</strong><small>Valeurs renseignées uniquement</small></article><article><span>Moyenne pondérée</span><strong>{percent(averageVariation(filtered, "weightedVariation"))}</strong><small>Valeurs renseignées uniquement</small></article><article><span>Données doubles</span><strong>{filtered.filter((point) => point.globalVariation !== null && point.weightedVariation !== null).length}</strong><small>GLOBAL et pondérée disponibles</small></article></div>
     <article className="surface supplier-overall-chart"><header><div><span>Lecture consolidée</span><strong>Variation moyenne par mois</strong></div><p>Chaque point est la moyenne des fournisseurs visibles. Les valeurs absentes ne sont jamais remplacées par zéro.</p></header><SupplierVariationChart points={series}/></article>
