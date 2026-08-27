@@ -4,7 +4,7 @@ import { globalUserMarkets, globalUsers, jiraMarketAssignments, marketDefinition
 import { isGlobalRole, roleMailMode, roleUsesAutomaticJira, type GlobalRole } from "../../../lib/global-directory";
 import { getEditorUser } from "../../simple-auth";
 
-type UserPayload = { id?: unknown; name?: unknown; email?: unknown; usercode?: unknown; role?: unknown; marketId?: unknown; marketIds?: unknown };
+type UserPayload = { id?: unknown; name?: unknown; email?: unknown; usercode?: unknown; plannerAlias?: unknown; role?: unknown; marketId?: unknown; marketIds?: unknown };
 
 async function requireEditor() {
   const editor = await getEditorUser();
@@ -77,6 +77,7 @@ async function serializeDirectory() {
     name: user.name,
     email: user.email,
     usercode: user.usercode,
+    plannerAlias: user.plannerAlias,
     role: user.role,
     marketIds: links.filter((link) => link.userId === user.id).map((link) => link.marketId),
   }));
@@ -107,6 +108,7 @@ export async function POST(request: Request) {
     const name = cleanText(body.name);
     const email = cleanEmail(body.email);
     const usercode = cleanUserCode(body.usercode);
+    const plannerAlias = cleanText(body.plannerAlias, 80);
     const role = cleanRole(body.role);
     const marketIds = role === "manager-tarif" ? [] : await validateMarkets(cleanMarketIds(body.marketId, body.marketIds));
     if (!name || !email) return Response.json({ error: "Nom et adresse e-mail sont requis." }, { status: 400 });
@@ -122,8 +124,8 @@ export async function POST(request: Request) {
     if (managerConflict) return managerConflict;
     const id = knownEmail?.id ?? crypto.randomUUID();
     const [created] = knownEmail
-      ? await db.update(globalUsers).set({ name, usercode, role, isActive: true, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(globalUsers.id, id)).returning()
-      : await db.insert(globalUsers).values({ id, name, email, usercode, role }).returning();
+      ? await db.update(globalUsers).set({ name, usercode, plannerAlias, role, isActive: true, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(globalUsers.id, id)).returning()
+      : await db.insert(globalUsers).values({ id, name, email, usercode, plannerAlias, role }).returning();
     await syncLinks(id, knownEmail?.usercode ?? usercode, usercode, role, marketIds);
     return Response.json({ user: { ...created, marketIds }, users: await serializeDirectory() }, { status: 201 });
   } catch (error) {
@@ -140,6 +142,7 @@ export async function PATCH(request: Request) {
     const name = cleanText(body.name);
     const email = cleanEmail(body.email);
     const usercode = cleanUserCode(body.usercode);
+    const plannerAlias = cleanText(body.plannerAlias, 80);
     const role = cleanRole(body.role);
     const marketIds = role === "manager-tarif" ? [] : await validateMarkets(cleanMarketIds(body.marketId, body.marketIds));
     if (!id || !name || !email) return Response.json({ error: "Utilisateur, nom et adresse e-mail sont requis." }, { status: 400 });
@@ -153,7 +156,7 @@ export async function PATCH(request: Request) {
     if (!existing) return Response.json({ error: "Utilisateur introuvable." }, { status: 404 });
     const [usercodeConflict] = usercode ? await db.select({ id: globalUsers.id }).from(globalUsers).where(and(eq(globalUsers.usercode, usercode), eq(globalUsers.isActive, true))).limit(1) : [];
     if (usercodeConflict && usercodeConflict.id !== id) return Response.json({ error: "Ce USERCODE existe déjà dans l’annuaire." }, { status: 409 });
-    const [updated] = await db.update(globalUsers).set({ name, email, usercode, role, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(globalUsers.id, id)).returning();
+    const [updated] = await db.update(globalUsers).set({ name, email, usercode, plannerAlias, role, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(globalUsers.id, id)).returning();
     await syncLinks(id, existing.usercode, usercode, role, marketIds);
     return Response.json({ user: { ...updated, marketIds }, users: await serializeDirectory() });
   } catch (error) {

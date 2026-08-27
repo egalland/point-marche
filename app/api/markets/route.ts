@@ -24,6 +24,25 @@ function cleanHex(value: unknown) {
   return /^#[0-9A-F]{6}$/.test(hex) ? hex : "";
 }
 
+function cleanPlannerTags(value: unknown) {
+  const values = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[;,\n]/) : [];
+  return Array.from(new Set(values
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim().toLocaleUpperCase("fr-FR").replace(/\s+/g, " ").slice(0, 40))
+    .filter(Boolean))).slice(0, 20);
+}
+
+function serializeMarket(row: typeof marketDefinitions.$inferSelect) {
+  let plannerTags: string[] = [];
+  try {
+    const parsed = JSON.parse(row.plannerTags) as unknown;
+    if (Array.isArray(parsed)) plannerTags = cleanPlannerTags(parsed);
+  } catch {
+    plannerTags = cleanPlannerTags(row.plannerTags);
+  }
+  return { ...row, plannerTags };
+}
+
 function cleanDays(value: unknown, fallback: number) {
   const days = Number(value);
   return Number.isInteger(days) && days >= 1 && days <= 365 ? days : fallback;
@@ -47,7 +66,7 @@ export async function GET() {
     const markets = await db.select().from(marketDefinitions)
       .where(eq(marketDefinitions.isActive, true))
       .orderBy(asc(marketDefinitions.position), asc(marketDefinitions.name));
-    return Response.json({ markets });
+    return Response.json({ markets: markets.map(serializeMarket) });
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });
   }
@@ -57,7 +76,7 @@ export async function POST(request: Request) {
   try {
     const denied = await requireEditor();
     if (denied) return denied;
-    const body = await request.json() as { name?: unknown; shortCode?: unknown; tone?: unknown; colorHex?: unknown; jiraWarningDays?: unknown; jiraCriticalDays?: unknown };
+    const body = await request.json() as { name?: unknown; shortCode?: unknown; tone?: unknown; colorHex?: unknown; plannerTags?: unknown; jiraWarningDays?: unknown; jiraCriticalDays?: unknown };
     const name = cleanName(body.name);
     if (!name) return Response.json({ error: "Le nom du marché est requis." }, { status: 400 });
     const jiraWarningDays = Math.min(364, cleanDays(body.jiraWarningDays, 10));
@@ -72,13 +91,14 @@ export async function POST(request: Request) {
         shortCode: cleanShort(body.shortCode, name),
         tone: cleanTone(body.tone),
         colorHex: cleanHex(body.colorHex),
+        plannerTags: JSON.stringify(cleanPlannerTags(body.plannerTags)),
         jiraWarningDays,
         jiraCriticalDays,
         position: Number(positionResult?.value ?? -1) + 1,
         isActive: true,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       }).where(eq(marketDefinitions.id, existing.id)).returning();
-      return Response.json({ market: restored }, { status: 201 });
+      return Response.json({ market: serializeMarket(restored) }, { status: 201 });
     }
     const [market] = await db.insert(marketDefinitions).values({
       id: `market-${crypto.randomUUID()}`,
@@ -86,11 +106,12 @@ export async function POST(request: Request) {
       shortCode: cleanShort(body.shortCode, name),
       tone: cleanTone(body.tone),
       colorHex: cleanHex(body.colorHex),
+      plannerTags: JSON.stringify(cleanPlannerTags(body.plannerTags)),
       jiraWarningDays,
       jiraCriticalDays,
       position: Number(positionResult?.value ?? -1) + 1,
     }).returning();
-    return Response.json({ market }, { status: 201 });
+    return Response.json({ market: serializeMarket(market) }, { status: 201 });
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });
   }
@@ -100,7 +121,7 @@ export async function PATCH(request: Request) {
   try {
     const denied = await requireEditor();
     if (denied) return denied;
-    const body = await request.json() as { id?: unknown; name?: unknown; shortCode?: unknown; tone?: unknown; colorHex?: unknown; jiraWarningDays?: unknown; jiraCriticalDays?: unknown };
+    const body = await request.json() as { id?: unknown; name?: unknown; shortCode?: unknown; tone?: unknown; colorHex?: unknown; plannerTags?: unknown; jiraWarningDays?: unknown; jiraCriticalDays?: unknown };
     const id = typeof body.id === "string" ? body.id.trim() : "";
     const name = cleanName(body.name);
     if (!id || !name) return Response.json({ error: "Identifiant et nom du marché requis." }, { status: 400 });
@@ -113,12 +134,13 @@ export async function PATCH(request: Request) {
       shortCode: cleanShort(body.shortCode, name),
       tone: cleanTone(body.tone),
       colorHex: cleanHex(body.colorHex),
+      plannerTags: JSON.stringify(cleanPlannerTags(body.plannerTags)),
       jiraWarningDays,
       jiraCriticalDays,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     }).where(and(eq(marketDefinitions.id, id), eq(marketDefinitions.isActive, true))).returning();
     if (!market) return Response.json({ error: "Marché introuvable." }, { status: 404 });
-    return Response.json({ market });
+    return Response.json({ market: serializeMarket(market) });
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });
   }
