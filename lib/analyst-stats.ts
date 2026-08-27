@@ -31,6 +31,31 @@ export type AnalystContribution = {
   workflowState: PlannerTask["workflowState"];
 };
 
+export type PlannerDelayKind = "receipt" | "simulation" | "marketReturn" | "control";
+
+export type PlannerDelaySample = {
+  taskId: string;
+  taskName: string;
+  kind: PlannerDelayKind;
+  startDate: string;
+  endDate: string;
+  days: number;
+  marketIds: string[];
+  marketTags: string[];
+  analystIds: string[];
+};
+
+export type PlannerDelaySummary = {
+  kind: PlannerDelayKind;
+  label: string;
+  definition: string;
+  average: number | null;
+  median: number | null;
+  sampleCount: number;
+  previousAverage: number | null;
+  movement: number | null;
+};
+
 export type AnalystStats = {
   contributions: AnalystContribution[];
   previousContributions: AnalystContribution[];
@@ -44,7 +69,16 @@ export type AnalystStats = {
   unmatchedNames: string[];
   monthly: { period: string; label: string; simulations: number; controls: number; total: number }[];
   byAnalyst: { id: string; name: string; simulations: number; controls: number; total: number }[];
+  delaySamples: PlannerDelaySample[];
+  delaySummaries: PlannerDelaySummary[];
 };
+
+const delayDefinitions: { kind: PlannerDelayKind; label: string; definition: string; start: (item: PlannerChecklistItem) => boolean; end: (item: PlannerChecklistItem) => boolean }[] = [
+  { kind: "receipt", label: "Réception fournisseur", definition: "Avis de hausse → Tarif fournisseur", start: (item) => /^avis de hausse\b/.test(normalized(item.label)), end: (item) => /^tarif fournisseur\b/.test(normalized(item.label)) },
+  { kind: "simulation", label: "Traitement simulation", definition: "Tarif fournisseur → Simulation", start: (item) => /^tarif fournisseur\b/.test(normalized(item.label)), end: (item) => item.kind === "simulation" },
+  { kind: "marketReturn", label: "Retour marché", definition: "Simulation → Validation CDM", start: (item) => item.kind === "simulation", end: (item) => /^validation cdm\b/.test(normalized(item.label)) },
+  { kind: "control", label: "Contrôle", definition: "Intégration → Contrôle", start: (item) => /^integration\b/.test(normalized(item.label)), end: (item) => item.kind === "control" },
+];
 
 function normalized(value: string) {
   return value
@@ -102,6 +136,46 @@ export function plannerContributions(tasks: PlannerTask[], users: GlobalDirector
   });
 }
 
+function checklistDate(task: PlannerTask, matcher: (item: PlannerChecklistItem) => boolean) {
+  return task.checklist.find((item) => Boolean(item.date) && matcher(item))?.date ?? "";
+}
+
+function calendarDays(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T12:00:00Z`).valueOf();
+  const end = new Date(`${endDate}T12:00:00Z`).valueOf();
+  const days = Math.round((end - start) / 86400000);
+  return Number.isFinite(days) && days >= 0 ? days : null;
+}
+
+function taskAnalystIds(task: PlannerTask, users: GlobalDirectoryUser[]) {
+  return Array.from(new Set(task.checklist.filter((item) => item.kind === "simulation" || item.kind === "control").map((item) => matchAnalyst(item.analystName, users)?.id ?? "").filter(Boolean)));
+}
+
+export function plannerDelaySamples(tasks: PlannerTask[], users: GlobalDirectoryUser[], markets: AnalystStatsMarket[]) {
+  return tasks.flatMap((task) => {
+    const marketIds = marketIdsForTask(task, markets);
+    const analystIds = taskAnalystIds(task, users);
+    return delayDefinitions.flatMap((definition) => {
+      const startDate = checklistDate(task, definition.start);
+      const endDate = checklistDate(task, definition.end);
+      if (!startDate || !endDate) return [];
+      const days = calendarDays(startDate, endDate);
+      if (days === null) return [];
+      return [{
+        taskId: task.externalId,
+        taskName: task.taskName,
+        kind: definition.kind,
+        startDate,
+        endDate,
+        days,
+        marketIds,
+        marketTags: task.labels,
+        analystIds,
+      } satisfies PlannerDelaySample];
+    });
+  });
+}
+
 function addDays(dateString: string, days: number) {
   const date = new Date(`${dateString}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -139,13 +213,41 @@ function applyFilters(contributions: AnalystContribution[], filters: AnalystStat
   });
 }
 
+function applyDelayFilters(samples: PlannerDelaySample[], filters: AnalystStatsFilters, from = filters.from, to = filters.to) {
+  const selected = new Set(filters.analystIds);
+  return samples.filter((sample) => {
+    if (sample.endDate < from || sample.endDate > to) return false;
+    if (filters.marketId !== "all" && !sample.marketIds.includes(filters.marketId)) return false;
+    if (selected.size && !sample.analystIds.some((id) => selected.has(id))) return false;
+    return true;
+  });
+}
+
+function rounded(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function average(values: number[]) {
+  return values.length ? rounded(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
+}
+
+function median(values: number[]) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return rounded(sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2);
+}
+
 export function buildAnalystStats(tasks: PlannerTask[], users: GlobalDirectoryUser[], markets: AnalystStatsMarket[], filters: AnalystStatsFilters): AnalystStats {
   const source = plannerContributions(tasks, users, markets);
+  const delaySource = plannerDelaySamples(tasks, users, markets);
   const contributions = applyFilters(source, filters);
   const span = daySpan(filters.from, filters.to);
   const previousTo = addDays(filters.from, -1);
   const previousFrom = addDays(previousTo, -(span - 1));
   const previousContributions = applyFilters(source, filters, previousFrom, previousTo);
+  const delaySamples = applyDelayFilters(delaySource, filters);
+  const previousDelaySamples = applyDelayFilters(delaySource, filters, previousFrom, previousTo);
   const simulations = contributions.filter((item) => item.specialty === "simulation").length;
   const controls = contributions.filter((item) => item.specialty === "control").length;
   const attributed = contributions.filter((item) => item.analystId).length;
@@ -166,6 +268,22 @@ export function buildAnalystStats(tasks: PlannerTask[], users: GlobalDirectoryUs
     current.total += 1;
     analystMap.set(id, current);
   });
+  const delaySummaries = delayDefinitions.map((definition) => {
+    const values = delaySamples.filter((sample) => sample.kind === definition.kind).map((sample) => sample.days);
+    const previousValues = previousDelaySamples.filter((sample) => sample.kind === definition.kind).map((sample) => sample.days);
+    const currentAverage = average(values);
+    const previousAverage = average(previousValues);
+    return {
+      kind: definition.kind,
+      label: definition.label,
+      definition: definition.definition,
+      average: currentAverage,
+      median: median(values),
+      sampleCount: values.length,
+      previousAverage,
+      movement: currentAverage !== null && previousAverage !== null ? rounded(currentAverage - previousAverage) : null,
+    } satisfies PlannerDelaySummary;
+  });
   return {
     contributions,
     previousContributions,
@@ -179,5 +297,7 @@ export function buildAnalystStats(tasks: PlannerTask[], users: GlobalDirectoryUs
     unmatchedNames,
     monthly,
     byAnalyst: Array.from(analystMap.values()).sort((left, right) => left.name.localeCompare(right.name, "fr")),
+    delaySamples,
+    delaySummaries,
   };
 }
