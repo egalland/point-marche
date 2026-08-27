@@ -13,6 +13,7 @@ export type GlobalDirectoryUser = {
   name: string;
   email: string;
   usercode: string;
+  plannerAlias: string;
   role: GlobalRole;
   marketIds: string[];
 };

@@ -7,6 +7,7 @@ export const marketDefinitions = sqliteTable("market_definitions", {
   shortCode: text("short_code").notNull(),
   tone: text("tone").notNull().default("mint"),
   colorHex: text("color_hex").notNull().default(""),
+  plannerTags: text("planner_tags").notNull().default("[]"),
   jiraWarningDays: integer("jira_warning_days").notNull().default(10),
   jiraCriticalDays: integer("jira_critical_days").notNull().default(20),
   position: integer("position").notNull().default(0),
@@ -77,6 +78,7 @@ export const globalUsers = sqliteTable("global_users", {
   name: text("name").notNull(),
   email: text("email").notNull(),
   usercode: text("jira_name").notNull(),
+  plannerAlias: text("planner_alias").notNull().default(""),
   role: text("role").notNull().default("autre"),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -96,4 +98,23 @@ export const globalUserMarkets = sqliteTable("global_user_markets", {
   uniqueIndex("global_user_markets_user_market_idx").on(table.userId, table.marketId),
   index("global_user_markets_market_idx").on(table.marketId),
   index("global_user_markets_user_idx").on(table.userId),
+]);
+
+export const plannerTasks = sqliteTable("planner_tasks", {
+  externalId: text("external_id").primaryKey(),
+  taskName: text("task_name").notNull(),
+  effectiveMonth: text("effective_month").notNull().default(""),
+  plannerStatus: text("planner_status").notNull().default(""),
+  category: text("category").notNull().default(""),
+  simulationDate: text("simulation_date").notNull().default(""),
+  controlDate: text("control_date").notNull().default(""),
+  labels: text("labels").notNull().default("[]"),
+  payload: text("payload").notNull(),
+  importedBy: text("imported_by").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("planner_tasks_effective_month_idx").on(table.effectiveMonth),
+  index("planner_tasks_simulation_date_idx").on(table.simulationDate),
+  index("planner_tasks_control_date_idx").on(table.controlDate),
 ]);
