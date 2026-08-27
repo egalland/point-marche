@@ -1,0 +1,161 @@
+import type { ModuleWidth } from "@/components/module-layout-editor";
+import type { GlobalDirectoryUser } from "./global-directory";
+import { parseJiraAssigneeSummary } from "./jira-import";
+
+export type AnalystPointModule = "overview" | "jira" | "planner" | "cycle20" | "dossiers";
+export type AnalystJiraTicket = { id: string; key: string; internalId: string; summary: string; status: string; createdAt: string; updatedAt: string; link: string };
+export type AnalystDossier = { id: string; title: string; status: string; action: string; deadline: string; comment: string; progress: number; showProgress: boolean; sourceId?: string; carriedFromYear?: number; carriedFromWeek?: number };
+export type AnalystPointPreferences = {
+  order: AnalystPointModule[];
+  widths: Record<AnalystPointModule, ModuleWidth>;
+  readModules: Record<AnalystPointModule, boolean>;
+  mailModules: Record<AnalystPointModule, boolean>;
+  htmlModules: Record<AnalystPointModule, boolean>;
+  jiraWarningDays: number;
+  jiraCriticalDays: number;
+};
+export type AnalystPointData = {
+  analystId: string;
+  meetingDate: string;
+  periodFrom: string;
+  periodTo: string;
+  includeCycle20: boolean;
+  cycleFrom: string;
+  cycleTo: string;
+  note: string;
+  dossiers: AnalystDossier[];
+  jira: AnalystJiraTicket[];
+  preferences: AnalystPointPreferences;
+  mail: { to: string; cc: string; subject: string; intro: string; autoTo: string[] };
+};
+export type AnalystPointRecord = { id: string; analystId: string; year: number; week: number; meetingDate: string; periodFrom: string; periodTo: string; data: AnalystPointData; createdAt: string; updatedAt: string };
+
+export const analystPointModules: { id: AnalystPointModule; label: string; detail: string }[] = [
+  { id: "overview", label: "Synthèse", detail: "KPI principaux et message de la semaine" },
+  { id: "jira", label: "Tickets Jira ouverts", detail: "Stock, évolution et absence d’activité" },
+  { id: "planner", label: "Simulations & contrôles", detail: "Activité Planner sur la période principale" },
+  { id: "cycle20", label: "Repère 20 → 20", detail: "Bloc séparé sur le dernier cycle terminé" },
+  { id: "dossiers", label: "Dossiers", detail: "À faire, en cours, en attente et faits" },
+];
+
+export function isoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+export function previousWeekRange(reference = new Date()) {
+  const current = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate(), 12));
+  const monday = new Date(current);
+  monday.setUTCDate(current.getUTCDate() - ((current.getUTCDay() + 6) % 7) - 7);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  return { from: isoDate(monday), to: isoDate(sunday) };
+}
+
+export function lastCompletedCycle20(reference = new Date()) {
+  const current = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate(), 12));
+  const end = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 20, 12));
+  if (current < end) end.setUTCMonth(end.getUTCMonth() - 1);
+  const start = new Date(end);
+  start.setUTCMonth(start.getUTCMonth() - 1);
+  return { from: isoDate(start), to: isoDate(end) };
+}
+
+export function isoWeekParts(dateString: string) {
+  const date = new Date(`${dateString}T12:00:00Z`);
+  const target = new Date(date.valueOf());
+  const day = (target.getUTCDay() + 6) % 7;
+  target.setUTCDate(target.getUTCDate() - day + 3);
+  const year = target.getUTCFullYear();
+  const firstThursday = new Date(Date.UTC(year, 0, 4, 12));
+  const firstDay = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDay + 3);
+  return { year, week: 1 + Math.round((target.valueOf() - firstThursday.valueOf()) / 604800000) };
+}
+
+export function shiftWeek(dateString: string, amount: number) {
+  const date = new Date(`${dateString}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + amount * 7);
+  const day = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - day);
+  const from = isoDate(date);
+  date.setUTCDate(date.getUTCDate() + 6);
+  return { from, to: isoDate(date) };
+}
+
+function allVisible() {
+  return analystPointModules.reduce((result, module) => ({ ...result, [module.id]: true }), {} as Record<AnalystPointModule, boolean>);
+}
+
+export function initialAnalystPoint(analyst: GlobalDirectoryUser, manager?: GlobalDirectoryUser): AnalystPointData {
+  const period = previousWeekRange();
+  const cycle = lastCompletedCycle20();
+  const recipients = [analyst.email, manager?.email ?? ""].filter(Boolean);
+  return {
+    analystId: analyst.id,
+    meetingDate: period.to,
+    periodFrom: period.from,
+    periodTo: period.to,
+    includeCycle20: false,
+    cycleFrom: cycle.from,
+    cycleTo: cycle.to,
+    note: "Sécuriser les dossiers prioritaires et partager les points nécessitant un arbitrage.",
+    dossiers: [],
+    jira: [],
+    preferences: {
+      order: analystPointModules.map((module) => module.id),
+      widths: { overview: "full", jira: "full", planner: "full", cycle20: "half", dossiers: "full" },
+      readModules: allVisible(),
+      mailModules: allVisible(),
+      htmlModules: allVisible(),
+      jiraWarningDays: 10,
+      jiraCriticalDays: 20,
+    },
+    mail: { to: recipients.join("; "), cc: "", subject: `Point analyste — ${analyst.name}`, intro: `Bonjour, voici le point hebdomadaire de ${analyst.name}.`, autoTo: recipients },
+  };
+}
+
+export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUser, manager?: GlobalDirectoryUser): AnalystPointData {
+  const fallback = initialAnalystPoint(analyst, manager);
+  if (!value || typeof value !== "object") return fallback;
+  const source = value as Partial<AnalystPointData>;
+  const preferences = source.preferences && typeof source.preferences === "object" ? source.preferences : fallback.preferences;
+  const visible = (candidate: unknown) => ({ ...allVisible(), ...(candidate && typeof candidate === "object" ? candidate : {}) });
+  const order = Array.isArray(preferences.order) ? [...preferences.order.filter((id) => analystPointModules.some((module) => module.id === id)), ...analystPointModules.map((module) => module.id).filter((id) => !preferences.order.includes(id))] : fallback.preferences.order;
+  return {
+    ...fallback,
+    ...source,
+    analystId: analyst.id,
+    dossiers: Array.isArray(source.dossiers) ? source.dossiers : [],
+    jira: Array.isArray(source.jira) ? source.jira : [],
+    preferences: {
+      ...fallback.preferences,
+      ...preferences,
+      order,
+      widths: { ...fallback.preferences.widths, ...(preferences.widths ?? {}) },
+      readModules: visible(preferences.readModules),
+      mailModules: visible(preferences.mailModules),
+      htmlModules: visible(preferences.htmlModules),
+      jiraWarningDays: Math.max(1, Number(preferences.jiraWarningDays) || 10),
+      jiraCriticalDays: Math.max((Number(preferences.jiraWarningDays) || 10) + 1, Number(preferences.jiraCriticalDays) || 20),
+    },
+    mail: { ...fallback.mail, ...(source.mail ?? {}) },
+  };
+}
+
+function closedStatus(status: string) {
+  return /(termin|cl[oô]tur|r[eé]solu|annul|done)/i.test(status);
+}
+
+export function analystJiraTickets(rawText: string, analyst: GlobalDirectoryUser): AnalystJiraTicket[] {
+  const usercode = analyst.usercode.trim().toUpperCase();
+  if (!/^[A-Z]\d{7}$/.test(usercode)) return [];
+  return parseJiraAssigneeSummary(rawText).detailedTickets
+    .filter((ticket) => ticket.assigneeUserCode.toUpperCase() === usercode && !closedStatus(ticket.status))
+    .map((ticket) => ({ id: `${ticket.key}:${ticket.updatedAt}`, key: ticket.key, internalId: ticket.internalId, summary: ticket.summary, status: ticket.status, createdAt: ticket.createdAt, updatedAt: ticket.updatedAt, link: ticket.link }));
+}
+
+export function daysBetween(from: string, to: string) {
+  const start = new Date(from.includes("T") ? from : `${from}T12:00:00Z`).valueOf();
+  const end = new Date(to.includes("T") ? to : `${to}T12:00:00Z`).valueOf();
+  return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.floor((end - start) / 86400000)) : 0;
+}

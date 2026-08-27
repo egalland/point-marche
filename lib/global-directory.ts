@@ -54,3 +54,17 @@ AND "Groupes d'affectation" in (
 AND statusCategory != Done
 AND assignee in (${usercodes.join(", ")})`;
 }
+
+export function buildAnalystJql(user: GlobalDirectoryUser | undefined) {
+  const usercode = user?.usercode.trim().toUpperCase() ?? "";
+  if (user?.role !== "analyste-tarif-referentiel" || !/^[A-Z]\d{7}$/.test(usercode)) return "";
+  return `project = "JSD-Distribution Matériaux Bois Panneaux"
+AND "Groupes d'affectation" in (
+    "JSD-GLOBAL [JSD-GLOBAL]",
+    "JSD-GLOBAL-APPRO [JSD-GLOBAL-APPRO]",
+    "JSD-GLOBAL-CODIF [JSD-GLOBAL-CODIF]",
+    "JSD-GLOBAL-TARIF [JSD-GLOBAL-TARIF]"
+)
+AND statusCategory != Done
+AND assignee = ${usercode}`;
+}

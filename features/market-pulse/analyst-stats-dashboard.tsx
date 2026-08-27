@@ -5,6 +5,7 @@ import { buildAnalystStats, type AnalystStatsMarket, type PlannerDelaySummary } 
 import type { GlobalDirectoryUser } from "@/lib/global-directory";
 import type { PlannerSpecialty, PlannerTask } from "@/lib/planner-import";
 import { PlannerImportDialog } from "./planner-import-dialog";
+import { SupplierVariationDashboard } from "./supplier-variation-dashboard";
 
 type Props = {
   tasks: PlannerTask[];
@@ -92,6 +93,7 @@ export function AnalystStatsDashboard({ tasks, users, markets, updatedAt, onImpo
   const [specialty, setSpecialty] = useState<PlannerSpecialty | "all">("all");
   const [analystIds, setAnalystIds] = useState<string[]>([]);
   const [detailSort, setDetailSort] = useState<{ key: DetailSort; direction: "asc" | "desc" }>({ key: "date", direction: "desc" });
+  const [statsView, setStatsView] = useState<"activity" | "suppliers">("activity");
   const stats = useMemo(() => buildAnalystStats(tasks, users, markets, { from: appliedRange.from, to: appliedRange.to, marketId, specialty, analystIds }), [analystIds, appliedRange, marketId, markets, specialty, tasks, users]);
   const maxMonth = Math.max(1, ...stats.monthly.map((item) => item.total));
   const maxAnalyst = Math.max(1, ...stats.byAnalyst.map((item) => item.total));
@@ -132,6 +134,10 @@ export function AnalystStatsDashboard({ tasks, users, markets, updatedAt, onImpo
       <div className="stats-hero-actions"><PlannerImportDialog markets={markets} onImport={onImport}/><div className="stats-freshness"><span>Dernier import</span><strong>{updatedAt ? new Date(updatedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "Aucun import"}</strong><small>{tasks.length} tâche{tasks.length > 1 ? "s" : ""} Planner disponible{tasks.length > 1 ? "s" : ""}</small></div><small>L’import actualise aussi les simulations du point actif.</small></div>
     </header>
 
+    <nav className="stats-view-tabs" aria-label="Vue des statistiques"><button type="button" className={statsView === "activity" ? "active" : ""} onClick={() => setStatsView("activity")}>Activité analystes</button><button type="button" className={statsView === "suppliers" ? "active" : ""} onClick={() => setStatsView("suppliers")}>Variations fournisseurs</button></nav>
+
+    {statsView === "suppliers" ? <SupplierVariationDashboard tasks={tasks} markets={markets}/> : <>
+
     <section className="surface stats-filters" aria-label="Filtres des statistiques">
       <div className="stats-period-presets"><span>Période rapide</span><div><button type="button" onClick={() => applyPeriod("previousWeek")}>Semaine dernière</button><button type="button" onClick={() => applyPeriod("cycle20")}>Mois dernier · 20 au 20</button><button type="button" onClick={() => applyPeriod("30d")}>30 jours</button><button type="button" onClick={() => applyPeriod("3m")}>3 mois</button><button type="button" onClick={() => applyPeriod("6m")}>6 mois</button><button type="button" onClick={() => applyPeriod("year")}>Cette année</button></div></div>
       <label><span>Du</span><input type="date" value={from} max={isIsoDate(to) ? to : undefined} onChange={(event) => updateFrom(event.target.value)} onBlur={() => { if (!isIsoDate(from)) setFrom(appliedRange.from); }}/></label>
@@ -168,5 +174,6 @@ export function AnalystStatsDashboard({ tasks, users, markets, updatedAt, onImpo
     {stats.unmatchedNames.length > 0 && <section className="stats-quality-note"><strong>Noms non rapprochés de l’annuaire</strong><span>{stats.unmatchedNames.join(" · ")}. Les anciennes simulations restent comptées dans le total, sans provoquer d’erreur.</span></section>}
 
     <section className="surface stats-detail"><header><div><span>Détail vérifiable</span><strong>{stats.contributions.length} activité{stats.contributions.length > 1 ? "s" : ""} dans la sélection</strong></div><small>Clique sur un en-tête pour trier.</small></header><div className="data-table-wrap"><table><thead><tr><th><button type="button" onClick={() => toggleDetailSort("date")}>Date{sortMark("date")}</button></th><th><button type="button" onClick={() => toggleDetailSort("analyst")}>Analyste{sortMark("analyst")}</button></th><th><button type="button" onClick={() => toggleDetailSort("specialty")}>Spécialité{sortMark("specialty")}</button></th><th><button type="button" onClick={() => toggleDetailSort("task")}>Simulation{sortMark("task")}</button></th><th><button type="button" onClick={() => toggleDetailSort("market")}>Marché{sortMark("market")}</button></th><th><button type="button" onClick={() => toggleDetailSort("step")}>Étape{sortMark("step")}</button></th></tr></thead><tbody>{sortedContributions.map((item, index) => <tr key={`${item.taskId}:${item.specialty}:${item.date}:${index}`}><td>{new Date(`${item.date}T12:00:00`).toLocaleDateString("fr-FR")}</td><td>{item.analystName}</td><td><span className={`stats-kind ${item.specialty}`}>{item.specialty === "simulation" ? "Simulation" : "Contrôle"}</span></td><td><strong>{item.taskName}</strong></td><td>{item.marketIds.map((id) => markets.find((market) => market.id === id)?.name).filter(Boolean).join(" · ") || item.marketTags.join(" · ") || "Non rattaché"}</td><td>{item.stepLabel || "Étape non renseignée"}</td></tr>)}</tbody></table>{!stats.contributions.length && <div className="table-empty">Aucune activité ne correspond à ces filtres.</div>}</div></section>
+    </>}
   </main>;
 }

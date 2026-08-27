@@ -41,3 +41,14 @@ test("builds the Jira query from valid USERCODEs of the selected market only", (
   assert.doesNotMatch(jql, /C1111111|D2222222|J9535152|B4166056|Nom Jira/);
   assert.equal(directory.buildMarketJql(users, "unknown"), "");
 });
+
+test("builds an open-ticket Jira query for one configured analyst", () => {
+  const analyst = { id: "analyst-1", name: "Jane DOE", email: "jane@example.test", usercode: "E1234567", role: "analyste-tarif-referentiel", marketIds: [] };
+  const jql = directory.buildAnalystJql(analyst);
+
+  assert.match(jql, /statusCategory != Done/);
+  assert.match(jql, /assignee = E1234567/);
+  assert.doesNotMatch(jql, /J9535152|B4166056/);
+  assert.equal(directory.buildAnalystJql({ ...analyst, role: "chef-produit" }), "");
+  assert.equal(directory.buildAnalystJql({ ...analyst, usercode: "Jane" }), "");
+});
