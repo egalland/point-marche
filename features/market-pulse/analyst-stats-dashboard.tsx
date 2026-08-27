@@ -1,15 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { buildAnalystStats, type AnalystStatsMarket } from "@/lib/analyst-stats";
+import { buildAnalystStats, type AnalystStatsMarket, type PlannerDelaySummary } from "@/lib/analyst-stats";
 import type { GlobalDirectoryUser } from "@/lib/global-directory";
 import type { PlannerSpecialty, PlannerTask } from "@/lib/planner-import";
+import { PlannerImportDialog } from "./planner-import-dialog";
 
 type Props = {
   tasks: PlannerTask[];
   users: GlobalDirectoryUser[];
   markets: AnalystStatsMarket[];
   updatedAt: string;
+  onImport: (rawText: string) => Promise<{ imported: number; message: string }>;
 };
 
 function today() {
@@ -38,7 +40,18 @@ function movementLabel(value: number | null) {
   return `${value > 0 ? "+" : ""}${new Intl.NumberFormat("fr-FR", { style: "percent", maximumFractionDigits: 0 }).format(value)} vs période précédente`;
 }
 
-export function AnalystStatsDashboard({ tasks, users, markets, updatedAt }: Props) {
+function daysLabel(value: number | null) {
+  return value === null ? "—" : `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(value)} j`;
+}
+
+function delayMovementLabel(summary: PlannerDelaySummary) {
+  if (summary.average === null) return "Aucune paire de dates exploitable";
+  if (summary.previousAverage === null) return "Pas de comparaison précédente";
+  if (!summary.movement) return "Stable vs période précédente";
+  return `${summary.movement > 0 ? "+" : ""}${daysLabel(summary.movement)} vs période précédente`;
+}
+
+export function AnalystStatsDashboard({ tasks, users, markets, updatedAt, onImport }: Props) {
   const analysts = useMemo(() => users.filter((user) => user.role === "analyste-tarif-referentiel").sort((left, right) => left.name.localeCompare(right.name, "fr")), [users]);
   const [from, setFrom] = useState(() => monthsAgo(5));
   const [to, setTo] = useState(today);
@@ -48,6 +61,7 @@ export function AnalystStatsDashboard({ tasks, users, markets, updatedAt }: Prop
   const stats = useMemo(() => buildAnalystStats(tasks, users, markets, { from, to, marketId, specialty, analystIds }), [analystIds, from, marketId, markets, specialty, tasks, to, users]);
   const maxMonth = Math.max(1, ...stats.monthly.map((item) => item.total));
   const maxAnalyst = Math.max(1, ...stats.byAnalyst.map((item) => item.total));
+  const maxDelay = Math.max(1, ...stats.delaySummaries.flatMap((item) => [item.average ?? 0, item.previousAverage ?? 0]));
   const selectAnalyst = (id: string) => setAnalystIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   const applyPeriod = (period: "30d" | "3m" | "6m" | "year") => {
     setTo(today());
@@ -57,7 +71,7 @@ export function AnalystStatsDashboard({ tasks, users, markets, updatedAt }: Prop
   return <main className="analyst-stats-page">
     <header className="stats-hero">
       <div><span>Activité tarif et référentiel</span><h1>Statistiques analystes</h1><p>Lecture descriptive des simulations et contrôles identifiés dans l’export Planner, sans objectif individuel.</p></div>
-      <div className="stats-freshness"><span>Dernier import</span><strong>{updatedAt ? new Date(updatedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "Aucun import"}</strong><small>{tasks.length} tâche{tasks.length > 1 ? "s" : ""} Planner disponible{tasks.length > 1 ? "s" : ""}</small></div>
+      <div className="stats-hero-actions"><PlannerImportDialog markets={markets} onImport={onImport}/><div className="stats-freshness"><span>Dernier import</span><strong>{updatedAt ? new Date(updatedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "Aucun import"}</strong><small>{tasks.length} tâche{tasks.length > 1 ? "s" : ""} Planner disponible{tasks.length > 1 ? "s" : ""}</small></div><small>L’import actualise aussi les simulations du point actif.</small></div>
     </header>
 
     <section className="surface stats-filters" aria-label="Filtres des statistiques">
@@ -75,6 +89,17 @@ export function AnalystStatsDashboard({ tasks, users, markets, updatedAt }: Prop
       <article><span>Étapes Simulation</span><strong>{stats.simulations}</strong><small>Dates trouvées dans les listes de contrôle</small></article>
       <article><span>Étapes Contrôle</span><strong>{stats.controls}</strong><small>Dates trouvées dans les listes de contrôle</small></article>
       <article className={stats.coverageRate < .8 ? "warning" : ""}><span>Couverture des noms</span><strong>{percent(stats.coverageRate)}</strong><small>{stats.unmatchedNames.length ? `${stats.unmatchedNames.length} nom${stats.unmatchedNames.length > 1 ? "s" : ""} à rapprocher` : "Tous les noms sont associés"}</small></article>
+    </section>
+
+    <section className="surface stats-delay-panel" aria-labelledby="stats-delay-title">
+      <header><div><span>Cycle tarifaire</span><strong id="stats-delay-title">Délais observés sur les tâches Planner</strong></div><p>La période retient la date de fin de chaque étape. Une paire absente ou incohérente n’entre pas dans le calcul.</p></header>
+      <div className="stats-delay-grid">{stats.delaySummaries.map((summary) => <article className={`stats-delay-card delay-${summary.kind}`} key={summary.kind}>
+        <div className="stats-delay-heading"><span>{summary.label}</span><small>{summary.definition}</small></div>
+        <div className="stats-delay-value"><strong>{daysLabel(summary.average)}</strong><span>Moyenne</span></div>
+        <div className="stats-delay-visual" aria-label={`${summary.label}, moyenne ${daysLabel(summary.average)}, période précédente ${daysLabel(summary.previousAverage)}`}><div><i style={{ width: `${(summary.average ?? 0) / maxDelay * 100}%` }}/>{summary.previousAverage !== null && <b style={{ left: `${summary.previousAverage / maxDelay * 100}%` }}/>}</div><small>{delayMovementLabel(summary)}</small></div>
+        <footer><span>Médiane <b>{daysLabel(summary.median)}</b></span><span><b>{summary.sampleCount}</b> dossier{summary.sampleCount > 1 ? "s" : ""}</span></footer>
+      </article>)}</div>
+      <div className="stats-delay-note"><span><i/>Période sélectionnée</span><span><b/>Période précédente équivalente</span><small>Le filtre « spécialité » pilote les volumes ; les délais conservent les quatre étapes du cycle pour les tâches correspondant aux autres filtres.</small></div>
     </section>
 
     <section className="stats-grid">

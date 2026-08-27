@@ -26,12 +26,16 @@ const baseTask = {
   overdue: false,
   completedAt: "2026-06-03",
   completedBy: "",
-  checklistCompleted: 3,
-  checklistTotal: 3,
+  checklistCompleted: 7,
+  checklistTotal: 7,
   checklist: [
-    { order: 1, label: "Simulation Anaïs", date: "2026-06-01", kind: "simulation", analystName: "Anaïs", nonApplicable: false },
-    { order: 2, label: "Contrôle", date: "2026-06-02", kind: "control", analystName: "", nonApplicable: false },
-    { order: 3, label: "Simulation Legacy Name", date: "2026-06-03", kind: "simulation", analystName: "Legacy Name", nonApplicable: false },
+    { order: 0, label: "Avis de hausse", date: "2026-05-20", kind: "other", analystName: "", nonApplicable: false },
+    { order: 1, label: "Tarif fournisseur", date: "2026-05-25", kind: "other", analystName: "", nonApplicable: false },
+    { order: 2, label: "Simulation Anaïs", date: "2026-06-01", kind: "simulation", analystName: "Anaïs", nonApplicable: false },
+    { order: 3, label: "Validation CDM", date: "2026-06-04", kind: "other", analystName: "", nonApplicable: false },
+    { order: 4, label: "Intégration", date: "2026-06-05", kind: "other", analystName: "", nonApplicable: false },
+    { order: 5, label: "Contrôle", date: "2026-06-07", kind: "control", analystName: "", nonApplicable: false },
+    { order: 6, label: "Simulation Legacy Name", date: "2026-06-03", kind: "simulation", analystName: "Legacy Name", nonApplicable: false },
   ],
   labels: ["REV-PB"],
   comments: "",
@@ -47,7 +51,7 @@ const markets = [{ id: "market-rev", name: "Revêtements", plannerTags: ["REV-PB
 
 test("counts old unnamed activities globally and matches configured Planner aliases", () => {
   const stats = analytics.buildAnalystStats([baseTask], users, markets, {
-    from: "2026-06-01",
+    from: "2026-05-01",
     to: "2026-06-30",
     marketId: "all",
     specialty: "all",
@@ -62,11 +66,17 @@ test("counts old unnamed activities globally and matches configured Planner alia
   assert.deepEqual(stats.unmatchedNames, ["Legacy Name"]);
   assert.equal(stats.contributions.find((item) => item.analystLabel === "Anaïs")?.analystId, "analyst-1");
   assert.equal(stats.contributions.find((item) => item.analystLabel === "")?.analystName, "Non attribué");
+  assert.deepEqual(stats.delaySummaries.map((item) => [item.kind, item.average, item.median, item.sampleCount]), [
+    ["receipt", 5, 5, 1],
+    ["simulation", 7, 7, 1],
+    ["marketReturn", 3, 3, 1],
+    ["control", 2, 2, 1],
+  ]);
 });
 
 test("supports combined analyst, market and specialty filters", () => {
   const stats = analytics.buildAnalystStats([baseTask], users, markets, {
-    from: "2026-06-01",
+    from: "2026-05-01",
     to: "2026-06-30",
     marketId: "market-rev",
     specialty: "simulation",
@@ -77,4 +87,28 @@ test("supports combined analyst, market and specialty filters", () => {
   assert.equal(stats.simulations, 1);
   assert.equal(stats.controls, 0);
   assert.equal(stats.byAnalyst[0].name, "Anaïs MARTIN");
+  assert.equal(stats.delaySummaries.every((item) => item.sampleCount === 1), true);
+});
+
+test("ignores incomplete or chronologically inconsistent date pairs without creating a failure", () => {
+  const incompleteTask = {
+    ...baseTask,
+    externalId: "task-2",
+    taskName: "2026-06-JUIN-INCOMPLET",
+    checklist: [
+      { order: 0, label: "Avis de hausse", date: "2026-06-10", kind: "other", analystName: "", nonApplicable: false },
+      { order: 1, label: "Tarif fournisseur", date: "", kind: "other", analystName: "", nonApplicable: false },
+      { order: 2, label: "Simulation", date: "2026-06-08", kind: "simulation", analystName: "", nonApplicable: false },
+    ],
+  };
+  const stats = analytics.buildAnalystStats([baseTask, incompleteTask], users, markets, {
+    from: "2026-05-01",
+    to: "2026-06-30",
+    marketId: "all",
+    specialty: "all",
+    analystIds: [],
+  });
+
+  assert.equal(stats.delaySamples.length, 4);
+  assert.equal(stats.delaySummaries.every((item) => item.sampleCount === 1), true);
 });
