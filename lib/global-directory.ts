@@ -68,3 +68,18 @@ AND "Groupes d'affectation" in (
 AND statusCategory != Done
 AND assignee = ${usercode}`;
 }
+
+export function buildGlobalJiraImportJql() {
+  return `project = "JSD-Distribution Matériaux Bois Panneaux"
+AND "Groupes d'affectation" in (
+    "JSD-GLOBAL [JSD-GLOBAL]",
+    "JSD-GLOBAL-APPRO [JSD-GLOBAL-APPRO]",
+    "JSD-GLOBAL-CODIF [JSD-GLOBAL-CODIF]",
+    "JSD-GLOBAL-TARIF [JSD-GLOBAL-TARIF]"
+)
+AND (
+    statusCategory != Done
+    OR resolved >= startOfYear(-1)
+)
+ORDER BY updated DESC`;
+}

@@ -177,6 +177,7 @@
 .analyst-progress i { display: block; height: 100%; background: var(--accent); }
 .analyst-progress b { color: var(--accent); font: 700 8px/1 var(--font-mono); }
 .analyst-module-empty { padding: 35px 20px; border: 1px dashed var(--line-strong); border-radius: 13px; color: var(--muted); font-size: 10px; text-align: center; }
+.analyst-module-empty.warning { border-color: rgba(255,176,131,.28); color: var(--peach); background: rgba(255,176,131,.045); }
 
 .analyst-edit-layout { display: grid; gap: 18px; }
 .analyst-point-form, .analyst-mail-settings, .analyst-layout-settings { overflow: hidden; }

@@ -34,6 +34,7 @@ test("keeps older saved analyst points compatible with weekly resolved tickets",
   const normalized = analystPoint.normalizeAnalystPoint({ meetingDate: "2026-08-30", jira: [] }, analyst);
 
   assert.deepEqual(normalized.jiraResolved, []);
+  assert.equal(normalized.jiraClosedWithoutResolutionDate, 0);
 });
 
 test("counts assigned non-closed tickets by their Jira status", () => {

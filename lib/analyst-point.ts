@@ -26,6 +26,7 @@ export type AnalystPointData = {
   dossiers: AnalystDossier[];
   jira: AnalystJiraTicket[];
   jiraResolved: AnalystJiraTicket[];
+  jiraClosedWithoutResolutionDate: number;
   preferences: AnalystPointPreferences;
   mail: { to: string; cc: string; subject: string; intro: string; autoTo: string[] };
 };
@@ -104,6 +105,7 @@ export function initialAnalystPoint(analyst: GlobalDirectoryUser, manager?: Glob
     dossiers: [],
     jira: [],
     jiraResolved: [],
+    jiraClosedWithoutResolutionDate: 0,
     preferences: {
       order: analystPointModules.map((module) => module.id),
       widths: { overview: "full", jira: "full", planner: "full", cycle20: "half", dossiers: "full" },
@@ -131,6 +133,7 @@ export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUs
     dossiers: Array.isArray(source.dossiers) ? source.dossiers : [],
     jira: Array.isArray(source.jira) ? source.jira : [],
     jiraResolved: Array.isArray(source.jiraResolved) ? source.jiraResolved : [],
+    jiraClosedWithoutResolutionDate: Math.max(0, Number(source.jiraClosedWithoutResolutionDate) || 0),
     preferences: {
       ...fallback.preferences,
       ...preferences,

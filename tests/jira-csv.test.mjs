@@ -33,8 +33,8 @@ test("parses repeated Jira participant columns and repairs mojibake only when pr
 
 test("keeps valid UTF-8 accents unchanged", () => {
   const value = [
-    "Clé de ticket;État;Résumé;Création;Personne assignée;Mise à jour",
-    "GLOBAL-1;Résolu;Référencement terminé;01/08/2026 08:00;A1234567;02/08/2026 09:00",
+    "Clé de ticket;État;Résumé;Création;Personne assignée;Mise à jour;Date de résolution",
+    "GLOBAL-1;Résolu;Référencement terminé;01/08/2026 08:00;A1234567;02/08/2026 09:00;02/08/2026 08:30",
   ].join("\n");
   const decoded = csv.decodeJiraCsv(new TextEncoder().encode(value));
   const result = csv.parseJiraCsv(decoded.text);
@@ -43,6 +43,22 @@ test("keeps valid UTF-8 accents unchanged", () => {
   assert.equal(result.repairedTextCount, 0);
   assert.equal(result.tickets[0].status, "Résolu");
   assert.equal(result.tickets[0].summary, "Référencement terminé");
+  assert.equal(result.hasResolutionColumn, true);
+  assert.equal(result.closedTicketCount, 1);
+  assert.equal(result.resolvedDatedCount, 1);
+  assert.equal(result.closedWithoutResolutionDate, 0);
+});
+
+test("flags an open-only Jira export without a resolution column", () => {
+  const value = [
+    "Clé de ticket;État;Résumé;Création;Personne assignée;Mise à jour",
+    "GLOBAL-2;En cours;Ticket ouvert;01/08/2026 08:00;A1234567;02/08/2026 09:00",
+  ].join("\n");
+  const result = csv.parseJiraCsv(value);
+
+  assert.equal(result.hasResolutionColumn, false);
+  assert.equal(result.openTicketCount, 1);
+  assert.equal(result.closedTicketCount, 0);
 });
 
 test("recognizes the full Jira custom-field participant header", () => {

@@ -1,12 +1,8 @@
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { getDb } from "../db";
 import { globalUserMarkets, globalUsers, jiraImportBatches, jiraTicketParticipants, jiraTickets } from "../db/schema";
-import { dateIsInIsoWeek } from "./iso-week";
-import { jiraSummaryFromDetailedTickets, type JiraDetailedTicket, type JiraParticipant } from "./jira-import";
-
-export function isClosedJiraStatus(status: string) {
-  return /(termin|cl[oô]tur|r[eé]solu|ferm|annul|done|closed)/i.test(status);
-}
+import { jiraActivityForAnalyst } from "./jira-analyst-activity";
+import { isClosedJiraStatus, jiraSummaryFromDetailedTickets, type JiraDetailedTicket, type JiraParticipant } from "./jira-import";
 
 export async function latestCompletedJiraBatch() {
   const db = getDb();
@@ -71,13 +67,7 @@ async function loadJiraTicketsForAnalyst(usercode: string) {
 
 export async function loadJiraActivityForAnalyst(usercode: string, year: number, week: number) {
   const tickets = await loadJiraTicketsForAnalyst(usercode);
-  return {
-    open: tickets.assigned.filter((ticket) => !isClosedJiraStatus(ticket.status)).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
-    resolved: tickets.related.filter((ticket) => {
-      if (!isClosedJiraStatus(ticket.status)) return false;
-      return dateIsInIsoWeek(ticket.resolutionAt || ticket.updatedAt, year, week);
-    }).sort((left, right) => (right.resolutionAt || right.updatedAt).localeCompare(left.resolutionAt || left.updatedAt)),
-  };
+  return jiraActivityForAnalyst(tickets.related, usercode, year, week);
 }
 
 export async function loadOpenMarketJiraSummary(marketId: string) {

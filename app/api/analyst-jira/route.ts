@@ -37,7 +37,7 @@ function serializeCentralTicket(ticket: Awaited<ReturnType<typeof loadJiraActivi
     status: ticket.status,
     createdAt: ticket.createdAt,
     updatedAt: ticket.updatedAt,
-    resolvedAt: ticket.resolutionAt || ticket.updatedAt,
+    resolvedAt: ticket.resolutionAt || undefined,
     link: ticket.link,
   };
 }
@@ -90,13 +90,14 @@ export async function GET(request: Request) {
           rawText: "",
           tickets: centralActivity?.open.map(serializeCentralTicket) ?? [],
           resolvedTickets: centralActivity?.resolved.map(serializeCentralTicket) ?? [],
+          closedWithoutResolutionDate: centralActivity?.closedWithoutResolutionDate ?? 0,
           updatedAt: centralUpdatedAt,
           source: "central",
         },
       }, { headers: { "Cache-Control": "no-store" } });
     }
     return Response.json({
-      snapshot: snapshot ? { ...serialize(snapshot), resolvedTickets: centralActivity?.resolved.map(serializeCentralTicket) ?? [], source: "weekly" } : null,
+      snapshot: snapshot ? { ...serialize(snapshot), resolvedTickets: centralActivity?.resolved.map(serializeCentralTicket) ?? [], closedWithoutResolutionDate: centralActivity?.closedWithoutResolutionDate ?? 0, source: "weekly" } : null,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });
