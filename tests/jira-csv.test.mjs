@@ -45,6 +45,17 @@ test("keeps valid UTF-8 accents unchanged", () => {
   assert.equal(result.tickets[0].summary, "Référencement terminé");
 });
 
+test("recognizes the full Jira custom-field participant header", () => {
+  const value = [
+    "Clé de ticket;ID de ticket;État;Résumé;Création;Personne assignée;Mise à jour;Champs personnalisés (Participants à la requête)",
+    "GLOBAL-12502;1646977;En attente de changement;REV : Huot;12/08/2026 09:00;X7877257;27/08/2026 13:38;E7234871(JIRAUSER134623)",
+  ].join("\n");
+  const result = csv.parseJiraCsv(value);
+
+  assert.equal(result.tickets.length, 1);
+  assert.deepEqual(result.tickets[0].participants, [{ usercode: "E7234871", jiraUserId: "JIRAUSER134623" }]);
+});
+
 test("handles more than twelve thousand Jira rows", () => {
   const header = "Clé de ticket;ID de ticket;État;Résumé;Création;Personne assignée;Mise à jour;Participants à la requête";
   const rows = Array.from({ length: 12_050 }, (_, index) => `GLOBAL-${index + 1};${1_600_000 + index};En cours;Ticket ${index + 1};01/08/2026 08:00;A1234567;02/08/2026 09:00;B1234567(JIRAUSER${index + 1})`);

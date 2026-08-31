@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { globalUserMarkets, globalUsers, jiraMarketWeeklySnapshots, jiraWeeklySnapshots, marketDefinitions } from "../../../db/schema";
 import { parseJiraAssigneeSummary, type JiraSummaryImport } from "../../../lib/jira-import";
 import { latestCompletedJiraBatch, loadOpenMarketJiraSummary } from "../../../lib/jira-registry-server";
+import { shouldPreferCentralJira } from "../../../lib/jira-source-priority";
 import { getEditorUser } from "../../simple-auth";
 
 function validPeriod(year: number, week: number) {
@@ -43,21 +44,28 @@ export async function GET(request: Request) {
     if (!marketId || !validPeriod(year, week)) return Response.json({ error: "Marché, année ou semaine ISO invalide." }, { status: 400 });
 
     const db = getDb();
-    const [marketSnapshot] = await db.select().from(jiraMarketWeeklySnapshots)
-      .where(and(eq(jiraMarketWeeklySnapshots.marketId, marketId), eq(jiraMarketWeeklySnapshots.year, year), eq(jiraMarketWeeklySnapshots.week, week))).limit(1);
-    const assignments = await db.select({ marketId: globalUserMarkets.marketId, assignee: globalUsers.usercode })
-      .from(globalUserMarkets)
-      .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
-      .where(and(eq(globalUsers.isActive, true), or(eq(globalUsers.role, "chef-produit"), eq(globalUsers.role, "chef-marche"))))
-      .orderBy(asc(globalUserMarkets.marketId), asc(globalUsers.usercode));
-    if (preferCentral) {
-      const [batch, centralSummary] = await Promise.all([latestCompletedJiraBatch(), loadOpenMarketJiraSummary(marketId)]);
-      if (batch && centralSummary) return Response.json({
-        snapshot: { year, week, rawText: "", summary: centralSummary, updatedAt: batch.completedAt ?? batch.createdAt, source: "central" },
+    const [[marketSnapshot], assignments, batch] = await Promise.all([
+      db.select().from(jiraMarketWeeklySnapshots)
+        .where(and(eq(jiraMarketWeeklySnapshots.marketId, marketId), eq(jiraMarketWeeklySnapshots.year, year), eq(jiraMarketWeeklySnapshots.week, week))).limit(1),
+      db.select({ marketId: globalUserMarkets.marketId, assignee: globalUsers.usercode })
+        .from(globalUserMarkets)
+        .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
+        .where(and(eq(globalUsers.isActive, true), or(eq(globalUsers.role, "chef-produit"), eq(globalUsers.role, "chef-marche"))))
+        .orderBy(asc(globalUserMarkets.marketId), asc(globalUsers.usercode)),
+      latestCompletedJiraBatch(),
+    ]);
+    const centralUpdatedAt = batch?.completedAt ?? batch?.createdAt;
+    const centralResponse = async (weeklyUpdatedAt?: string) => {
+      if (!batch || !shouldPreferCentralJira(centralUpdatedAt, weeklyUpdatedAt, preferCentral)) return null;
+      const centralSummary = await loadOpenMarketJiraSummary(marketId);
+      return centralSummary ? Response.json({
+        snapshot: { year, week, rawText: "", summary: centralSummary, updatedAt: centralUpdatedAt, source: "central" },
         assignments: assignmentMap(assignments),
-      });
-    }
+      }) : null;
+    };
     if (marketSnapshot) {
+      const newerCentral = await centralResponse(marketSnapshot.updatedAt);
+      if (newerCentral) return newerCentral;
       return Response.json({
         snapshot: { ...serializedSnapshot(marketSnapshot, JSON.parse(marketSnapshot.payload) as JiraSummaryImport), source: "weekly" },
         assignments: assignmentMap(assignments),
@@ -66,13 +74,14 @@ export async function GET(request: Request) {
 
     const [legacySnapshot] = await db.select().from(jiraWeeklySnapshots)
       .where(and(eq(jiraWeeklySnapshots.year, year), eq(jiraWeeklySnapshots.week, week))).limit(1);
+    const centralOverLegacy = await centralResponse(legacySnapshot?.updatedAt);
+    if (centralOverLegacy) return centralOverLegacy;
     if (legacySnapshot) return Response.json({
       snapshot: { ...serializedSnapshot(legacySnapshot, JSON.parse(legacySnapshot.payload) as JiraSummaryImport), source: "weekly" },
       assignments: assignmentMap(assignments),
     });
-    const [batch, centralSummary] = await Promise.all([latestCompletedJiraBatch(), loadOpenMarketJiraSummary(marketId)]);
     return Response.json({
-      snapshot: batch && centralSummary ? { year, week, rawText: "", summary: centralSummary, updatedAt: batch.completedAt ?? batch.createdAt, source: "central" } : null,
+      snapshot: null,
       assignments: assignmentMap(assignments),
     });
   } catch (error) {
