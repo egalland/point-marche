@@ -35,3 +35,18 @@ test("keeps older saved analyst points compatible with weekly resolved tickets",
 
   assert.deepEqual(normalized.jiraResolved, []);
 });
+
+test("counts assigned non-closed tickets by their Jira status", () => {
+  const tickets = [
+    { status: "En attente d'un tiers" },
+    { status: "En cours" },
+    { status: "En attente d'un tiers" },
+    { status: "À faire" },
+  ];
+
+  assert.deepEqual(analystPoint.jiraStatusBreakdown(tickets), [
+    { status: "En cours", count: 1 },
+    { status: "En attente d'un tiers", count: 2 },
+    { status: "À faire", count: 1 },
+  ]);
+});

@@ -132,6 +132,10 @@
 .analyst-jira-subtitle strong { font-size: 14px; }
 .analyst-jira-subtitle small { max-width: 410px; color: var(--muted); font-size: 8px; text-align: right; }
 .analyst-jira-subtitle.resolved span, .analyst-jira-subtitle.resolved strong { color: var(--accent); }
+.analyst-jira-status-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(135px,1fr)); gap: 8px; margin-bottom: 12px; }
+.analyst-jira-status-grid article { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: rgba(112,216,255,.035); }
+.analyst-jira-status-grid strong { color: var(--aqua); font: 800 20px/1 var(--font-mono); }
+.analyst-jira-status-grid span { overflow: hidden; color: var(--muted); font-size: 8px; font-weight: 700; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .analyst-jira-resolved-list > a.resolved { border-color: rgba(114,245,197,.2); background: rgba(114,245,197,.035); }
 .analyst-jira-resolved-list > a.resolved > span, .analyst-jira-resolved-list > a.resolved > b { color: var(--accent); }
 .analyst-jira-resolved-list > a.resolved > b { background: rgba(114,245,197,.08); }
