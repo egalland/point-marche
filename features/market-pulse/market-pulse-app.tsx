@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type FormEvent, type ReactNode } from "react";
 import { AppDialog } from "@/components/app-dialog";
 import { ModuleLayoutEditor, type ModuleWidth } from "@/components/module-layout-editor";
-import { buildMarketJql, GLOBAL_ROLE_OPTIONS, roleLabel, roleMailMode, roleUsesAutomaticJira, type GlobalDirectoryUser, type GlobalRole } from "@/lib/global-directory";
-import { JIRA_SUMMARY_STATUSES, parseJiraAssigneeSummary, type JiraSummaryImport } from "@/lib/jira-import";
+import { GLOBAL_ROLE_OPTIONS, roleLabel, roleMailMode, roleUsesAutomaticJira, type GlobalDirectoryUser, type GlobalRole } from "@/lib/global-directory";
+import { JIRA_SUMMARY_STATUSES, type JiraSummaryImport } from "@/lib/jira-import";
 import { plannerTaskMonthLabel, type PlannerTask } from "@/lib/planner-import";
 import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 import { supplierSeriesForTask, type SupplierVariationPoint } from "@/lib/supplier-variations";
@@ -33,7 +33,6 @@ type AlertItem = { title: string; detail: string; severity: "warning" | "danger"
 type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
 type Market = { id: string; name: string; short: string; tone: ThemeKey; colorHex: string; plannerTags: string[]; position: number; jiraWarningDays: number; jiraCriticalDays: number };
 type PointRecord = { id: string; marketId: string; year: number; week: number; meetingDate: string; pointName: string; themeColor: ThemeKey; data: PointData; createdAt: string };
-type ImportOutcome = { count: number; message?: string };
 type JiraPersonGroup = { assignee: string; items: JiraTicket[]; total: number };
 type JiraAttentionLevel = "fresh" | "warning" | "critical" | "undated";
 type JiraDashboardScope = "all" | "attention" | "critical";
@@ -439,95 +438,6 @@ function SectionTitle({ eyebrow, title, detail, action }: { eyebrow: string; tit
 }
 function EmptyState({ label, onAdd }: { label: string; onAdd: () => void }) { return <button className="empty-state" onClick={onAdd}><span className="empty-plus"><Icon name="plus" size={22} /></span><strong>Ajouter {label}</strong><small>La section est vide pour le moment.</small></button>; }
 
-function JiraPasteImporter({ marketId, marketName, directoryUsers, year, week, onImport }: { marketId: string; marketName: string; directoryUsers: GlobalDirectoryUser[]; year: number; week: number; onImport: (summary: JiraSummaryImport, selectedPeople: string[]) => ImportOutcome }) {
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
-  const [preview, setPreview] = useState<JiraSummaryImport>(() => parseJiraAssigneeSummary(""));
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [message, setMessage] = useState("");
-  const marketPeople = useMemo(() => directoryUsers.filter((user) => roleUsesAutomaticJira(user.role) && user.marketIds.includes(marketId) && /^[A-Z]\d{7}$/i.test(user.usercode)), [directoryUsers, marketId]);
-  const personByUserCode = useMemo(() => new Map(marketPeople.map((person) => [person.usercode.toUpperCase(), person])), [marketPeople]);
-  const jql = useMemo(() => buildMarketJql(directoryUsers, marketId), [directoryUsers, marketId]);
-  const recognizedTickets = useMemo(() => preview.detailedTickets.filter((ticket) => personByUserCode.has(ticket.assigneeUserCode.toUpperCase())), [personByUserCode, preview.detailedTickets]);
-  const recognizedPeople = useMemo(() => Array.from(new Set(recognizedTickets.map((ticket) => ticket.assigneeUserCode.toUpperCase()))).map((usercode) => {
-    const person = personByUserCode.get(usercode);
-    const tickets = recognizedTickets.filter((ticket) => ticket.assigneeUserCode.toUpperCase() === usercode);
-    return { usercode, name: person?.name ?? usercode, tickets };
-  }).sort((a, b) => b.tickets.length - a.tickets.length || a.name.localeCompare(b.name, "fr")), [personByUserCode, recognizedTickets]);
-  const unknownUserCodes = useMemo(() => Array.from(new Set(preview.detailedTickets.map((ticket) => ticket.assigneeUserCode.toUpperCase()).filter((usercode) => !personByUserCode.has(usercode)))), [personByUserCode, preview.detailedTickets]);
-
-  useEffect(() => {
-    let active = true;
-    void fetchJiraWeek(year, week, marketId).then((payload) => {
-      if (!active) return;
-      if (payload.snapshot) {
-        setText(payload.snapshot.rawText);
-        setPreview(normalizeJiraSummary(payload.snapshot.summary));
-        setMessage(`Import déjà enregistré pour ${marketName} · ${year} · S${String(week).padStart(2, "0")}.`);
-      } else {
-        setText("");
-        setPreview(parseJiraAssigneeSummary(""));
-        setMessage("Aucun import Jira enregistré pour ce marché et cette semaine.");
-      }
-    }).catch((error) => { if (active) setMessage(error instanceof Error ? error.message : "Chargement impossible."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [marketId, marketName, year, week]);
-
-  const updateText = (value: string) => { setText(value); setMessage(""); setPreview(parseJiraAssigneeSummary(value)); };
-  const copyJql = async () => {
-    if (!jql) return;
-    try {
-      await navigator.clipboard.writeText(jql);
-    } catch {
-      const input = document.createElement("textarea");
-      input.value = jql;
-      input.style.position = "fixed";
-      input.style.opacity = "0";
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand("copy");
-      input.remove();
-    }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  };
-  const saveMarketTable = async () => {
-    if (!recognizedTickets.length || saving) return;
-    setSaving(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/jira-week", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ marketId, year, week, rawText: text }) });
-      const payload = await response.json() as JiraWeekPayload;
-      if (!response.ok || !payload.snapshot) throw new Error(payload.error || "Enregistrement impossible.");
-      const result = onImport(normalizeJiraSummary(payload.snapshot.summary), payload.assignments[marketId] ?? marketPeople.map((person) => person.usercode));
-      setPreview(normalizeJiraSummary(payload.snapshot.summary));
-      setMessage(result.message ?? `Import enregistré pour ${marketName} · ${year} · S${String(week).padStart(2, "0")}.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Enregistrement impossible."); }
-    finally { setSaving(false); }
-  };
-  const formatLabel = preview.format === "tabulated" ? "Export tabulé détecté" : preview.format === "markdown" ? "Tableau Jira détecté" : preview.format === "semicolon" ? "Tableau séparé par ; détecté" : "En attente de l’export";
-
-  return <div className={`paste-importer jira-paste-importer ${open ? "is-open" : ""}`}>
-    <button type="button" className="secondary-button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}><Icon name="copy" /> Importer les tickets Jira</button>
-    <AppDialog open={open} onClose={() => setOpen(false)} busy={saving} labelledBy="jira-import-title" className="paste-panel jira-paste-panel">
-      <div className="jira-import-heading"><div><strong id="jira-import-title">Import Jira · {marketName}</strong><span>{year} · S{String(week).padStart(2, "0")} · rattachement automatique par USERCODE</span></div><div className="paste-market-target"><Icon name="check" size={14}/><span>Chefs configurés</span><strong>{marketPeople.length}</strong></div></div>
-      <section className={`jira-query-card ${jql ? "" : "is-empty"}`}><div className="jira-query-heading"><div><span>1 · Requête prête pour Jira</span><strong>{jql ? `${marketPeople.length} USERCODE de chefs inclus` : "Aucun chef avec USERCODE disponible"}</strong></div><button type="button" className="secondary-button" disabled={!jql} onClick={copyJql}><Icon name={copied ? "check" : "copy"} size={15}/> {copied ? "Requête copiée" : "Copier la requête"}</button></div>{jql ? <pre className="jira-query-code">{jql}</pre> : <p>Ajoute d’abord un chef de produit ou un chef de marché avec son USERCODE dans l’annuaire GLOBAL.</p>}</section>
-      <div className="jira-import-step"><span>2 · Colle l’export détaillé</span><code>Clé de ticket → ID → État → Résumé → Création → Personne assignée (USERCODE) → Mise à jour</code></div>
-      <textarea data-autofocus value={text} disabled={loading} onChange={(event) => updateText(event.target.value)} placeholder="Colle ici l’export Jira tabulé détaillé…" aria-label="Export Jira tabulé détaillé de la semaine" />
-      <div className={`jira-detection ${preview.mode === "detailed" && preview.detailedTickets.length ? "is-valid" : ""}`}><span><Icon name={preview.mode === "detailed" && preview.detailedTickets.length ? "check" : "copy"} size={15}/> {loading ? "Chargement de l’import hebdomadaire…" : formatLabel}</span><strong>{preview.mode === "detailed" && preview.detailedTickets.length ? `${preview.detailedTickets.length} ticket${preview.detailedTickets.length > 1 ? "s" : ""} détaillé${preview.detailedTickets.length > 1 ? "s" : ""}` : preview.personCount ? "Ancien récapitulatif détecté · export détaillé requis" : "Aucune ligne reconnue"}</strong></div>
-      {preview.detailedTickets.length > 0 && <div className="jira-preview jira-auto-preview">
-        <div className="jira-preview-toolbar"><div><strong>Prévisualisation automatique</strong><span>Seules les personnes de {marketName} qui ont au moins un ticket seront affichées dans le point.</span></div><b>{recognizedTickets.length} / {preview.detailedTickets.length} tickets reconnus</b></div>
-        {recognizedPeople.length ? <div className="jira-preview-persons">{recognizedPeople.map((person) => <details key={person.usercode} className="jira-preview-person"><summary><span>{person.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span><div><strong>{person.name}</strong><small>{person.usercode} · {jiraStatusSummary(person.tickets.map((ticket) => ({ id: ticket.key, key: ticket.key, summary: ticket.summary, status: ticket.status, priority: "", assignee: person.name, lastActivity: ticket.updatedAt, link: ticket.link, comment: "", count: 1 })))}</small></div><b>{person.tickets.length}</b><Icon name="chevron" size={15}/></summary><div className="jira-preview-ticket-list">{person.tickets.map((ticket) => <a key={`${person.usercode}-${ticket.key}`} href={ticket.link} target="_blank" rel="noreferrer"><span>{ticket.key} ↗</span><strong>{ticket.summary}</strong><small>{ticket.status} · mise à jour {ticket.updatedAt || "non datée"}</small></a>)}</div></details>)}</div> : <div className="jira-query-empty">Aucun ticket ne correspond aux USERCODE enregistrés pour ce marché.</div>}
-        {unknownUserCodes.length > 0 && <div className="jira-unknown"><Icon name="alert" size={15}/><span><strong>{unknownUserCodes.length} USERCODE non rattaché{unknownUserCodes.length > 1 ? "s" : ""}</strong> · {unknownUserCodes.join(", ")} · ces tickets ne seront pas affichés.</span></div>}
-      </div>}
-      <div className="paste-actions"><span>{message}</span><div><button type="button" className="secondary-button small" disabled={saving} onClick={() => setOpen(false)}>Fermer</button><button type="button" className="primary-button small" disabled={!recognizedTickets.length || saving || loading} onClick={saveMarketTable}><Icon name="check" size={15}/> {saving ? "Enregistrement…" : "Enregistrer l’import de ce marché"}</button></div></div>
-    </AppDialog>
-  </div>;
-}
-
 function buildAlerts(data: PointData, market: Market): AlertItem[] {
   const alerts: AlertItem[] = []; const pointDate = data.meetingDate || isoToday();
   data.dossiers.forEach((item) => { if (isClosed(item.status)) return; const common = { title: item.title || "Dossier", targetId: `dossier-${item.id}`, category: "Dossier" as const }; if (/bloqu/i.test(item.status)) alerts.push({ ...common, detail: item.comment || "Dossier bloquant", severity: "danger" }); else if (item.deadline && daysBetween(item.deadline, pointDate) > 0) alerts.push({ ...common, detail: `Échéance dépassée depuis ${daysBetween(item.deadline, pointDate)} jour(s)`, severity: "danger" }); else if (/(surveill|action)/i.test(item.status)) alerts.push({ ...common, detail: item.comment || item.action || item.status, severity: "warning" }); });
@@ -758,7 +668,6 @@ export function MarketPulseApp() {
   const [plannerRegistry, setPlannerRegistry] = useState<PlannerRegistrySummary>(() => emptyPlannerRegistry());
   const [directorySavingId, setDirectorySavingId] = useState("");
   const [directoryEditor, setDirectoryEditor] = useState<DirectoryEditor | null>(null);
-  const [directoryRevision, setDirectoryRevision] = useState(0);
   const [lastSavedSignature, setLastSavedSignature] = useState("");
   const [toast, setToast] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(() => monthStart(isoToday()));
@@ -1028,14 +937,6 @@ export function MarketPulseApp() {
     return { ...current, jira: [...current.jira, { id: uid(), key: "", summary: "Synthèse manuelle", status, priority: "", assignee, lastActivity: "", link: "", comment: "Saisie manuelle", count }] };
   });
 
-  const importJiraSummary = (summary: JiraSummaryImport, selectedPeople: string[]) => {
-    const jira = jiraTicketsFromSummary(summary, selectedPeople, marketId);
-    if (!jira.length) return { count: 0 };
-    const selectedRows = groupJiraPeople(jira);
-    const tickets = jira.reduce((sum, item) => sum + jiraItemCount(item), 0);
-    setData((current) => ({ ...current, jira }));
-    return { count: selectedRows.length, message: `${selectedRows.length} personne${selectedRows.length > 1 ? "s" : ""} · ${tickets} tickets automatiquement rattachés à « ${market.name} ».` };
-  };
   const synchronizePlannerPoint = (tasks = plannerTasks) => {
     const relevant = plannerTasksForPoint(tasks, market, data.meetingDate);
     setData((current) => ({ ...current, operations: mergePlannerOperations(current.operations, relevant, tasks) }));
@@ -1177,7 +1078,6 @@ export function MarketPulseApp() {
   };
   const acceptDirectoryPayload = (users: GlobalDirectoryUser[]) => {
     setDirectoryUsers(users);
-    setDirectoryRevision((current) => current + 1);
     setData((current) => applyDirectoryMail(current, marketId, users));
   };
   const openDirectoryEditor = (user?: GlobalDirectoryUser) => setDirectoryEditor(user
@@ -1380,11 +1280,11 @@ export function MarketPulseApp() {
       </article>)}</div> : <EmptyState label="une simulation ou opération" onAdd={addOperation}/>}</section>}
 
     {section === "jira" && <section className="editor-section">
-      <SectionTitle eyebrow="Activité Jira" title="Tickets ouverts du marché" detail={`La requête utilise uniquement les USERCODE des chefs de produit et chefs de marché de ${market.name}. Seules les personnes ayant des tickets apparaissent.`} action={<div className="title-actions"><JiraPasteImporter key={`${currentWeekYear}-${currentWeek}-${marketId}-${directoryRevision}`} marketId={marketId} marketName={market.name} directoryUsers={directoryUsers} year={currentWeekYear} week={currentWeek} onImport={importJiraSummary}/><button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter une synthèse</button></div>}/>
-      <div className="jira-import-note"><Icon name="ticket"/><div><strong>Rattachement automatique par USERCODE et par rôle</strong><span>Aucun préfixe de ticket n’est utilisé. Le marché et le rôle enregistrés dans l’annuaire sont les seules sources d’affectation.</span></div></div>
+      <SectionTitle eyebrow="Activité Jira" title="Tickets ouverts du marché" detail={`Les tickets sont récupérés automatiquement depuis le centre d’import global pour les chefs de produit et chefs de marché de ${market.name}. Seules les personnes ayant des tickets apparaissent.`} action={<button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter une synthèse</button>}/>
+      <div className="jira-import-note"><Icon name="check"/><div><strong>Alimenté par le centre d’import global</strong><span>Un seul import Jira met à jour tous les points marché. Le rattachement utilise le USERCODE, le marché et le rôle enregistrés dans l’annuaire.</span></div></div>
       <JiraVolumePulse data={data} archive={archive} market={market}/>
       <div className="surface jira-alert-settings"><div><span><Icon name="alert" size={16}/> Alertes sur la dernière modification</span><strong>Seuils propres à {market.name}</strong><small>Ces repères signalent une absence d’activité ; ils ne mesurent pas le temps de résolution.</small></div><label><span>À surveiller après</span><div><input type="number" min="1" max="364" value={market.jiraWarningDays} onChange={(event) => { const warning = Math.max(1, Math.min(364, Number(event.target.value) || 1)); updateMarketDraft(marketId, { jiraWarningDays: warning, jiraCriticalDays: Math.max(warning + 1, market.jiraCriticalDays) }); }}/><b>jours</b></div></label><label><span>Critique après</span><div><input type="number" min={market.jiraWarningDays + 1} max="365" value={market.jiraCriticalDays} onChange={(event) => updateMarketDraft(marketId, { jiraCriticalDays: Math.max(market.jiraWarningDays + 1, Math.min(365, Number(event.target.value) || market.jiraWarningDays + 1)) })}/><b>jours</b></div></label><button className="secondary-button" disabled={Boolean(marketSavingId)} onClick={() => saveMarket(marketId)}><Icon name="check" size={15}/> {marketSavingId === marketId ? "Enregistrement…" : "Enregistrer les seuils"}</button></div>
-      <div className="surface data-table-wrap jira-summary-wrap"><table className="data-table jira-person-table"><thead><tr><th>Personne</th>{JIRA_SUMMARY_STATUSES.map((status) => <th key={status}>{status}</th>)}<th>Total</th><th/></tr></thead><tbody>{jiraPeople.map((person) => <tr key={person.assignee}><th scope="row"><input value={person.assignee} aria-label={`Personne ${person.assignee}`} onChange={(event) => renameJiraPerson(person.assignee, event.target.value)}/></th>{JIRA_SUMMARY_STATUSES.map((status) => { const statusItems = person.items.filter((item) => item.status === status); const count = statusItems.reduce((sum, item) => sum + jiraItemCount(item), 0); const link = statusItems.find((item) => item.link)?.link; return <td key={status}><div className="jira-count-cell"><input type="number" min="0" value={count} aria-label={`${status} pour ${person.assignee}`} onChange={(event) => setJiraPersonCount(person.assignee, status, Number(event.target.value))}/>{link && <a href={link} target="_blank" rel="noreferrer" title={`Ouvrir le filtre « ${status} »`} aria-label={`Ouvrir le filtre ${status} de ${person.assignee}`}>↗</a>}</div></td>; })}<td className="jira-person-total"><strong>{person.total}</strong><small>{jiraStatusSummary(person.items)}</small></td><td><button className="icon-button subtle" aria-label={`Supprimer ${person.assignee}`} onClick={() => removeJiraPerson(person.assignee)}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!jiraPeople.length && <div className="table-empty">Aucun ticket Jira. Importe le tableau complet ou ajoute une personne.</div>}</div>
+      <div className="surface data-table-wrap jira-summary-wrap"><table className="data-table jira-person-table"><thead><tr><th>Personne</th>{JIRA_SUMMARY_STATUSES.map((status) => <th key={status}>{status}</th>)}<th>Total</th><th/></tr></thead><tbody>{jiraPeople.map((person) => <tr key={person.assignee}><th scope="row"><input value={person.assignee} aria-label={`Personne ${person.assignee}`} onChange={(event) => renameJiraPerson(person.assignee, event.target.value)}/></th>{JIRA_SUMMARY_STATUSES.map((status) => { const statusItems = person.items.filter((item) => item.status === status); const count = statusItems.reduce((sum, item) => sum + jiraItemCount(item), 0); const link = statusItems.find((item) => item.link)?.link; return <td key={status}><div className="jira-count-cell"><input type="number" min="0" value={count} aria-label={`${status} pour ${person.assignee}`} onChange={(event) => setJiraPersonCount(person.assignee, status, Number(event.target.value))}/>{link && <a href={link} target="_blank" rel="noreferrer" title={`Ouvrir le filtre « ${status} »`} aria-label={`Ouvrir le filtre ${status} de ${person.assignee}`}>↗</a>}</div></td>; })}<td className="jira-person-total"><strong>{person.total}</strong><small>{jiraStatusSummary(person.items)}</small></td><td><button className="icon-button subtle" aria-label={`Supprimer ${person.assignee}`} onClick={() => removeJiraPerson(person.assignee)}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!jiraPeople.length && <div className="table-empty">Aucun ticket Jira dans le registre global pour ce marché. Tu peux ajouter une synthèse manuelle si nécessaire.</div>}</div>
       {jiraActivityRows.length > 0 && <div className="surface data-table-wrap jira-ticket-detail-wrap"><div className="jira-detail-heading"><div><span>Détail des tickets</span><strong>Priorité visuelle par dernière modification</strong></div><small>Création affichée à titre de contexte uniquement.</small></div><table className="data-table jira-ticket-table"><thead><tr><th>Ticket</th><th>État</th><th>Résumé</th><th>Personne</th><th>Création</th><th>Dernière modification</th><th>Signal</th></tr></thead><tbody>{jiraActivityRows.map(({ item, inactivity }) => { const signal = inactivity === null ? "neutral" : inactivity >= market.jiraCriticalDays ? "critical" : inactivity >= market.jiraWarningDays ? "warning" : "fresh"; return <tr id={`jira-${item.id}`} className={`jira-ticket-${signal}`} key={item.id}><td>{item.link ? <a href={item.link} target="_blank" rel="noreferrer">{item.key} ↗</a> : <strong>{item.key}</strong>}{item.internalId && <small>ID {item.internalId}</small>}</td><td><span className={`report-pill tone-${toneForStatus(item.status)}`}>{item.status}</span></td><td><strong>{item.summary || "Sans résumé"}</strong></td><td><strong>{item.assignee || "Non assigné"}</strong>{item.assigneeUserCode && <small>{item.assigneeUserCode}</small>}</td><td>{item.createdAt ? dateLabel(item.createdAt.slice(0, 10)) : "—"}</td><td>{item.lastActivity ? dateLabel(item.lastActivity.slice(0, 10)) : "—"}</td><td><span className={`jira-activity-signal ${signal}`}>{inactivity === null ? "Non daté" : inactivity === 0 ? "Aujourd’hui" : `${inactivity} j sans activité`}</span></td></tr>; })}</tbody></table></div>}
     </section>}
 
