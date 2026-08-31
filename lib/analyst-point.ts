@@ -30,10 +30,11 @@ export type AnalystPointData = {
   mail: { to: string; cc: string; subject: string; intro: string; autoTo: string[] };
 };
 export type AnalystPointRecord = { id: string; analystId: string; year: number; week: number; meetingDate: string; periodFrom: string; periodTo: string; data: AnalystPointData; createdAt: string; updatedAt: string };
+export type AnalystJiraStatusCount = { status: string; count: number };
 
 export const analystPointModules: { id: AnalystPointModule; label: string; detail: string }[] = [
   { id: "overview", label: "Synthèse", detail: "KPI principaux et message de la semaine" },
-  { id: "jira", label: "Tickets Jira ouverts", detail: "Stock, évolution et absence d’activité" },
+  { id: "jira", label: "Activité Jira", detail: "Stock attribué par état et tickets terminés dans la semaine" },
   { id: "planner", label: "Simulations & contrôles", detail: "Activité Planner sur la période principale" },
   { id: "cycle20", label: "Repère 20 → 20", detail: "Bloc séparé sur le dernier cycle terminé" },
   { id: "dossiers", label: "Dossiers", detail: "À faire, en cours, en attente et faits" },
@@ -161,4 +162,19 @@ export function daysBetween(from: string, to: string) {
   const start = new Date(from.includes("T") ? from : `${from}T12:00:00Z`).valueOf();
   const end = new Date(to.includes("T") ? to : `${to}T12:00:00Z`).valueOf();
   return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.floor((end - start) / 86400000)) : 0;
+}
+
+export function jiraStatusBreakdown(tickets: AnalystJiraTicket[]): AnalystJiraStatusCount[] {
+  const counts = tickets.reduce((result, ticket) => {
+    const status = ticket.status.trim() || "Sans statut";
+    result.set(status, (result.get(status) ?? 0) + 1);
+    return result;
+  }, new Map<string, number>());
+  const priority = (status: string) => {
+    if (/en cours/i.test(status)) return 0;
+    if (/attente/i.test(status)) return 1;
+    if (/[àa] faire|ouvert|r[eé]ouvert/i.test(status)) return 2;
+    return 3;
+  };
+  return Array.from(counts, ([status, count]) => ({ status, count })).sort((left, right) => priority(left.status) - priority(right.status) || right.count - left.count || left.status.localeCompare(right.status, "fr"));
 }

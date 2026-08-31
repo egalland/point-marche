@@ -53,23 +53,27 @@ async function hydratedTickets(rows: JiraTicketRow[]) {
 
 async function loadJiraTicketsForAnalyst(usercode: string) {
   const normalizedUserCode = usercode.trim().toUpperCase();
-  if (!/^[A-Z]\d{7}$/.test(normalizedUserCode)) return [];
+  if (!/^[A-Z]\d{7}$/.test(normalizedUserCode)) return { assigned: [], related: [] };
   const db = getDb();
   const [assigned, participated] = await Promise.all([
     db.select().from(jiraTickets).where(eq(jiraTickets.assigneeUserCode, normalizedUserCode)),
     db.select({ ticketKey: jiraTicketParticipants.ticketKey }).from(jiraTicketParticipants).where(eq(jiraTicketParticipants.usercode, normalizedUserCode)),
   ]);
   const keys = Array.from(new Set([...assigned.map((row) => row.key), ...participated.map((row) => row.ticketKey)]));
-  if (!keys.length) return [];
+  if (!keys.length) return { assigned: [], related: [] };
   const rows = await db.select().from(jiraTickets).where(inArray(jiraTickets.key, keys));
-  return hydratedTickets(rows);
+  const related = await hydratedTickets(rows);
+  return {
+    assigned: related.filter((ticket) => ticket.assigneeUserCode.toUpperCase() === normalizedUserCode),
+    related,
+  };
 }
 
 export async function loadJiraActivityForAnalyst(usercode: string, year: number, week: number) {
   const tickets = await loadJiraTicketsForAnalyst(usercode);
   return {
-    open: tickets.filter((ticket) => !isClosedJiraStatus(ticket.status)).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
-    resolved: tickets.filter((ticket) => {
+    open: tickets.assigned.filter((ticket) => !isClosedJiraStatus(ticket.status)).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+    resolved: tickets.related.filter((ticket) => {
       if (!isClosedJiraStatus(ticket.status)) return false;
       return dateIsInIsoWeek(ticket.resolutionAt || ticket.updatedAt, year, week);
     }).sort((left, right) => (right.resolutionAt || right.updatedAt).localeCompare(left.resolutionAt || left.updatedAt)),
