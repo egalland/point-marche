@@ -120,6 +120,84 @@ export const jiraAnalystWeeklySnapshots = sqliteTable("jira_analyst_weekly_snaps
   index("jira_analyst_weekly_snapshots_analyst_updated_idx").on(table.analystId, table.updatedAt),
 ]);
 
+export const jiraImportBatches = sqliteTable("jira_import_batches", {
+  id: text("id").primaryKey(),
+  sourceProfile: text("source_profile").notNull().default("jira-participants"),
+  filename: text("filename").notNull().default(""),
+  status: text("status").notNull().default("uploading"),
+  rowCount: integer("row_count").notNull().default(0),
+  ticketCount: integer("ticket_count").notNull().default(0),
+  participantCount: integer("participant_count").notNull().default(0),
+  rejectedCount: integer("rejected_count").notNull().default(0),
+  repairedTextCount: integer("repaired_text_count").notNull().default(0),
+  unknownUserCodeCount: integer("unknown_usercode_count").notNull().default(0),
+  importedBy: text("imported_by").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+}, (table) => [
+  index("jira_import_batches_status_created_idx").on(table.status, table.createdAt),
+]);
+
+export const jiraImportTickets = sqliteTable("jira_import_tickets", {
+  id: text("id").primaryKey(),
+  importId: text("import_id").notNull().references(() => jiraImportBatches.id, { onDelete: "cascade" }),
+  ticketKey: text("ticket_key").notNull(),
+  internalId: text("internal_id").notNull().default(""),
+  status: text("status").notNull().default(""),
+  summary: text("summary").notNull().default(""),
+  jiraCreatedAt: text("jira_created_at").notNull().default(""),
+  assigneeUserCode: text("assignee_usercode").notNull().default(""),
+  jiraUpdatedAt: text("jira_updated_at").notNull().default(""),
+  resolutionAt: text("resolution_at").notNull().default(""),
+  link: text("link").notNull().default(""),
+}, (table) => [
+  uniqueIndex("jira_import_tickets_import_key_idx").on(table.importId, table.ticketKey),
+  index("jira_import_tickets_import_idx").on(table.importId),
+]);
+
+export const jiraImportParticipants = sqliteTable("jira_import_participants", {
+  id: text("id").primaryKey(),
+  importId: text("import_id").notNull().references(() => jiraImportBatches.id, { onDelete: "cascade" }),
+  ticketKey: text("ticket_key").notNull(),
+  usercode: text("usercode").notNull(),
+  jiraUserId: text("jira_user_id").notNull().default(""),
+}, (table) => [
+  uniqueIndex("jira_import_participants_import_ticket_usercode_idx").on(table.importId, table.ticketKey, table.usercode),
+  index("jira_import_participants_import_idx").on(table.importId),
+]);
+
+export const jiraTickets = sqliteTable("jira_tickets", {
+  key: text("ticket_key").primaryKey(),
+  internalId: text("internal_id").notNull().default(""),
+  status: text("status").notNull().default(""),
+  summary: text("summary").notNull().default(""),
+  jiraCreatedAt: text("jira_created_at").notNull().default(""),
+  assigneeUserCode: text("assignee_usercode").notNull().default(""),
+  jiraUpdatedAt: text("jira_updated_at").notNull().default(""),
+  resolutionAt: text("resolution_at").notNull().default(""),
+  link: text("link").notNull().default(""),
+  lastImportId: text("last_import_id").notNull().default(""),
+  importedAt: text("imported_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("jira_tickets_assignee_status_idx").on(table.assigneeUserCode, table.status),
+  index("jira_tickets_updated_idx").on(table.jiraUpdatedAt),
+  index("jira_tickets_last_import_idx").on(table.lastImportId),
+]);
+
+export const jiraTicketParticipants = sqliteTable("jira_ticket_participants", {
+  id: text("id").primaryKey(),
+  ticketKey: text("ticket_key").notNull().references(() => jiraTickets.key, { onDelete: "cascade" }),
+  usercode: text("usercode").notNull(),
+  jiraUserId: text("jira_user_id").notNull().default(""),
+  lastImportId: text("last_import_id").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("jira_ticket_participants_ticket_usercode_idx").on(table.ticketKey, table.usercode),
+  index("jira_ticket_participants_usercode_idx").on(table.usercode),
+  index("jira_ticket_participants_import_idx").on(table.lastImportId),
+]);
+
 export const globalUserMarkets = sqliteTable("global_user_markets", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => globalUsers.id, { onDelete: "cascade" }),

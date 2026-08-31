@@ -2,6 +2,7 @@ import { and, asc, eq, or, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { globalUserMarkets, globalUsers, jiraMarketWeeklySnapshots, jiraWeeklySnapshots, marketDefinitions } from "../../../db/schema";
 import { parseJiraAssigneeSummary, type JiraSummaryImport } from "../../../lib/jira-import";
+import { latestCompletedJiraBatch, loadOpenMarketJiraSummary } from "../../../lib/jira-registry-server";
 import { getEditorUser } from "../../simple-auth";
 
 function validPeriod(year: number, week: number) {
@@ -10,7 +11,7 @@ function validPeriod(year: number, week: number) {
 
 function routeError(error: unknown) {
   const message = error instanceof Error ? error.message : "Erreur inattendue";
-  if (/no such table|jira_weekly_snapshots|jira_market_weekly_snapshots|jira_market_assignments/i.test(message)) return "Le registre Jira hebdomadaire n’est pas encore disponible.";
+  if (/no such table|jira_weekly_snapshots|jira_market_weekly_snapshots|jira_market_assignments|jira_import_batches|jira_tickets|jira_ticket_participants/i.test(message)) return "Le registre Jira hebdomadaire n’est pas encore disponible.";
   return message;
 }
 
@@ -36,6 +37,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const marketId = url.searchParams.get("marketId")?.trim() ?? "";
+    const preferCentral = url.searchParams.get("preferCentral") === "1";
     const year = Number(url.searchParams.get("year"));
     const week = Number(url.searchParams.get("week"));
     if (!marketId || !validPeriod(year, week)) return Response.json({ error: "Marché, année ou semaine ISO invalide." }, { status: 400 });
@@ -48,17 +50,29 @@ export async function GET(request: Request) {
       .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
       .where(and(eq(globalUsers.isActive, true), or(eq(globalUsers.role, "chef-produit"), eq(globalUsers.role, "chef-marche"))))
       .orderBy(asc(globalUserMarkets.marketId), asc(globalUsers.usercode));
+    if (preferCentral) {
+      const [batch, centralSummary] = await Promise.all([latestCompletedJiraBatch(), loadOpenMarketJiraSummary(marketId)]);
+      if (batch && centralSummary) return Response.json({
+        snapshot: { year, week, rawText: "", summary: centralSummary, updatedAt: batch.completedAt ?? batch.createdAt, source: "central" },
+        assignments: assignmentMap(assignments),
+      });
+    }
     if (marketSnapshot) {
       return Response.json({
-        snapshot: serializedSnapshot(marketSnapshot, JSON.parse(marketSnapshot.payload) as JiraSummaryImport),
+        snapshot: { ...serializedSnapshot(marketSnapshot, JSON.parse(marketSnapshot.payload) as JiraSummaryImport), source: "weekly" },
         assignments: assignmentMap(assignments),
       });
     }
 
     const [legacySnapshot] = await db.select().from(jiraWeeklySnapshots)
       .where(and(eq(jiraWeeklySnapshots.year, year), eq(jiraWeeklySnapshots.week, week))).limit(1);
+    if (legacySnapshot) return Response.json({
+      snapshot: { ...serializedSnapshot(legacySnapshot, JSON.parse(legacySnapshot.payload) as JiraSummaryImport), source: "weekly" },
+      assignments: assignmentMap(assignments),
+    });
+    const [batch, centralSummary] = await Promise.all([latestCompletedJiraBatch(), loadOpenMarketJiraSummary(marketId)]);
     return Response.json({
-      snapshot: legacySnapshot ? serializedSnapshot(legacySnapshot, JSON.parse(legacySnapshot.payload) as JiraSummaryImport) : null,
+      snapshot: batch && centralSummary ? { year, week, rawText: "", summary: centralSummary, updatedAt: batch.completedAt ?? batch.createdAt, source: "central" } : null,
       assignments: assignmentMap(assignments),
     });
   } catch (error) {

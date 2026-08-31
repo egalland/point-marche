@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { globalUsers, jiraAnalystWeeklySnapshots } from "../../../db/schema";
 import { analystJiraTickets, type AnalystJiraTicket } from "../../../lib/analyst-point";
 import type { GlobalDirectoryUser } from "../../../lib/global-directory";
+import { latestCompletedJiraBatch, loadOpenJiraTicketsForAnalyst } from "../../../lib/jira-registry-server";
 import { getEditorUser } from "../../simple-auth";
 
 function validPeriod(year: number, week: number) {
@@ -11,7 +12,7 @@ function validPeriod(year: number, week: number) {
 
 function routeError(error: unknown) {
   const message = error instanceof Error ? error.message : "Erreur inattendue";
-  if (/no such table|jira_analyst_weekly_snapshots/i.test(message)) return "Le registre Jira des analystes n’est pas encore disponible.";
+  if (/no such table|jira_analyst_weekly_snapshots|jira_import_batches|jira_tickets|jira_ticket_participants/i.test(message)) return "Le registre Jira des analystes n’est pas encore disponible.";
   return message;
 }
 
@@ -52,14 +53,32 @@ export async function GET(request: Request) {
     const year = Number(url.searchParams.get("year"));
     const week = Number(url.searchParams.get("week"));
     if (!analystId || !validPeriod(year, week)) return Response.json({ error: "Analyste, année ou semaine ISO invalide." }, { status: 400 });
-    if (!await activeAnalyst(analystId)) return Response.json({ error: "Analyste actif introuvable dans l’annuaire GLOBAL." }, { status: 404 });
+    const analyst = await activeAnalyst(analystId);
+    if (!analyst) return Response.json({ error: "Analyste actif introuvable dans l’annuaire GLOBAL." }, { status: 404 });
     const db = getDb();
     const [snapshot] = await db.select().from(jiraAnalystWeeklySnapshots).where(and(
       eq(jiraAnalystWeeklySnapshots.analystId, analystId),
       eq(jiraAnalystWeeklySnapshots.year, year),
       eq(jiraAnalystWeeklySnapshots.week, week),
     )).limit(1);
-    return Response.json({ snapshot: snapshot ? serialize(snapshot) : null }, { headers: { "Cache-Control": "no-store" } });
+    if (snapshot) return Response.json({ snapshot: { ...serialize(snapshot), source: "weekly" } }, { headers: { "Cache-Control": "no-store" } });
+    const [batch, centralTickets] = await Promise.all([
+      latestCompletedJiraBatch(),
+      loadOpenJiraTicketsForAnalyst(analyst.usercode),
+    ]);
+    const tickets: AnalystJiraTicket[] = centralTickets.map((ticket) => ({
+      id: `${ticket.key}:${ticket.updatedAt}`,
+      key: ticket.key,
+      internalId: ticket.internalId,
+      summary: ticket.summary,
+      status: ticket.status,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      link: ticket.link,
+    }));
+    return Response.json({
+      snapshot: batch ? { analystId, year, week, rawText: "", tickets, updatedAt: batch.completedAt ?? batch.createdAt, source: "central" } : null,
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });
   }

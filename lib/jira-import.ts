@@ -10,6 +10,7 @@ export const JIRA_SUMMARY_STATUSES = [
 export type JiraSummaryStatus = { status: string; count: number; link: string };
 export type JiraSummaryPerson = { assignee: string; displayName?: string; marketId?: string; statuses: JiraSummaryStatus[]; total: number; totalLink: string };
 export type JiraSummaryItem = JiraSummaryStatus & { assignee: string };
+export type JiraParticipant = { usercode: string; jiraUserId: string };
 export type JiraDetailedTicket = {
   key: string;
   internalId: string;
@@ -21,6 +22,8 @@ export type JiraDetailedTicket = {
   marketId?: string;
   updatedAt: string;
   link: string;
+  resolutionAt?: string;
+  participants?: JiraParticipant[];
 };
 export type JiraSummaryImport = {
   personCount: number;
@@ -43,6 +46,19 @@ const mojibakePairs: [string, string][] = [
 
 export function repairJiraText(value: string) {
   return mojibakePairs.reduce((result, [broken, repaired]) => result.replaceAll(broken, repaired), value);
+}
+
+export function repairJiraTextWithCount(value: string) {
+  let repaired = value;
+  let repairedTextCount = 0;
+  mojibakePairs.forEach(([broken, replacement]) => {
+    if (broken === "Â") return;
+    const occurrences = repaired.split(broken).length - 1;
+    if (!occurrences) return;
+    repairedTextCount += occurrences;
+    repaired = repaired.replaceAll(broken, replacement);
+  });
+  return { text: repaired, repairedTextCount };
 }
 
 function decodeEntities(value: string) {
@@ -84,7 +100,7 @@ function detectedFormat(text: string): JiraSummaryImport["format"] {
   return "unknown";
 }
 
-function canonicalStatus(value: string) {
+export function canonicalJiraStatus(value: string) {
   const label = normalized(value);
   if (/^(?:a faire|to do)$/.test(label)) return JIRA_SUMMARY_STATUSES[0];
   if (/^reouvert(?:e)?$/.test(label)) return JIRA_SUMMARY_STATUSES[1];
@@ -96,7 +112,7 @@ function canonicalStatus(value: string) {
 }
 
 function canonicalHeaderStatus(value: string) {
-  const status = canonicalStatus(value);
+  const status = canonicalJiraStatus(value);
   return JIRA_SUMMARY_STATUSES.includes(status as typeof JIRA_SUMMARY_STATUSES[number]) ? status : "";
 }
 
@@ -132,7 +148,7 @@ function detailedTicket(cells: string[]): JiraDetailedTicket | null {
   return {
     key,
     internalId: internalIdIndex >= 0 ? clean[internalIdIndex] : "",
-    status: canonicalStatus(clean[statusIndex]),
+    status: canonicalJiraStatus(clean[statusIndex]),
     summary: clean.slice(statusIndex + 1, createdIndex).filter(Boolean).join(" "),
     createdAt: jiraDate(clean[createdIndex]),
     assigneeUserCode: clean[usercodeIndex].toUpperCase(),
@@ -199,18 +215,32 @@ function summaryItems(people: JiraSummaryPerson[]) {
   });
 }
 
+export function jiraSummaryFromDetailedTickets(detailedTickets: JiraDetailedTicket[], format: JiraSummaryImport["format"] = "unknown"): JiraSummaryImport {
+  const people = aggregateDetailedTickets(detailedTickets);
+  return {
+    personCount: people.length,
+    tickets: detailedTickets.length,
+    people,
+    items: summaryItems(people),
+    detailedTickets,
+    mode: "detailed",
+    format,
+  };
+}
+
 export function parseJiraAssigneeSummary(text: string): JiraSummaryImport {
   const repairedText = repairJiraText(text).replace(/\u00a0/g, " ");
   const rows = repairedText.split(/\r?\n/).map((line) => splitRow(line)).filter((cells) => cells.length > 1);
   const detailedTickets = rows.map((cells) => detailedTicket(cells)).filter((ticket): ticket is JiraDetailedTicket => Boolean(ticket));
-  const people = detailedTickets.length ? aggregateDetailedTickets(detailedTickets) : legacySummary(rows);
+  if (detailedTickets.length) return jiraSummaryFromDetailedTickets(detailedTickets, detectedFormat(repairedText));
+  const people = legacySummary(rows);
   return {
     personCount: people.length,
     tickets: detailedTickets.length || people.reduce((sum, person) => sum + person.total, 0),
     people,
     items: summaryItems(people),
     detailedTickets,
-    mode: detailedTickets.length ? "detailed" : "summary",
+    mode: "summary",
     format: detectedFormat(repairedText),
   };
 }
