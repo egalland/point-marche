@@ -416,7 +416,6 @@ async function fetchJiraWeek(year: number, week: number, marketId: string, prefe
 }
 async function applyJiraWeek(data: PointData, marketId: string, replaceCentral = false) {
   try {
-    if (!replaceCentral && data.jira.some((ticket) => ticket.key)) return data;
     const payload = await fetchJiraWeek(isoWeekYear(data.meetingDate), isoWeek(data.meetingDate), marketId, replaceCentral);
     if (!payload.snapshot) return data;
     return { ...data, jira: jiraTicketsFromSummary(payload.snapshot.summary, payload.assignments[marketId] ?? [], marketId) };
