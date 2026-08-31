@@ -29,3 +29,9 @@ test("keeps open En cours tickets for the selected analyst USERCODE", () => {
   assert.equal(tickets[0].key, "GLOBAL-100");
   assert.equal(tickets[0].status, "En cours");
 });
+
+test("keeps older saved analyst points compatible with weekly resolved tickets", () => {
+  const normalized = analystPoint.normalizeAnalystPoint({ meetingDate: "2026-08-30", jira: [] }, analyst);
+
+  assert.deepEqual(normalized.jiraResolved, []);
+});

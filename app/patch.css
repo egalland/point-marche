@@ -84,14 +84,17 @@
 .analyst-point-module header p { margin: 0; color: var(--muted); font-size: 9px; }
 .analyst-overview-module > header { display: grid; justify-content: start; gap: 8px; }
 .analyst-overview-module > header strong { max-width: 930px; font-size: 22px; line-height: 1.35; }
-.analyst-point-kpis { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+.analyst-point-kpis { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; }
 .analyst-point-kpis article { display: grid; gap: 5px; padding: 15px; border: 1px solid var(--line); border-radius: 13px; background: #ffffff03; }
+.analyst-point-kpis article.resolved { border-color: rgba(114,245,197,.22); background: rgba(114,245,197,.045); }
+.analyst-point-kpis article.resolved strong { color: var(--accent); }
 .analyst-point-kpis span { color: var(--muted); font-size: 8px; text-transform: uppercase; }
 .analyst-point-kpis strong { font: 800 27px/1 var(--font-mono); }
 .analyst-point-kpis small { color: #708589; font-size: 8px; }
 .analyst-jira-signals { display: flex; gap: 8px; }
 .analyst-jira-signals span { display: grid; gap: 3px; padding: 9px 11px; border-radius: 10px; color: var(--peach); background: rgba(255,176,131,.08); font-size: 8px; }
 .analyst-jira-signals span.critical { color: var(--red); background: rgba(255,114,135,.08); }
+.analyst-jira-signals span.resolved { color: var(--accent); background: rgba(114,245,197,.08); }
 .analyst-jira-signals b { font-size: 18px; }
 
 .analyst-stock-trend { display: grid; grid-template-columns: minmax(0,1fr) 250px; gap: 12px; margin-bottom: 13px; padding: 15px; border: 1px solid var(--line); border-radius: 16px; background: #071113; }
@@ -123,6 +126,15 @@
 .analyst-jira-list > a > b { padding: 6px 8px; border-radius: 8px; color: var(--muted); background: #ffffff08; font-size: 8px; }
 .analyst-jira-list > a.warning > b { color: var(--peach); background: rgba(255,176,131,.1); }
 .analyst-jira-list > a.critical > b { color: var(--red); background: rgba(255,114,135,.1); }
+.analyst-jira-subtitle { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 18px 0 9px; padding-top: 14px; border-top: 1px solid var(--line); }
+.analyst-jira-subtitle > div { display: grid; gap: 4px; }
+.analyst-jira-subtitle span { color: var(--aqua); font: 730 8px/1 var(--font-mono); text-transform: uppercase; }
+.analyst-jira-subtitle strong { font-size: 14px; }
+.analyst-jira-subtitle small { max-width: 410px; color: var(--muted); font-size: 8px; text-align: right; }
+.analyst-jira-subtitle.resolved span, .analyst-jira-subtitle.resolved strong { color: var(--accent); }
+.analyst-jira-resolved-list > a.resolved { border-color: rgba(114,245,197,.2); background: rgba(114,245,197,.035); }
+.analyst-jira-resolved-list > a.resolved > span, .analyst-jira-resolved-list > a.resolved > b { color: var(--accent); }
+.analyst-jira-resolved-list > a.resolved > b { background: rgba(114,245,197,.08); }
 
 .analyst-planner-total { display: grid; justify-items: end; }
 .analyst-planner-total strong { color: var(--accent); font: 800 29px/1 var(--font-mono); }
@@ -260,6 +272,9 @@
   .analyst-point-toolbar { top: 76px; align-items: stretch; flex-direction: column; }
   .analyst-point-toolbar > div:last-child { justify-content: space-between; }
   .analyst-stock-trend { grid-template-columns: 1fr; }
+  .analyst-jira-signals { flex-wrap: wrap; }
+  .analyst-jira-subtitle { align-items: flex-start; flex-direction: column; }
+  .analyst-jira-subtitle small { text-align: left; }
   .analyst-jira-list > a { grid-template-columns: 1fr; }
   .analyst-activity-list article { align-items: flex-start; flex-direction: column; }
   .analyst-activity-list article > div:last-child { justify-content: flex-start; }
