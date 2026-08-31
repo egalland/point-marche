@@ -52,3 +52,12 @@ test("builds an open-ticket Jira query for one configured analyst", () => {
   assert.equal(directory.buildAnalystJql({ ...analyst, role: "chef-produit" }), "");
   assert.equal(directory.buildAnalystJql({ ...analyst, usercode: "Jane" }), "");
 });
+
+test("builds the global Jira import query with open and recently resolved tickets", () => {
+  const jql = directory.buildGlobalJiraImportJql();
+
+  assert.match(jql, /statusCategory != Done/);
+  assert.match(jql, /resolved >= startOfYear\(-1\)/);
+  assert.match(jql, /ORDER BY updated DESC/);
+  assert.doesNotMatch(jql, /assignee in/);
+});
