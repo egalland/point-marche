@@ -3,7 +3,7 @@ import { getDb } from "../../../db";
 import { globalUsers, jiraAnalystWeeklySnapshots } from "../../../db/schema";
 import { analystJiraTickets, type AnalystJiraTicket } from "../../../lib/analyst-point";
 import type { GlobalDirectoryUser } from "../../../lib/global-directory";
-import { latestCompletedJiraBatch, loadOpenJiraTicketsForAnalyst } from "../../../lib/jira-registry-server";
+import { latestCompletedJiraBatch, loadJiraActivityForAnalyst } from "../../../lib/jira-registry-server";
 import { shouldPreferCentralJira } from "../../../lib/jira-source-priority";
 import { getEditorUser } from "../../simple-auth";
 
@@ -25,6 +25,20 @@ function serialize(snapshot: typeof jiraAnalystWeeklySnapshots.$inferSelect) {
     rawText: snapshot.rawText,
     tickets: JSON.parse(snapshot.payload) as AnalystJiraTicket[],
     updatedAt: snapshot.updatedAt,
+  };
+}
+
+function serializeCentralTicket(ticket: Awaited<ReturnType<typeof loadJiraActivityForAnalyst>>["open"][number]): AnalystJiraTicket {
+  return {
+    id: `${ticket.key}:${ticket.updatedAt}`,
+    key: ticket.key,
+    internalId: ticket.internalId,
+    summary: ticket.summary,
+    status: ticket.status,
+    createdAt: ticket.createdAt,
+    updatedAt: ticket.updatedAt,
+    resolvedAt: ticket.resolutionAt || ticket.updatedAt,
+    link: ticket.link,
   };
 }
 
@@ -66,24 +80,23 @@ export async function GET(request: Request) {
       latestCompletedJiraBatch(),
     ]);
     const centralUpdatedAt = batch?.completedAt ?? batch?.createdAt;
+    const centralActivity = batch ? await loadJiraActivityForAnalyst(analyst.usercode, year, week) : null;
     if (batch && shouldPreferCentralJira(centralUpdatedAt, snapshot?.updatedAt)) {
-      const centralTickets = await loadOpenJiraTicketsForAnalyst(analyst.usercode);
-      const tickets: AnalystJiraTicket[] = centralTickets.map((ticket) => ({
-        id: `${ticket.key}:${ticket.updatedAt}`,
-        key: ticket.key,
-        internalId: ticket.internalId,
-        summary: ticket.summary,
-        status: ticket.status,
-        createdAt: ticket.createdAt,
-        updatedAt: ticket.updatedAt,
-        link: ticket.link,
-      }));
       return Response.json({
-        snapshot: { analystId, year, week, rawText: "", tickets, updatedAt: centralUpdatedAt, source: "central" },
+        snapshot: {
+          analystId,
+          year,
+          week,
+          rawText: "",
+          tickets: centralActivity?.open.map(serializeCentralTicket) ?? [],
+          resolvedTickets: centralActivity?.resolved.map(serializeCentralTicket) ?? [],
+          updatedAt: centralUpdatedAt,
+          source: "central",
+        },
       }, { headers: { "Cache-Control": "no-store" } });
     }
     return Response.json({
-      snapshot: snapshot ? { ...serialize(snapshot), source: "weekly" } : null,
+      snapshot: snapshot ? { ...serialize(snapshot), resolvedTickets: centralActivity?.resolved.map(serializeCentralTicket) ?? [], source: "weekly" } : null,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });

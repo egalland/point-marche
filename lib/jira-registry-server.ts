@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { getDb } from "../db";
 import { globalUserMarkets, globalUsers, jiraImportBatches, jiraTicketParticipants, jiraTickets } from "../db/schema";
+import { dateIsInIsoWeek } from "./iso-week";
 import { jiraSummaryFromDetailedTickets, type JiraDetailedTicket, type JiraParticipant } from "./jira-import";
 
 export function isClosedJiraStatus(status: string) {
@@ -50,7 +51,7 @@ async function hydratedTickets(rows: JiraTicketRow[]) {
   return rows.map((row) => ticketFromRow(row, participants.get(row.key) ?? []));
 }
 
-export async function loadOpenJiraTicketsForAnalyst(usercode: string) {
+async function loadJiraTicketsForAnalyst(usercode: string) {
   const normalizedUserCode = usercode.trim().toUpperCase();
   if (!/^[A-Z]\d{7}$/.test(normalizedUserCode)) return [];
   const db = getDb();
@@ -61,8 +62,18 @@ export async function loadOpenJiraTicketsForAnalyst(usercode: string) {
   const keys = Array.from(new Set([...assigned.map((row) => row.key), ...participated.map((row) => row.ticketKey)]));
   if (!keys.length) return [];
   const rows = await db.select().from(jiraTickets).where(inArray(jiraTickets.key, keys));
-  const tickets = await hydratedTickets(rows);
-  return tickets.filter((ticket) => !isClosedJiraStatus(ticket.status)).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  return hydratedTickets(rows);
+}
+
+export async function loadJiraActivityForAnalyst(usercode: string, year: number, week: number) {
+  const tickets = await loadJiraTicketsForAnalyst(usercode);
+  return {
+    open: tickets.filter((ticket) => !isClosedJiraStatus(ticket.status)).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+    resolved: tickets.filter((ticket) => {
+      if (!isClosedJiraStatus(ticket.status)) return false;
+      return dateIsInIsoWeek(ticket.resolutionAt || ticket.updatedAt, year, week);
+    }).sort((left, right) => (right.resolutionAt || right.updatedAt).localeCompare(left.resolutionAt || left.updatedAt)),
+  };
 }
 
 export async function loadOpenMarketJiraSummary(marketId: string) {
