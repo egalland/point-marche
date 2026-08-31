@@ -10,11 +10,12 @@ import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 import { supplierSeriesForTask, type SupplierVariationPoint } from "@/lib/supplier-variations";
 import { AnalystPointDashboard } from "./analyst-point-dashboard";
 import { AnalystStatsDashboard } from "./analyst-stats-dashboard";
+import { ImportCenter } from "./import-center";
 import { PlannerImportDialog } from "./planner-import-dialog";
 import { SupplierSparkline } from "./supplier-variation-dashboard";
 
 type Tone = "mint" | "violet" | "aqua" | "peach" | "red";
-type View = "read" | "edit" | "analyst" | "stats" | "mail" | "settings";
+type View = "read" | "edit" | "analyst" | "stats" | "imports" | "mail" | "settings";
 type Section = "general" | "dossiers" | "operations" | "jira" | "saved" | "markets" | "users" | "mail" | "personalization";
 type FontScale = "compact" | "standard" | "large";
 type Density = "compact" | "comfortable";
@@ -36,7 +37,7 @@ type ImportOutcome = { count: number; message?: string };
 type JiraPersonGroup = { assignee: string; items: JiraTicket[]; total: number };
 type JiraAttentionLevel = "fresh" | "warning" | "critical" | "undated";
 type JiraDashboardScope = "all" | "attention" | "critical";
-type JiraWeekPayload = { snapshot: { year: number; week: number; rawText: string; summary: JiraSummaryImport; updatedAt: string } | null; assignments: Record<string, string[]>; error?: string };
+type JiraWeekPayload = { snapshot: { year: number; week: number; rawText: string; summary: JiraSummaryImport; updatedAt: string; source?: "weekly" | "central" } | null; assignments: Record<string, string[]>; error?: string };
 type SessionPayload = { user: { displayName: string; username: string } | null };
 type DirectoryDraft = { name: string; email: string; usercode: string; plannerAlias: string; role: GlobalRole; marketIds: string[] };
 type DirectoryEditor = { id: string; draft: DirectoryDraft };
@@ -408,15 +409,16 @@ function jiraTicketsFromSummary(summaryInput: JiraSummaryImport, selectedPeople:
     lastActivity: "", link: item.link, comment: "Tableau Jira hebdomadaire", count: item.count,
   }));
 }
-async function fetchJiraWeek(year: number, week: number, marketId: string): Promise<JiraWeekPayload> {
-  const response = await fetch(`/api/jira-week?marketId=${encodeURIComponent(marketId)}&year=${year}&week=${week}`, { cache: "no-store" });
+async function fetchJiraWeek(year: number, week: number, marketId: string, preferCentral = false): Promise<JiraWeekPayload> {
+  const response = await fetch(`/api/jira-week?marketId=${encodeURIComponent(marketId)}&year=${year}&week=${week}${preferCentral ? "&preferCentral=1" : ""}`, { cache: "no-store" });
   const payload = await response.json() as JiraWeekPayload;
   if (!response.ok) throw new Error(payload.error || "Impossible de charger le tableau Jira hebdomadaire.");
   return payload;
 }
-async function applyJiraWeek(data: PointData, marketId: string) {
+async function applyJiraWeek(data: PointData, marketId: string, replaceCentral = false) {
   try {
-    const payload = await fetchJiraWeek(isoWeekYear(data.meetingDate), isoWeek(data.meetingDate), marketId);
+    if (!replaceCentral && data.jira.some((ticket) => ticket.key)) return data;
+    const payload = await fetchJiraWeek(isoWeekYear(data.meetingDate), isoWeek(data.meetingDate), marketId, replaceCentral);
     if (!payload.snapshot) return data;
     return { ...data, jira: jiraTicketsFromSummary(payload.snapshot.summary, payload.assignments[marketId] ?? [], marketId) };
   } catch {
@@ -907,7 +909,7 @@ export function MarketPulseApp() {
       if (payload.user) {
         void Promise.all([loadDirectory(), loadPlanner()]);
         const requestedMode = new URLSearchParams(window.location.search).get("mode");
-        if (requestedMode === "edit" || requestedMode === "analyst" || requestedMode === "stats" || requestedMode === "settings") setView(requestedMode);
+        if (requestedMode === "edit" || requestedMode === "analyst" || requestedMode === "stats" || requestedMode === "imports" || requestedMode === "settings") setView(requestedMode);
       }
     }).catch(() => { /* La lecture publique reste disponible. */ }).finally(() => { if (active) setSessionReady(true); });
     return () => { active = false; };
@@ -960,7 +962,7 @@ export function MarketPulseApp() {
       setLoginOpen(false);
       setView(loginDestination);
       await Promise.all([loadDirectory(), loadPlanner()]);
-      setToast(loginDestination === "stats" ? "Connexion réussie. Statistiques ouvertes." : loginDestination === "analyst" ? "Connexion réussie. Point analyste ouvert." : loginDestination === "settings" ? "Connexion réussie. Paramètres ouverts." : "Connexion réussie. Mode édition ouvert.");
+      setToast(loginDestination === "stats" ? "Connexion réussie. Statistiques ouvertes." : loginDestination === "analyst" ? "Connexion réussie. Point analyste ouvert." : loginDestination === "imports" ? "Connexion réussie. Centre d’import ouvert." : loginDestination === "settings" ? "Connexion réussie. Paramètres ouverts." : "Connexion réussie. Mode édition ouvert.");
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "Connexion impossible.");
     } finally {
@@ -982,7 +984,7 @@ export function MarketPulseApp() {
   };
 
   const chooseView = (nextView: View) => {
-    if ((nextView === "edit" || nextView === "analyst" || nextView === "stats" || nextView === "settings") && !session.user) {
+    if ((nextView === "edit" || nextView === "analyst" || nextView === "stats" || nextView === "imports" || nextView === "settings") && !session.user) {
       setLoginDestination(nextView);
       openLogin();
       return;
@@ -1055,6 +1057,11 @@ export function MarketPulseApp() {
       imported: payload.imported ?? 0,
       message: `${payload.imported ?? 0} tâche${(payload.imported ?? 0) > 1 ? "s" : ""} enregistrée${(payload.imported ?? 0) > 1 ? "s" : ""} · ${relevant.length} liée${relevant.length > 1 ? "s" : ""} au point actif.`,
     };
+  };
+  const refreshJiraFromRegistry = async () => {
+    const refreshed = await applyJiraWeek(data, marketId, true);
+    setData((current) => ({ ...current, jira: refreshed.jira }));
+    setToast("Registre Jira actualisé dans le point marché actif.");
   };
   const download = (name: string, content: string, type: string) => { const url = URL.createObjectURL(new Blob([content], { type })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 500); };
   const exportJson = (record?: PointRecord) => {
@@ -1396,7 +1403,7 @@ export function MarketPulseApp() {
   return <div className={`app-shell market-${market.tone} font-${data.preferences.fontScale} density-${data.preferences.density}`} style={themeStyle}><div className="ambient ambient-a"/><div className="ambient ambient-b"/>
     <header className="app-header">
       <a className="brand" href="#top"><span className="brand-mark"><Icon name="spark" size={19}/></span><div><strong>Market Pulse</strong><small>Générateur de point marché</small></div></a>
-      <nav className="view-tabs" aria-label="Mode d’affichage"><button className={view === "read" ? "active" : ""} onClick={() => chooseView("read")}><Icon name="eye"/> Lecture marché</button><button className={view === "edit" ? "active" : ""} onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> Préparation</button><button className={view === "analyst" ? "active" : ""} onClick={() => chooseView("analyst")}><Icon name={session.user ? "user" : "lock"}/> Point analyste</button><button className={view === "stats" ? "active" : ""} onClick={() => chooseView("stats")}><Icon name={session.user ? "trend" : "lock"}/> Statistiques</button><button className={view === "mail" ? "active" : ""} onClick={() => chooseView("mail")}><Icon name="mail"/> Mail marché</button><button className={view === "settings" ? "active" : ""} onClick={() => chooseView("settings")}><Icon name={session.user ? "settings" : "lock"}/> Paramètres</button></nav>
+      <nav className="view-tabs" aria-label="Mode d’affichage"><button className={view === "read" ? "active" : ""} onClick={() => chooseView("read")}><Icon name="eye"/> Lecture marché</button><button className={view === "edit" ? "active" : ""} onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> Préparation</button><button className={view === "analyst" ? "active" : ""} onClick={() => chooseView("analyst")}><Icon name={session.user ? "user" : "lock"}/> Point analyste</button><button className={view === "stats" ? "active" : ""} onClick={() => chooseView("stats")}><Icon name={session.user ? "trend" : "lock"}/> Statistiques</button><button className={view === "imports" ? "active" : ""} onClick={() => chooseView("imports")}><Icon name={session.user ? "upload" : "lock"}/> Imports</button><button className={view === "mail" ? "active" : ""} onClick={() => chooseView("mail")}><Icon name="mail"/> Mail marché</button><button className={view === "settings" ? "active" : ""} onClick={() => chooseView("settings")}><Icon name={session.user ? "settings" : "lock"}/> Paramètres</button></nav>
       <div className="header-actions">
         <input ref={fileInput} className="sr-only" type="file" accept="application/json" onChange={importJson}/>
         {session.user && (view === "edit" || view === "settings") && <><details className="header-more"><summary className="icon-button" aria-label="Autres actions" title="Autres actions"><Icon name="more"/></summary><div><button type="button" onClick={() => { fileInput.current?.click(); }}><Icon name="upload"/> Importer un JSON</button><button type="button" onClick={() => exportJson()}><Icon name="download"/> Exporter le brouillon</button><button type="button" className="danger" onClick={() => { void resetPoint(); }}><Icon name="plus"/> Réinitialiser la semaine</button></div></details><button className={`primary-button save-point ${isDirty ? "has-changes" : ""}`} disabled={saving || !ready || (!isDirty && Boolean(activeRecordId))} onClick={savePoint}><Icon name="check"/> {saving ? "Enregistrement…" : isDirty ? "Sauvegarder" : activeRecordId ? "Enregistré" : "Créer le point"}</button></>}
@@ -1404,12 +1411,13 @@ export function MarketPulseApp() {
         {session.user && <div className="editor-profile"><span><Icon name="user" size={15}/></span><div><strong>{session.user.displayName}</strong><small>{session.user.username}</small></div><button onClick={logout}>Déconnexion</button></div>}
       </div>
     </header>
-    <div id="top" className="top-strip"><span className="live-dot"/><strong>{view === "stats" ? "ANALYSE TARIF" : view === "analyst" ? "POINT ANALYSTE" : view === "settings" ? "PARAMÈTRES" : market.short}</strong><i/>{view === "stats" ? "Source Planner" : view === "analyst" ? "Semaine et analyste" : view === "settings" ? market.name : `${isoWeekYear(data.meetingDate)} · S${String(isoWeek(data.meetingDate)).padStart(2, "0")}`}<i/>{view === "stats" || view === "analyst" ? `${plannerTasks.length} simulations enregistrées` : view === "settings" ? "Marchés · annuaire · affichage" : dateLabel(data.meetingDate)}<i/>{view === "stats" || view === "analyst" ? "Lecture descriptive" : isDirty ? "Brouillon" : activeRecordId ? "Enregistré" : "Non enregistré"}<b>{view === "stats" ? "Filtres multi-analystes" : view === "analyst" ? "Tickets ouverts uniquement" : view === "settings" ? "Réglages internes" : alerts.length ? "Vigilances détectées" : "Aucune vigilance"}</b></div>
+    <div id="top" className="top-strip"><span className="live-dot"/><strong>{view === "stats" ? "ANALYSE TARIF" : view === "analyst" ? "POINT ANALYSTE" : view === "imports" ? "CENTRE D’IMPORT" : view === "settings" ? "PARAMÈTRES" : market.short}</strong><i/>{view === "stats" ? "Source Planner" : view === "analyst" ? "Semaine et analyste" : view === "imports" ? "Jira · Planner" : view === "settings" ? market.name : `${isoWeekYear(data.meetingDate)} · S${String(isoWeek(data.meetingDate)).padStart(2, "0")}`}<i/>{view === "stats" || view === "analyst" || view === "imports" ? `${plannerTasks.length} simulations enregistrées` : view === "settings" ? "Marchés · annuaire · affichage" : dateLabel(data.meetingDate)}<i/>{view === "stats" || view === "analyst" ? "Lecture descriptive" : view === "imports" ? "Registres centralisés" : isDirty ? "Brouillon" : activeRecordId ? "Enregistré" : "Non enregistré"}<b>{view === "stats" ? "Filtres multi-analystes" : view === "analyst" ? "Tickets ouverts uniquement" : view === "imports" ? "CSV volumineux accepté" : view === "settings" ? "Réglages internes" : alerts.length ? "Vigilances détectées" : "Aucune vigilance"}</b></div>
     {(view === "read" || view === "edit") && periodNavigator}
     {(view === "edit" || view === "settings") && session.user && renderEditor()}
     {view === "read" && <main className="preview-page"><div className="preview-toolbar"><div><span>Lecture générale</span><strong>Choisis le marché et la semaine dans le calendrier ci-dessus.</strong></div><button className="secondary-button" onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> {session.user ? "Modifier ce point" : "Connexion GLOBAL pour modifier"}</button></div>{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Tu peux préparer puis sauvegarder le point de cette semaine." : "Aucun brouillon n’est affiché publiquement. Connecte-toi pour préparer cette semaine."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard data={data} market={market} archive={archive}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou connecte-toi pour la préparer.</p></div>}</main>}
     {view === "stats" && session.user && (plannerReady && directoryReady ? <AnalystStatsDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} registry={plannerRegistry} updatedAt={plannerUpdatedAt} onImport={importPlannerData}/> : <main className="analyst-stats-page"><div className="surface stats-loading"><span>Chargement de la source Planner et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "analyst" && session.user && (plannerReady && directoryReady ? <AnalystPointDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData}/> : <main className="analyst-point-page"><div className="surface stats-loading"><span>Chargement du point analyste, de Planner et de l’annuaire GLOBAL…</span></div></main>)}
+    {view === "imports" && session.user && (plannerReady && directoryReady ? <ImportCenter users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerTasks={plannerTasks} plannerRegistry={plannerRegistry} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData} onJiraImported={refreshJiraFromRegistry}/> : <main className="import-center-page"><div className="surface stats-loading"><span>Chargement des registres et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "mail" && <main className="mail-page">
       <div className="mail-toolbar"><div><span>Kit Outlook</span><strong>Le mail reste lisible seul, la pièce jointe conserve les interactions.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { setSection("mail"); chooseView("edit"); }}><Icon name={session.user ? "edit" : "lock"}/> Paramètres</button><button className="primary-button" onClick={copyMail}><Icon name="copy"/> Copier le corps du mail</button></div></div>
       <section className="mail-kit-panel" aria-label="Préparation de l’envoi Outlook"><div className="mail-kit-intro"><span>Envoi en deux éléments</span><strong>Corps du mail + tableau de bord interactif</strong><p>Copie d’abord la version statique dans Outlook, puis fais glisser la carte HTML dans le message. Si Outlook refuse le glisser-déposer, utilise le bouton de téléchargement.</p></div><div className="mail-kit-steps"><article><span>1</span><div><strong>Version mail</strong><small>Synthèse compatible Outlook, sans script.</small></div><button type="button" className="secondary-button" onClick={copyMail}><Icon name="copy" size={15}/> Copier</button></article><article className="html-attachment-card" draggable onDragStart={dragInteractiveHtml} title="Faire glisser cette pièce jointe vers Outlook"><span>2</span><div className="html-file-icon">HTML</div><div><strong>{htmlAttachmentName}</strong><small>Graphiques, filtres Jira et personnes dépliables · aucune modification possible</small></div><div className="attachment-actions"><span><Icon name="upload" size={14}/> Glisser dans Outlook</span><button type="button" className="secondary-button" onClick={downloadInteractiveHtml}><Icon name="download" size={15}/> Télécharger</button></div></article></div><div className="mail-security-note"><Icon name="alert" size={15}/><span>La version statique reste complète si la sécurité de l’entreprise bloque l’ouverture d’une pièce jointe HTML.</span></div></section>
