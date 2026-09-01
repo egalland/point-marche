@@ -1,8 +1,9 @@
-import { and, desc, eq, inArray, or } from "drizzle-orm";
-import { getDb } from "../db";
-import { globalUserMarkets, globalUsers, jiraImportBatches, jiraTicketParticipants, jiraTickets } from "../db/schema";
+import { and, desc, eq, or } from "drizzle-orm";
+import { getDb, getRawDb } from "../db";
+import { globalUserMarkets, globalUsers, jiraImportBatches, jiraTickets } from "../db/schema";
+import { isoWeekRange } from "./iso-week";
 import { jiraActivityForAnalyst } from "./jira-analyst-activity";
-import { isClosedJiraStatus, jiraSummaryFromDetailedTickets, type JiraDetailedTicket, type JiraParticipant } from "./jira-import";
+import { canonicalJiraStatus, isClosedJiraStatus, jiraSummaryFromDetailedTickets, type JiraDetailedTicket, type JiraParticipant } from "./jira-import";
 
 export async function latestCompletedJiraBatch() {
   const db = getDb();
@@ -13,13 +14,32 @@ export async function latestCompletedJiraBatch() {
   return batch ?? null;
 }
 
-type JiraTicketRow = typeof jiraTickets.$inferSelect;
+type JiraTicketRow = Pick<typeof jiraTickets.$inferSelect, "key" | "internalId" | "status" | "summary" | "jiraCreatedAt" | "assigneeUserCode" | "jiraUpdatedAt" | "resolutionAt" | "link">;
+type AnalystTicketRow = JiraTicketRow & { participantUserCode: string | null; participantJiraUserId: string | null };
+
+const JIRA_READ_PAGE_SIZE = 1000;
+const ticketColumns = `t.ticket_key AS key, t.internal_id AS internalId, t.status, t.summary,
+  t.jira_created_at AS jiraCreatedAt, t.assignee_usercode AS assigneeUserCode,
+  t.jira_updated_at AS jiraUpdatedAt, t.resolution_at AS resolutionAt, t.link`;
+
+async function* ticketPages<T extends JiraTicketRow>(query: string, bindings: unknown[]) {
+  const db = getRawDb();
+  let afterKey = "";
+  while (true) {
+    const { results } = await db.prepare(`${query} AND t.ticket_key > ? ORDER BY t.ticket_key LIMIT ?`)
+      .bind(...bindings, afterKey, JIRA_READ_PAGE_SIZE).all<T>();
+    if (!results.length) return;
+    yield results;
+    if (results.length < JIRA_READ_PAGE_SIZE) return;
+    afterKey = results[results.length - 1].key;
+  }
+}
 
 function ticketFromRow(row: JiraTicketRow, participants: JiraParticipant[] = []): JiraDetailedTicket {
   return {
     key: row.key,
     internalId: row.internalId,
-    status: row.status,
+    status: canonicalJiraStatus(row.status),
     summary: row.summary,
     createdAt: row.jiraCreatedAt,
     assigneeUserCode: row.assigneeUserCode,
@@ -30,44 +50,29 @@ function ticketFromRow(row: JiraTicketRow, participants: JiraParticipant[] = [])
   };
 }
 
-async function participantMap(ticketKeys: string[]) {
-  if (!ticketKeys.length) return new Map<string, JiraParticipant[]>();
-  const db = getDb();
-  const rows = await db.select({ ticketKey: jiraTicketParticipants.ticketKey, usercode: jiraTicketParticipants.usercode, jiraUserId: jiraTicketParticipants.jiraUserId })
-    .from(jiraTicketParticipants)
-    .where(inArray(jiraTicketParticipants.ticketKey, ticketKeys));
-  return rows.reduce((result, row) => {
-    result.set(row.ticketKey, [...(result.get(row.ticketKey) ?? []), { usercode: row.usercode, jiraUserId: row.jiraUserId }]);
-    return result;
-  }, new Map<string, JiraParticipant[]>());
-}
-
-async function hydratedTickets(rows: JiraTicketRow[]) {
-  const participants = await participantMap(rows.map((row) => row.key));
-  return rows.map((row) => ticketFromRow(row, participants.get(row.key) ?? []));
-}
-
-async function loadJiraTicketsForAnalyst(usercode: string) {
-  const normalizedUserCode = usercode.trim().toUpperCase();
-  if (!/^[A-Z]\d{7}$/.test(normalizedUserCode)) return { assigned: [], related: [] };
-  const db = getDb();
-  const [assigned, participated] = await Promise.all([
-    db.select().from(jiraTickets).where(eq(jiraTickets.assigneeUserCode, normalizedUserCode)),
-    db.select({ ticketKey: jiraTicketParticipants.ticketKey }).from(jiraTicketParticipants).where(eq(jiraTicketParticipants.usercode, normalizedUserCode)),
-  ]);
-  const keys = Array.from(new Set([...assigned.map((row) => row.key), ...participated.map((row) => row.ticketKey)]));
-  if (!keys.length) return { assigned: [], related: [] };
-  const rows = await db.select().from(jiraTickets).where(inArray(jiraTickets.key, keys));
-  const related = await hydratedTickets(rows);
-  return {
-    assigned: related.filter((ticket) => ticket.assigneeUserCode.toUpperCase() === normalizedUserCode),
-    related,
-  };
-}
-
 export async function loadJiraActivityForAnalyst(usercode: string, year: number, week: number) {
-  const tickets = await loadJiraTicketsForAnalyst(usercode);
-  return jiraActivityForAnalyst(tickets.related, usercode, year, week);
+  const normalizedUserCode = usercode.trim().toUpperCase();
+  if (!/^[A-Z]\d{7}$/.test(normalizedUserCode)) return { open: [], resolved: [] };
+  const range = isoWeekRange(year, week);
+  const nextWeek = isoWeekRange(year, week + 1).from;
+  const query = `SELECT ${ticketColumns}, p.usercode AS participantUserCode, p.jira_user_id AS participantJiraUserId
+    FROM jira_tickets t
+    LEFT JOIN jira_ticket_participants p ON p.ticket_key = t.ticket_key AND p.usercode = ?
+    WHERE (t.assignee_usercode = ? OR (
+      t.jira_updated_at >= ? AND t.jira_updated_at < ?
+      AND t.ticket_key IN (SELECT ticket_key FROM jira_ticket_participants WHERE usercode = ?)
+    ))`;
+  const activity: ReturnType<typeof jiraActivityForAnalyst> = { open: [], resolved: [] };
+  for await (const rows of ticketPages<AnalystTicketRow>(query, [normalizedUserCode, normalizedUserCode, range.from, nextWeek, normalizedUserCode])) {
+    const tickets = rows.map((row) => ticketFromRow(row, row.participantUserCode ? [{ usercode: row.participantUserCode, jiraUserId: row.participantJiraUserId ?? "" }] : []));
+    const page = jiraActivityForAnalyst(tickets, normalizedUserCode, year, week);
+    activity.open.push(...page.open);
+    activity.resolved.push(...page.resolved);
+  }
+  return {
+    open: activity.open.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+    resolved: activity.resolved.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+  };
 }
 
 export async function loadOpenMarketJiraSummary(marketId: string) {
@@ -82,9 +87,16 @@ export async function loadOpenMarketJiraSummary(marketId: string) {
     ));
   const people = new Map(directory.map((person) => [person.usercode.toUpperCase(), person.name]));
   if (!people.size) return null;
-  const rows = await db.select().from(jiraTickets).where(inArray(jiraTickets.assigneeUserCode, Array.from(people.keys())));
-  const tickets = (await hydratedTickets(rows))
-    .filter((ticket) => !isClosedJiraStatus(ticket.status))
-    .map((ticket) => ({ ...ticket, assigneeName: people.get(ticket.assigneeUserCode.toUpperCase()), marketId }));
+  const query = `SELECT ${ticketColumns} FROM jira_tickets t
+    WHERE t.assignee_usercode IN (
+      SELECT u.jira_name FROM global_user_markets m
+      INNER JOIN global_users u ON u.id = m.user_id
+      WHERE m.market_id = ? AND u.is_active = 1 AND u.role IN ('chef-produit', 'chef-marche')
+    )`;
+  const tickets: JiraDetailedTicket[] = [];
+  for await (const rows of ticketPages<JiraTicketRow>(query, [marketId])) {
+    tickets.push(...rows.filter((row) => !isClosedJiraStatus(row.status))
+      .map((row) => ({ ...ticketFromRow(row), assigneeName: people.get(row.assigneeUserCode.toUpperCase()), marketId })));
+  }
   return jiraSummaryFromDetailedTickets(tickets, "unknown");
 }

@@ -2,7 +2,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
 import { getRuntimeEnv } from "../lib/runtime-env";
 
-export function getDb() {
+export function getRawDb() {
   const env = getRuntimeEnv();
   if (!env?.DB) {
     throw new Error(
@@ -10,5 +10,9 @@ export function getDb() {
     );
   }
 
-  return drizzle(env.DB as never, { schema });
+  return env.DB;
+}
+
+export function getDb() {
+  return drizzle(getRawDb() as never, { schema });
 }

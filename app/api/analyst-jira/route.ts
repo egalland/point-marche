@@ -13,8 +13,8 @@ function validPeriod(year: number, week: number) {
 
 function routeError(error: unknown) {
   const message = error instanceof Error ? error.message : "Erreur inattendue";
-  if (/no such table|jira_analyst_weekly_snapshots|jira_import_batches|jira_tickets|jira_ticket_participants/i.test(message)) return "Le registre Jira des analystes n’est pas encore disponible.";
-  return message;
+  if (/no such table/i.test(message)) return "Le registre Jira des analystes n’est pas encore disponible.";
+  return "Le chargement ou l’enregistrement Jira a échoué. Réessaie dans quelques instants.";
 }
 
 function serialize(snapshot: typeof jiraAnalystWeeklySnapshots.$inferSelect) {

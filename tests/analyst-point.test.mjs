@@ -21,6 +21,7 @@ test("keeps open En cours tickets for the selected analyst USERCODE", () => {
     "GLOBAL-100\t1000001\tEn cours\tTicket analyste actif\t20/08/2026 09:00\tA1234567\t27/08/2026 10:00",
     "GLOBAL-101\t1000002\tRésolu\tTicket analyste terminé\t20/08/2026 09:00\tA1234567\t27/08/2026 10:00",
     "GLOBAL-102\t1000003\tEn cours\tTicket d’un autre analyste\t20/08/2026 09:00\tB1234567\t27/08/2026 10:00",
+    "GLOBAL-103\t1000004\tFini\tTicket analyste fini\t20/08/2026 09:00\tA1234567\t27/08/2026 10:00",
   ].join("\n");
 
   const tickets = analystPoint.analystJiraTickets(table, analyst);

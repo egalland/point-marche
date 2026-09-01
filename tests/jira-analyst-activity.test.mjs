@@ -43,3 +43,14 @@ test("counts open tickets as assigned only and weekly closed tickets by last upd
   assert.deepEqual(result.open.map((item) => item.key), ["GLOBAL-1"]);
   assert.deepEqual(result.resolved.map((item) => item.key), ["GLOBAL-5", "GLOBAL-4", "GLOBAL-3"]);
 });
+
+test("treats Fini as completed for assigned and participant tickets without confusing Finition", () => {
+  const result = activity.jiraActivityForAnalyst([
+    ticket("GLOBAL-10", "Fini", "A1234567", "2026-08-25T09:00:00"),
+    ticket("GLOBAL-11", "Fini", "B1234567", "2026-08-26T09:00:00", [{ usercode: "A1234567", jiraUserId: "" }]),
+    ticket("GLOBAL-12", "Finition en cours", "A1234567", "2026-08-27T09:00:00"),
+    ticket("GLOBAL-13", "Fini", "A1234567", "2026-08-31T09:00:00"),
+  ], "A1234567", 2026, 35);
+  assert.deepEqual(result.open.map((item) => item.key), ["GLOBAL-12"]);
+  assert.deepEqual(result.resolved.map((item) => item.key), ["GLOBAL-11", "GLOBAL-10"]);
+});

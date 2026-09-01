@@ -12,8 +12,8 @@ function validPeriod(year: number, week: number) {
 
 function routeError(error: unknown) {
   const message = error instanceof Error ? error.message : "Erreur inattendue";
-  if (/no such table|jira_weekly_snapshots|jira_market_weekly_snapshots|jira_market_assignments|jira_import_batches|jira_tickets|jira_ticket_participants/i.test(message)) return "Le registre Jira hebdomadaire n’est pas encore disponible.";
-  return message;
+  if (/no such table/i.test(message)) return "Le registre Jira hebdomadaire n’est pas encore disponible.";
+  return "Le chargement ou l’enregistrement Jira a échoué. Réessaie dans quelques instants.";
 }
 
 function assignmentMap(rows: { marketId: string; assignee: string }[]) {

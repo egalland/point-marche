@@ -64,6 +64,12 @@
 .analyst-point-toolbar > div:last-child { display: flex; align-items: center; gap: 10px; }
 .analyst-saved-state { padding: 6px 9px; border-radius: 99px; color: var(--peach); background: rgba(255,176,131,.08); font: 720 8px/1 var(--font-mono); text-transform: uppercase; }
 .analyst-saved-state.saved { color: var(--mint); background: rgba(114,245,197,.08); }
+.analyst-jira-load-state { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px; border: 1px solid var(--line-strong); border-radius: 16px; background: var(--surface); }
+.analyst-jira-load-state > div { display: grid; gap: 6px; flex: 1 1 240px; }
+.analyst-jira-load-state strong { color: var(--text); font-size: 13px; }
+.analyst-jira-load-state span, .analyst-jira-load-state small { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.analyst-jira-load-state.error { border-color: rgba(255,176,131,.35); background: rgba(255,176,131,.045); }
+.analyst-jira-load-state.error strong { color: var(--peach); }
 .analyst-render-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
 .analyst-render-item.width-full { grid-column: 1/-1; }
 .analyst-render-item.width-half { grid-column: span 1; }
