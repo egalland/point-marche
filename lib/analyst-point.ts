@@ -3,7 +3,7 @@ import type { GlobalDirectoryUser } from "./global-directory";
 import { parseJiraAssigneeSummary } from "./jira-import";
 
 export type AnalystPointModule = "overview" | "jira" | "planner" | "cycle20" | "dossiers";
-export type AnalystJiraTicket = { id: string; key: string; internalId: string; summary: string; status: string; createdAt: string; updatedAt: string; resolvedAt?: string; link: string };
+export type AnalystJiraTicket = { id: string; key: string; internalId: string; summary: string; status: string; createdAt: string; updatedAt: string; link: string };
 export type AnalystDossier = { id: string; title: string; status: string; action: string; deadline: string; comment: string; progress: number; showProgress: boolean; sourceId?: string; carriedFromYear?: number; carriedFromWeek?: number };
 export type AnalystPointPreferences = {
   order: AnalystPointModule[];
@@ -26,7 +26,6 @@ export type AnalystPointData = {
   dossiers: AnalystDossier[];
   jira: AnalystJiraTicket[];
   jiraResolved: AnalystJiraTicket[];
-  jiraClosedWithoutResolutionDate: number;
   preferences: AnalystPointPreferences;
   mail: { to: string; cc: string; subject: string; intro: string; autoTo: string[] };
 };
@@ -105,7 +104,6 @@ export function initialAnalystPoint(analyst: GlobalDirectoryUser, manager?: Glob
     dossiers: [],
     jira: [],
     jiraResolved: [],
-    jiraClosedWithoutResolutionDate: 0,
     preferences: {
       order: analystPointModules.map((module) => module.id),
       widths: { overview: "full", jira: "full", planner: "full", cycle20: "half", dossiers: "full" },
@@ -133,7 +131,6 @@ export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUs
     dossiers: Array.isArray(source.dossiers) ? source.dossiers : [],
     jira: Array.isArray(source.jira) ? source.jira : [],
     jiraResolved: Array.isArray(source.jiraResolved) ? source.jiraResolved : [],
-    jiraClosedWithoutResolutionDate: Math.max(0, Number(source.jiraClosedWithoutResolutionDate) || 0),
     preferences: {
       ...fallback.preferences,
       ...preferences,
