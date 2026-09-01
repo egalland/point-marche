@@ -62,7 +62,7 @@ export function repairJiraTextWithCount(value: string) {
 }
 
 export function isClosedJiraStatus(status: string) {
-  return /(termin|cl[oô]tur|r[eé]solu|ferm|annul|done|closed)/i.test(status);
+  return /(termin|cl[oô]tur|r[eé]solu|ferm|annul|done|closed)/i.test(status) || /^fini(?:e)?s?$/i.test(status.trim());
 }
 
 function decodeEntities(value: string) {
@@ -106,6 +106,7 @@ function detectedFormat(text: string): JiraSummaryImport["format"] {
 
 export function canonicalJiraStatus(value: string) {
   const label = normalized(value);
+  if (/^fini(?:e)?s?$/.test(label)) return "Terminé";
   if (/^(?:a faire|to do)$/.test(label)) return JIRA_SUMMARY_STATUSES[0];
   if (/^reouvert(?:e)?$/.test(label)) return JIRA_SUMMARY_STATUSES[1];
   if (/^en cours$/.test(label)) return JIRA_SUMMARY_STATUSES[2];

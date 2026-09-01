@@ -1,6 +1,6 @@
 import type { ModuleWidth } from "@/components/module-layout-editor";
 import type { GlobalDirectoryUser } from "./global-directory";
-import { parseJiraAssigneeSummary } from "./jira-import";
+import { isClosedJiraStatus, parseJiraAssigneeSummary } from "./jira-import";
 
 export type AnalystPointModule = "overview" | "jira" | "planner" | "cycle20" | "dossiers";
 export type AnalystJiraTicket = { id: string; key: string; internalId: string; summary: string; status: string; createdAt: string; updatedAt: string; link: string };
@@ -146,15 +146,11 @@ export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUs
   };
 }
 
-function closedStatus(status: string) {
-  return /(termin|cl[oô]tur|r[eé]solu|annul|done)/i.test(status);
-}
-
 export function analystJiraTickets(rawText: string, analyst: GlobalDirectoryUser): AnalystJiraTicket[] {
   const usercode = analyst.usercode.trim().toUpperCase();
   if (!/^[A-Z]\d{7}$/.test(usercode)) return [];
   return parseJiraAssigneeSummary(rawText).detailedTickets
-    .filter((ticket) => ticket.assigneeUserCode.toUpperCase() === usercode && !closedStatus(ticket.status))
+    .filter((ticket) => ticket.assigneeUserCode.toUpperCase() === usercode && !isClosedJiraStatus(ticket.status))
     .map((ticket) => ({ id: `${ticket.key}:${ticket.updatedAt}`, key: ticket.key, internalId: ticket.internalId, summary: ticket.summary, status: ticket.status, createdAt: ticket.createdAt, updatedAt: ticket.updatedAt, link: ticket.link }));
 }
 
