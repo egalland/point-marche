@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { jiraImportBatches, jiraImportParticipants, jiraImportTickets, jiraTicketParticipants, jiraTickets } from "../../../db/schema";
 import type { JiraCsvTicket } from "../../../lib/jira-csv";
+import { JIRA_DELETE_KEYS_PER_STATEMENT, JIRA_PARTICIPANT_ROWS_PER_STATEMENT, JIRA_STATEMENTS_PER_BATCH, JIRA_TICKET_ROWS_PER_STATEMENT, jiraImportChunks } from "../../../lib/jira-import-batching";
 import { getRuntimeEnv } from "../../../lib/runtime-env";
 import { getEditorUser } from "../../simple-auth";
 
@@ -120,7 +121,7 @@ export async function POST(request: Request) {
       const tickets = incoming.map(cleanTicket).filter((ticket): ticket is JiraCsvTicket => Boolean(ticket));
       if (tickets.length !== incoming.length) return Response.json({ error: "Une ou plusieurs lignes normalisées sont invalides." }, { status: 400 });
       const keys = tickets.map((ticket) => ticket.key);
-      const ticketQuery = db.insert(jiraImportTickets).values(tickets.map((ticket) => ({
+      const ticketRows = tickets.map((ticket) => ({
         id: `${importId}:${ticket.key}`,
         importId,
         ticketKey: ticket.key,
@@ -132,19 +133,7 @@ export async function POST(request: Request) {
         jiraUpdatedAt: ticket.updatedAt,
         resolutionAt: ticket.resolutionAt,
         link: ticket.link,
-      }))).onConflictDoUpdate({
-        target: [jiraImportTickets.importId, jiraImportTickets.ticketKey],
-        set: {
-          internalId: sql`excluded.internal_id`,
-          status: sql`excluded.status`,
-          summary: sql`excluded.summary`,
-          jiraCreatedAt: sql`excluded.jira_created_at`,
-          assigneeUserCode: sql`excluded.assignee_usercode`,
-          jiraUpdatedAt: sql`excluded.jira_updated_at`,
-          resolutionAt: sql`excluded.resolution_at`,
-          link: sql`excluded.link`,
-        },
-      });
+      }));
       const participantRows = tickets.flatMap((ticket) => ticket.participants.map((participant) => ({
         id: `${importId}:${ticket.key}:${participant.usercode}`,
         importId,
@@ -152,9 +141,27 @@ export async function POST(request: Request) {
         usercode: participant.usercode,
         jiraUserId: participant.jiraUserId,
       })));
-      const deleteParticipantsQuery = db.delete(jiraImportParticipants).where(and(eq(jiraImportParticipants.importId, importId), inArray(jiraImportParticipants.ticketKey, keys)));
-      if (participantRows.length) await db.batch([ticketQuery, deleteParticipantsQuery, db.insert(jiraImportParticipants).values(participantRows)]);
-      else await db.batch([ticketQuery, deleteParticipantsQuery]);
+      const operations = [
+        ...jiraImportChunks(ticketRows, JIRA_TICKET_ROWS_PER_STATEMENT).map((rows) => db.insert(jiraImportTickets).values(rows).onConflictDoUpdate({
+          target: [jiraImportTickets.importId, jiraImportTickets.ticketKey],
+          set: {
+            internalId: sql`excluded.internal_id`,
+            status: sql`excluded.status`,
+            summary: sql`excluded.summary`,
+            jiraCreatedAt: sql`excluded.jira_created_at`,
+            assigneeUserCode: sql`excluded.assignee_usercode`,
+            jiraUpdatedAt: sql`excluded.jira_updated_at`,
+            resolutionAt: sql`excluded.resolution_at`,
+            link: sql`excluded.link`,
+          },
+        })),
+        ...jiraImportChunks(keys, JIRA_DELETE_KEYS_PER_STATEMENT).map((ticketKeys) => db.delete(jiraImportParticipants).where(and(eq(jiraImportParticipants.importId, importId), inArray(jiraImportParticipants.ticketKey, ticketKeys)))),
+        ...jiraImportChunks(participantRows, JIRA_PARTICIPANT_ROWS_PER_STATEMENT).map((rows) => db.insert(jiraImportParticipants).values(rows)),
+      ];
+      for (const statements of jiraImportChunks(operations, JIRA_STATEMENTS_PER_BATCH)) {
+        const [first, ...rest] = statements;
+        if (first) await db.batch([first, ...rest]);
+      }
       return Response.json({ accepted: tickets.length, participants: participantRows.length });
     }
 

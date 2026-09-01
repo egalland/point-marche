@@ -16,30 +16,30 @@ const activitySource = transpile("../lib/jira-analyst-activity.ts")
   .replace('from "./iso-week"', `from "${isoWeekUrl}"`);
 const activity = await import(`data:text/javascript;base64,${Buffer.from(activitySource).toString("base64")}`);
 
-const ticket = (key, status, assigneeUserCode, resolutionAt = "", participants = []) => ({
+const ticket = (key, status, assigneeUserCode, updatedAt, participants = [], resolutionAt = "") => ({
   key,
   internalId: key,
   status,
   summary: key,
   createdAt: "2026-08-01T08:00:00",
   assigneeUserCode,
-  updatedAt: "2026-08-27T10:00:00",
+  updatedAt,
   resolutionAt,
   participants,
   link: `https://jira.example/${key}`,
 });
 
-test("counts open tickets as assigned only and weekly closed tickets as assigned or participated", () => {
+test("counts open tickets as assigned only and weekly closed tickets by last update for assigned or participant", () => {
   const result = activity.jiraActivityForAnalyst([
-    ticket("GLOBAL-1", "En cours", "A1234567"),
-    ticket("GLOBAL-2", "En attente", "B1234567", "", [{ usercode: "A1234567", jiraUserId: "" }]),
+    ticket("GLOBAL-1", "En cours", "A1234567", "2026-08-27T10:00:00"),
+    ticket("GLOBAL-2", "En attente", "B1234567", "2026-08-27T10:00:00", [{ usercode: "A1234567", jiraUserId: "" }]),
     ticket("GLOBAL-3", "Résolu", "A1234567", "2026-08-25T09:00:00"),
     ticket("GLOBAL-4", "Terminé", "B1234567", "2026-08-26T09:00:00", [{ usercode: "A1234567", jiraUserId: "" }]),
-    ticket("GLOBAL-5", "Résolu", "B1234567", "", [{ usercode: "A1234567", jiraUserId: "" }]),
-    ticket("GLOBAL-6", "Résolu", "A1234567", "2026-08-18T09:00:00"),
+    ticket("GLOBAL-5", "Résolu", "B1234567", "2026-08-27T09:00:00", [{ usercode: "A1234567", jiraUserId: "" }]),
+    ticket("GLOBAL-6", "Résolu", "A1234567", "2026-08-18T09:00:00", [], "2026-08-25T09:00:00"),
+    ticket("GLOBAL-4", "Terminé", "B1234567", "2026-08-26T09:00:00", [{ usercode: "A1234567", jiraUserId: "" }]),
   ], "A1234567", 2026, 35);
 
   assert.deepEqual(result.open.map((item) => item.key), ["GLOBAL-1"]);
-  assert.deepEqual(result.resolved.map((item) => item.key), ["GLOBAL-4", "GLOBAL-3"]);
-  assert.equal(result.closedWithoutResolutionDate, 1);
+  assert.deepEqual(result.resolved.map((item) => item.key), ["GLOBAL-5", "GLOBAL-4", "GLOBAL-3"]);
 });
