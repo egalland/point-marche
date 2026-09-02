@@ -10,7 +10,8 @@ function transpile(path) {
 }
 
 const jiraUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/jira-import.ts")).toString("base64")}`;
-const analystSource = transpile("../lib/analyst-point.ts").replace('from "./jira-import"', `from "${jiraUrl}"`);
+const isoUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/iso-week.ts")).toString("base64")}`;
+const analystSource = transpile("../lib/analyst-point.ts").replace('from "./jira-import"', `from "${jiraUrl}"`).replace('from "./iso-week"', `from "${isoUrl}"`);
 const analystPoint = await import(`data:text/javascript;base64,${Buffer.from(analystSource).toString("base64")}`);
 
 const analyst = { id: "analyst", name: "Jane DOE", email: "jane@example.test", usercode: "A1234567", plannerAlias: "Jane", role: "analyste-tarif-referentiel", marketIds: [] };
@@ -36,6 +37,13 @@ test("keeps older saved analyst points compatible with weekly resolved tickets",
   const normalized = analystPoint.normalizeAnalystPoint({ meetingDate: "2026-08-30", jira: [] }, analyst);
 
   assert.deepEqual(normalized.jiraResolved, []);
+  assert.equal(normalized.preferences.jiraChart.horizon, "3");
+});
+
+test("preserves saved chart preferences and normalizes unknown horizons", () => {
+  const preferences = { jiraChart: { horizon: "custom", from: "2026-01-01", to: "2026-06-30" } };
+  assert.deepEqual(analystPoint.normalizeAnalystPoint({ preferences }, analyst).preferences.jiraChart, preferences.jiraChart);
+  assert.equal(analystPoint.normalizeAnalystPoint({ preferences: { jiraChart: { horizon: "wrong" } } }, analyst).preferences.jiraChart.horizon, "3");
 });
 
 test("removes abandoned tickets from saved points without changing the imported data", () => {

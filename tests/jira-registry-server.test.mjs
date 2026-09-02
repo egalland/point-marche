@@ -16,15 +16,16 @@ const ormUrl = import.meta.resolve("drizzle-orm");
 const runtimeUrl = moduleUrl("../lib/runtime-env.ts");
 const jiraUrl = moduleUrl("../lib/jira-import.ts");
 const isoUrl = moduleUrl("../lib/iso-week.ts");
+const historyUrl = moduleUrl("../lib/analyst-jira-history.ts", { "./iso-week": isoUrl });
 const activityUrl = moduleUrl("../lib/jira-analyst-activity.ts", { "./iso-week": isoUrl, "./jira-import": jiraUrl });
 const schemaUrl = moduleUrl("../db/schema.ts", { "drizzle-orm": ormUrl, "drizzle-orm/sqlite-core": import.meta.resolve("drizzle-orm/sqlite-core") });
 const dbUrl = moduleUrl("../db/index.ts", { "drizzle-orm/d1": import.meta.resolve("drizzle-orm/d1"), "./schema": schemaUrl, "../lib/runtime-env": runtimeUrl });
 const registryUrl = moduleUrl("../lib/jira-registry-server.ts", {
   "drizzle-orm": ormUrl, "../db": dbUrl, "../db/schema": schemaUrl,
-  "./iso-week": isoUrl, "./jira-analyst-activity": activityUrl, "./jira-import": jiraUrl,
+  "./iso-week": isoUrl, "./jira-analyst-activity": activityUrl, "./jira-import": jiraUrl, "./analyst-jira-history": historyUrl,
 });
 const { runWithRuntimeEnv } = await import(runtimeUrl);
-const { loadJiraActivityForAnalyst, loadOpenMarketJiraSummary } = await import(registryUrl);
+const { loadJiraActivityForAnalyst, loadOpenMarketJiraSummary, loadJiraCompletionHistory } = await import(registryUrl);
 
 function fixture(t) {
   const sqlite = new DatabaseSync(":memory:");
@@ -146,4 +147,59 @@ test("reads a market with 150 people and 13,000 tickets without participant hydr
 test("propagates registry failures instead of reporting zero tickets", async () => {
   const failingDb = { prepare() { throw new Error("Database unavailable"); } };
   await assert.rejects(runWithRuntimeEnv({ DB: failingDb }, () => loadJiraActivityForAnalyst("A1234567", 2026, 35)), /Database unavailable/);
+  await assert.rejects(runWithRuntimeEnv({ DB: failingDb }, () => loadJiraCompletionHistory("A1234567", { from: "2026-08-01", to: "2026-08-30" })), /Database unavailable/);
+});
+
+test("counts completed tickets in all weeks without any saved point, using modification dates and no double participation", async (t) => {
+  const db = fixture(t);
+  db.ticket("GLOBAL-1", "Fini", "A1234567", "2026-03-13T10:00:00");
+  db.participant("GLOBAL-1", "A1234567");
+  db.ticket("GLOBAL-2", "Résolu", "B1234567", "2026-08-17T00:00:00");
+  db.participant("GLOBAL-2", "A1234567");
+  db.ticket("GLOBAL-3", "Terminé", "A1234567", "2026-08-30T23:59:59.999Z");
+  db.ticket("GLOBAL-4", "Abandonnée", "A1234567");
+  db.ticket("GLOBAL-5", "En cours", "A1234567");
+  db.ticket("GLOBAL-6", "En attente du client", "A1234567");
+  db.ticket("GLOBAL-7", "Résolu", "B1234567");
+  db.ticket("GLOBAL-8", "Résolu", "A1234567", "2026-08-31T00:00:00");
+  db.ticket("GLOBAL-9", "Résolu", "A1234567", "");
+  db.sqlite.prepare("UPDATE jira_tickets SET resolution_at = ? WHERE ticket_key = ?").run("2026-08-24T10:00:00", "GLOBAL-1");
+  const history = await db.run(() => loadJiraCompletionHistory(" a1234567 ", { from: "2026-03-09", to: "2026-08-30" }));
+  assert.equal(history.weeks.length, 25);
+  assert.deepEqual(history.weeks.filter((week) => week.count).map(({ year, week, count }) => ({ year, week, count })), [{ year: 2026, week: 11, count: 1 }, { year: 2026, week: 34, count: 1 }, { year: 2026, week: 35, count: 1 }]);
+  assert.equal(history.weeks.filter((week) => week.count === 0).length, 22);
+  assert.ok(db.queries.every(({ query }) => !query.includes("weekly_points")));
+  for (const week of history.weeks.filter((week) => week.count)) {
+    const activity = await db.run(() => loadJiraActivityForAnalyst("A1234567", week.year, week.week));
+    assert.equal(week.count, activity.resolved.length);
+  }
+});
+
+test("reads a 25,000-ticket history in bounded pages with minimal columns", async (t) => {
+  const db = fixture(t);
+  db.sqlite.exec("BEGIN");
+  for (let index = 0; index < 25_000; index += 1) {
+    const key = `GLOBAL-${100_000 + index}`;
+    db.ticket(key, index % 5 === 0 ? "Abandonné" : index % 5 === 1 ? "En cours" : "Fini", index % 2 ? "B1234567" : "A1234567", index % 2 ? "2026-08-18T10:00:00" : "2026-08-25T10:00:00");
+    db.participant(key, "A1234567");
+  }
+  db.sqlite.exec("COMMIT");
+  const history = await db.run(() => loadJiraCompletionHistory("A1234567", { from: "2026-08-01", to: "2026-08-30" }));
+  assert.equal(history.weeks.reduce((sum, week) => sum + week.count, 0), 15_000);
+  assert.equal(history.weeks.find((week) => week.week === 34).count, 7_500);
+  assert.equal(history.weeks.find((week) => week.week === 35).count, 7_500);
+  assert.ok(db.queries.length >= 25);
+  assert.ok(db.queries.every(({ bindings, query }) => bindings <= 6 && !query.includes("summary")));
+});
+
+test("aligns custom history to complete ISO weeks at the year boundary", async (t) => {
+  const db = fixture(t);
+  db.ticket("GLOBAL-1", "Fini", "A1234567", "2026-12-28T00:00:00");
+  db.ticket("GLOBAL-2", "Fini", "A1234567", "2027-01-03T23:59:59Z");
+  db.ticket("GLOBAL-3", "Fini", "A1234567", "2027-01-04T00:00:00");
+  const history = await db.run(() => loadJiraCompletionHistory("A1234567", { from: "2026-12-31", to: "2027-01-05" }));
+  assert.deepEqual(history, { from: "2026-12-28", to: "2027-01-10", weeks: [
+    { year: 2026, week: 53, from: "2026-12-28", to: "2027-01-03", count: 2 },
+    { year: 2027, week: 1, from: "2027-01-04", to: "2027-01-10", count: 1 },
+  ] });
 });

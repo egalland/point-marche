@@ -4,7 +4,8 @@ import { globalUsers, jiraAnalystWeeklySnapshots } from "../../../db/schema";
 import { analystJiraTickets, type AnalystJiraTicket } from "../../../lib/analyst-point";
 import type { GlobalDirectoryUser } from "../../../lib/global-directory";
 import { isAbandonedJiraStatus } from "../../../lib/jira-import";
-import { latestCompletedJiraBatch, loadJiraActivityForAnalyst } from "../../../lib/jira-registry-server";
+import { latestCompletedJiraBatch, loadJiraActivityForAnalyst, loadJiraCompletionHistory } from "../../../lib/jira-registry-server";
+import { validateJiraHistoryRange } from "../../../lib/analyst-jira-history";
 import { shouldPreferCentralJira } from "../../../lib/jira-source-priority";
 import { getEditorUser } from "../../simple-auth";
 
@@ -67,9 +68,20 @@ export async function GET(request: Request) {
     const analystId = url.searchParams.get("analystId")?.trim() ?? "";
     const year = Number(url.searchParams.get("year"));
     const week = Number(url.searchParams.get("week"));
-    if (!analystId || !validPeriod(year, week)) return Response.json({ error: "Analyste, année ou semaine ISO invalide." }, { status: 400 });
+    const historyView = url.searchParams.get("view") === "history";
+    if (!analystId || (!historyView && !validPeriod(year, week))) return Response.json({ error: "Analyste, année ou semaine ISO invalide." }, { status: 400 });
     const analyst = await activeAnalyst(analystId);
     if (!analyst) return Response.json({ error: "Analyste actif introuvable dans l’annuaire GLOBAL." }, { status: 404 });
+    if (historyView) {
+      const range = { from: url.searchParams.get("from") ?? "", to: url.searchParams.get("to") ?? "" };
+      const error = validateJiraHistoryRange(range);
+      if (error) return Response.json({ error }, { status: 400 });
+      if (!/^[A-Z]\d{7}$/i.test(analyst.usercode.trim())) return Response.json({ error: "Renseigne un USERCODE Jira valide pour cet analyste dans l’annuaire." }, { status: 409 });
+      const batch = await latestCompletedJiraBatch();
+      if (!batch) return Response.json({ history: null }, { headers: { "Cache-Control": "no-store" } });
+      const history = await loadJiraCompletionHistory(analyst.usercode, range);
+      return Response.json({ history: { ...history, analystId, updatedAt: batch.completedAt ?? batch.createdAt } }, { headers: { "Cache-Control": "no-store" } });
+    }
     const db = getDb();
     const [[snapshot], batch] = await Promise.all([
       db.select().from(jiraAnalystWeeklySnapshots).where(and(
