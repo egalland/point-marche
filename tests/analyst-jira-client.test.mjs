@@ -6,7 +6,7 @@ import ts from "typescript";
 const source = ts.transpileModule(readFileSync(new URL("../lib/analyst-jira-client.ts", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-const { fetchAnalystJiraSnapshot } = await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
+const { fetchAnalystJiraSnapshot, fetchAnalystJiraHistory } = await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 
 test("fetches the selected analyst week without cache and preserves both ticket lists", async (t) => {
   const controller = new AbortController();
@@ -30,4 +30,27 @@ test("reports server and network failures rather than returning empty data", asy
 test("accepts a successful response without an imported snapshot", async (t) => {
   t.mock.method(globalThis, "fetch", async () => Response.json({ snapshot: null }));
   assert.equal(await fetchAnalystJiraSnapshot("person", { year: 2026, week: 35 }), null);
+});
+
+test("fetches a single bounded range for the analyst history without relying on saved points", async (t) => {
+  const signal = new AbortController().signal;
+  const history = { analystId: "person/1", from: "2026-08-03", to: "2026-08-30", weeks: [{ year: 2026, week: 35, count: 13 }], updatedAt: "2026-09-01" };
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    const query = new URL(url, "https://example.test").searchParams;
+    assert.equal(query.get("analystId"), "person/1");
+    assert.equal(query.get("view"), "history");
+    assert.equal(query.get("from"), "2026-08-03");
+    assert.equal(query.get("to"), "2026-08-30");
+    assert.equal(options.cache, "no-store");
+    assert.equal(options.signal, signal);
+    return Response.json({ history });
+  });
+  assert.deepEqual(await fetchAnalystJiraHistory("person/1", { from: "2026-08-03", to: "2026-08-30" }, signal), history);
+});
+
+test("distinguishes missing imports from failed history loads", async (t) => {
+  const fetchMock = t.mock.method(globalThis, "fetch", async () => Response.json({ history: null }));
+  assert.equal(await fetchAnalystJiraHistory("person", { from: "2026-08-03", to: "2026-08-30" }), null);
+  fetchMock.mock.mockImplementation(async () => Response.json({ error: "Historique indisponible" }, { status: 500 }));
+  await assert.rejects(fetchAnalystJiraHistory("person", { from: "2026-08-03", to: "2026-08-30" }), /Historique indisponible/);
 });

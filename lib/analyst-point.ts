@@ -1,5 +1,7 @@
 import type { ModuleWidth } from "@/components/module-layout-editor";
 import type { GlobalDirectoryUser } from "./global-directory";
+import type { JiraChartSettings } from "./analyst-jira-history";
+export { isoWeekParts } from "./iso-week";
 import { isAbandonedJiraStatus, isClosedJiraStatus, parseJiraAssigneeSummary } from "./jira-import";
 
 export type AnalystPointModule = "overview" | "jira" | "planner" | "cycle20" | "dossiers";
@@ -13,6 +15,7 @@ export type AnalystPointPreferences = {
   htmlModules: Record<AnalystPointModule, boolean>;
   jiraWarningDays: number;
   jiraCriticalDays: number;
+  jiraChart: JiraChartSettings;
 };
 export type AnalystPointData = {
   analystId: string;
@@ -34,7 +37,7 @@ export type AnalystJiraStatusCount = { status: string; count: number };
 
 export const analystPointModules: { id: AnalystPointModule; label: string; detail: string }[] = [
   { id: "overview", label: "Synthèse", detail: "KPI principaux et message de la semaine" },
-  { id: "jira", label: "Activité Jira", detail: "Stock attribué par état et tickets terminés dans la semaine" },
+  { id: "jira", label: "Activité Jira", detail: "Tickets terminés et évolution hebdomadaire" },
   { id: "planner", label: "Simulations & contrôles", detail: "Activité Planner sur la période principale" },
   { id: "cycle20", label: "Repère 20 → 20", detail: "Bloc séparé sur le dernier cycle terminé" },
   { id: "dossiers", label: "Dossiers", detail: "À faire, en cours, en attente et faits" },
@@ -60,18 +63,6 @@ export function lastCompletedCycle20(reference = new Date()) {
   const start = new Date(end);
   start.setUTCMonth(start.getUTCMonth() - 1);
   return { from: isoDate(start), to: isoDate(end) };
-}
-
-export function isoWeekParts(dateString: string) {
-  const date = new Date(`${dateString}T12:00:00Z`);
-  const target = new Date(date.valueOf());
-  const day = (target.getUTCDay() + 6) % 7;
-  target.setUTCDate(target.getUTCDate() - day + 3);
-  const year = target.getUTCFullYear();
-  const firstThursday = new Date(Date.UTC(year, 0, 4, 12));
-  const firstDay = (firstThursday.getUTCDay() + 6) % 7;
-  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDay + 3);
-  return { year, week: 1 + Math.round((target.valueOf() - firstThursday.valueOf()) / 604800000) };
 }
 
 export function shiftWeek(dateString: string, amount: number) {
@@ -112,6 +103,7 @@ export function initialAnalystPoint(analyst: GlobalDirectoryUser, manager?: Glob
       htmlModules: allVisible(),
       jiraWarningDays: 10,
       jiraCriticalDays: 20,
+      jiraChart: { horizon: "3", from: shiftWeek(period.from, -12).from, to: period.to },
     },
     mail: { to: recipients.join("; "), cc: "", subject: `Point analyste — ${analyst.name}`, intro: `Bonjour, voici le point hebdomadaire de ${analyst.name}.`, autoTo: recipients },
   };
@@ -141,6 +133,11 @@ export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUs
       htmlModules: visible(preferences.htmlModules),
       jiraWarningDays: Math.max(1, Number(preferences.jiraWarningDays) || 10),
       jiraCriticalDays: Math.max((Number(preferences.jiraWarningDays) || 10) + 1, Number(preferences.jiraCriticalDays) || 20),
+      jiraChart: {
+        horizon: ["1", "3", "6", "12", "custom"].includes(preferences.jiraChart?.horizon) ? preferences.jiraChart.horizon : "3",
+        from: typeof preferences.jiraChart?.from === "string" ? preferences.jiraChart.from : fallback.preferences.jiraChart.from,
+        to: typeof preferences.jiraChart?.to === "string" ? preferences.jiraChart.to : fallback.preferences.jiraChart.to,
+      },
     },
     mail: { ...fallback.mail, ...(source.mail ?? {}) },
   };

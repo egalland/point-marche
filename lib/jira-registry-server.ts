@@ -1,9 +1,10 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import { getDb, getRawDb } from "../db";
 import { globalUserMarkets, globalUsers, jiraImportBatches, jiraTickets } from "../db/schema";
-import { isoWeekRange } from "./iso-week";
+import { addIsoDays, isIsoDate, isoWeekForDate, isoWeekRange } from "./iso-week";
+import { jiraCompletionWeeks, validateJiraHistoryRange, type JiraHistoryRange } from "./analyst-jira-history";
 import { jiraActivityForAnalyst } from "./jira-analyst-activity";
-import { canonicalJiraStatus, isClosedJiraStatus, jiraSummaryFromDetailedTickets, type JiraDetailedTicket, type JiraParticipant } from "./jira-import";
+import { canonicalJiraStatus, isAbandonedJiraStatus, isClosedJiraStatus, jiraSummaryFromDetailedTickets, type JiraDetailedTicket, type JiraParticipant } from "./jira-import";
 
 export async function latestCompletedJiraBatch() {
   const db = getDb();
@@ -22,7 +23,7 @@ const ticketColumns = `t.ticket_key AS key, t.internal_id AS internalId, t.statu
   t.jira_created_at AS jiraCreatedAt, t.assignee_usercode AS assigneeUserCode,
   t.jira_updated_at AS jiraUpdatedAt, t.resolution_at AS resolutionAt, t.link`;
 
-async function* ticketPages<T extends JiraTicketRow>(query: string, bindings: unknown[]) {
+async function* ticketPages<T extends { key: string }>(query: string, bindings: unknown[]) {
   const db = getRawDb();
   let afterKey = "";
   while (true) {
@@ -73,6 +74,31 @@ export async function loadJiraActivityForAnalyst(usercode: string, year: number,
     open: activity.open.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
     resolved: activity.resolved.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
   };
+}
+
+export async function loadJiraCompletionHistory(usercode: string, requestedRange: JiraHistoryRange) {
+  const normalizedUserCode = usercode.trim().toUpperCase();
+  if (!/^[A-Z]\d{7}$/.test(normalizedUserCode)) throw new Error("USERCODE Jira invalide.");
+  const rangeError = validateJiraHistoryRange(requestedRange);
+  if (rangeError) throw new Error(rangeError);
+  const weeks = jiraCompletionWeeks(requestedRange);
+  const from = weeks[0].from;
+  const to = weeks[weeks.length - 1].to;
+  const byMonday = new Map(weeks.map((week) => [week.from, week]));
+  const query = `SELECT t.ticket_key AS key, t.status, t.jira_updated_at AS jiraUpdatedAt
+    FROM jira_tickets t
+    WHERE t.jira_updated_at >= ? AND t.jira_updated_at < ?
+      AND (t.assignee_usercode = ? OR t.ticket_key IN (
+        SELECT ticket_key FROM jira_ticket_participants WHERE usercode = ?
+      ))`;
+  for await (const rows of ticketPages<Pick<JiraTicketRow, "key" | "status" | "jiraUpdatedAt">>(query, [from, addIsoDays(to, 1), normalizedUserCode, normalizedUserCode])) {
+    for (const row of rows) {
+      if (!isClosedJiraStatus(row.status) || isAbandonedJiraStatus(row.status) || !isIsoDate(row.jiraUpdatedAt.slice(0, 10))) continue;
+      const week = byMonday.get(isoWeekForDate(row.jiraUpdatedAt.slice(0, 10)).from);
+      if (week) week.count += 1;
+    }
+  }
+  return { from, to, weeks };
 }
 
 export async function loadOpenMarketJiraSummary(marketId: string) {
