@@ -4,6 +4,8 @@ import { useId, useMemo, useState, type KeyboardEvent, type PointerEvent } from 
 import { AppDialog } from "@/components/app-dialog";
 import { SafeDateInput } from "@/components/safe-date-input";
 import { TablePagination, useTablePage } from "@/components/table-pagination";
+import { SupplierMiniChart } from "./supplier-mini-chart";
+import { supplierMiniTrend } from "@/lib/supplier-mini-trend";
 import { averageVariation, buildSupplierVariations, type SupplierVariationPoint } from "@/lib/supplier-variations";
 import type { PlannerTask } from "@/lib/planner-import";
 import type { PlannerRegistrySummary } from "@/lib/planner-registry";
@@ -48,15 +50,19 @@ function pathSegments(points: SupplierVariationPoint[], key: SeriesKey, x: (inde
 }
 
 export function SupplierVariationChart({ points, compact = false }: { points: SupplierVariationPoint[]; compact?: boolean }) {
+  return compact ? <SupplierMiniChart points={points}/> : <SupplierDetailChart points={points}/>;
+}
+
+function SupplierDetailChart({ points }: { points: SupplierVariationPoint[] }) {
   const helpId = useId();
   const [showGlobal, setShowGlobal] = useState(true);
   const [showWeighted, setShowWeighted] = useState(true);
   const [selection, setSelection] = useState<{ points: SupplierVariationPoint[]; index: number | null }>({ points, index: null });
   const activeIndex = points.length ? Math.max(0, Math.min(points.length - 1, selection.points === points ? selection.index ?? points.length - 1 : points.length - 1)) : null;
   const setActiveIndex = (index: number | null) => setSelection({ points, index });
-  const width = compact ? 460 : 760;
-  const height = compact ? 180 : 300;
-  const padding = compact ? 26 : 58;
+  const width = 760;
+  const height = 300;
+  const padding = 58;
   const values = points.flatMap((point) => [showGlobal ? point.globalVariation : null, showWeighted ? point.weightedVariation : null]).filter((value): value is number => value !== null);
   const rawMin = values.length ? Math.min(...values) : 0;
   const rawMax = values.length ? Math.max(...values) : 1;
@@ -74,7 +80,7 @@ export function SupplierVariationChart({ points, compact = false }: { points: Su
   };
   const active = activeIndex === null ? null : points[activeIndex];
   const handleKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
-    if (compact || !points.length) return;
+    if (!points.length) return;
     const current = activeIndex ?? points.length - 1;
     const next = event.key === "ArrowLeft" ? Math.max(0, current - 1) : event.key === "ArrowRight" ? Math.min(points.length - 1, current + 1) : event.key === "Home" ? 0 : event.key === "End" ? points.length - 1 : null;
     if (next !== null) { event.preventDefault(); setActiveIndex(next); }
@@ -84,22 +90,22 @@ export function SupplierVariationChart({ points, compact = false }: { points: Su
   const labelledIndexes = new Set(monthIndexes.filter((_, index) => index % labelStride === 0 || index === monthIndexes.length - 1));
   const globalPaths = pathSegments(points, "globalVariation", x, y);
   const weightedPaths = pathSegments(points, "weightedVariation", x, y);
-  return <div className={`supplier-line-chart ${compact ? "compact" : ""}`}>
-    {!compact && <div className="supplier-chart-toggles"><button type="button" className={showGlobal ? "active global" : ""} aria-pressed={showGlobal} onClick={() => setShowGlobal((current) => !current)}><i/>Variation GLOBAL</button><button type="button" className={showWeighted ? "active weighted" : ""} aria-pressed={showWeighted} onClick={() => setShowWeighted((current) => !current)}><i/>Variation pondérée</button></div>}
-    {!compact && <p className="sr-only" id={helpId}>Utilise les flèches gauche et droite pour parcourir les observations ; Début et Fin pour rejoindre les extrémités.</p>}
+  return <div className="supplier-line-chart">
+    <div className="supplier-chart-toggles"><button type="button" className={showGlobal ? "active global" : ""} aria-pressed={showGlobal} onClick={() => setShowGlobal((current) => !current)}><i/>Variation GLOBAL</button><button type="button" className={showWeighted ? "active weighted" : ""} aria-pressed={showWeighted} onClick={() => setShowWeighted((current) => !current)}><i/>Variation pondérée</button></div>
+    <p className="sr-only" id={helpId}>Utilise les flèches gauche et droite pour parcourir les observations ; Début et Fin pour rejoindre les extrémités.</p>
     <div className="supplier-chart-stage">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" tabIndex={compact ? undefined : 0} aria-describedby={compact ? undefined : helpId} aria-label={`Évolution des variations fournisseur${!compact && active ? ` · ${monthLabel(active.period)} · GLOBAL ${percent(active.globalVariation)} · Pondérée ${percent(active.weightedVariation)}` : ""}`} onKeyDown={handleKeyDown} onPointerMove={pointer} onPointerLeave={() => setActiveIndex(null)}>
-        {[0, .25, .5, .75, 1].map((ratio) => { const value = max - (max - min) * ratio; const position = padding + (height - padding * 2) * ratio; return <g key={ratio}><line x1={padding} y1={position} x2={width - padding} y2={position} className="supplier-chart-grid"/>{!compact && <text x={padding - 7} y={position + 4} textAnchor="end">{percent(value)}</text>}</g>; })}
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" tabIndex={0} aria-describedby={helpId} aria-label={`Évolution des variations fournisseur${active ? ` · ${monthLabel(active.period)} · GLOBAL ${percent(active.globalVariation)} · Pondérée ${percent(active.weightedVariation)}` : ""}`} onKeyDown={handleKeyDown} onPointerMove={pointer} onPointerLeave={() => setActiveIndex(null)}>
+        {[0, .25, .5, .75, 1].map((ratio) => { const value = max - (max - min) * ratio; const position = padding + (height - padding * 2) * ratio; return <g key={ratio}><line x1={padding} y1={position} x2={width - padding} y2={position} className="supplier-chart-grid"/><text x={padding - 7} y={position + 4} textAnchor="end">{percent(value)}</text></g>; })}
         {showGlobal && globalPaths.map((path, index) => <path key={`global-${index}`} d={path} className="supplier-chart-line global"/>)}
         {showWeighted && weightedPaths.map((path, index) => <path key={`weighted-${index}`} d={path} className="supplier-chart-line weighted"/>)}
         {points.map((point, index) => <g key={`${point.taskId}-${index}`}>
           {showGlobal && point.globalVariation !== null && <circle cx={x(index)} cy={y(point.globalVariation)} r={activeIndex === index ? 5 : 3} className="supplier-chart-dot global"/>}
           {showWeighted && point.weightedVariation !== null && <circle cx={x(index)} cy={y(point.weightedVariation)} r={activeIndex === index ? 5 : 3} className="supplier-chart-dot weighted"/>}
-          {!compact && labelledIndexes.has(index) && <text x={x(index)} y={height - 10} textAnchor="middle">{monthLabel(point.period)}</text>}
+          {labelledIndexes.has(index) && <text x={x(index)} y={height - 10} textAnchor="middle">{monthLabel(point.period)}</text>}
         </g>)}
         {active && <line x1={x(activeIndex ?? 0)} y1={padding} x2={x(activeIndex ?? 0)} y2={height - padding} className="supplier-chart-cursor"/>}
       </svg>
-      {active && !compact && <div className="supplier-chart-tooltip" style={{ left: `${Math.max(18, Math.min(82, x(activeIndex ?? 0) / width * 100))}%` }}><strong>{monthLabel(active.period)}</strong><span><i className="global"/>GLOBAL <b>{percent(active.globalVariation)}</b></span><span><i className="weighted"/>Pondérée <b>{percent(active.weightedVariation)}</b></span>{active.purchases12m !== undefined && <span className="supplier-chart-turnover" title={supplierTurnoverSource}>CA · 12 mG <b>{formatSupplierTurnover(active.purchases12m)}</b></span>}</div>}
+      {active && <div className="supplier-chart-tooltip" style={{ left: `${Math.max(18, Math.min(82, x(activeIndex ?? 0) / width * 100))}%` }}><strong>{monthLabel(active.period)}</strong><span><i className="global"/>GLOBAL <b>{percent(active.globalVariation)}</b></span><span><i className="weighted"/>Pondérée <b>{percent(active.weightedVariation)}</b></span>{active.purchases12m !== undefined && <span className="supplier-chart-turnover" title={supplierTurnoverSource}>CA · 12 mG <b>{formatSupplierTurnover(active.purchases12m)}</b></span>}</div>}
       {!points.length && <div className="supplier-chart-empty">Aucune variation exploitable.</div>}
     </div>
   </div>;
@@ -107,13 +113,17 @@ export function SupplierVariationChart({ points, compact = false }: { points: Su
 
 export function SupplierSparkline({ points, label }: { points: SupplierVariationPoint[]; label: string }) {
   const [open, setOpen] = useState(false);
+  const dialogId = useId();
   const last = points.at(-1);
-  const previous = points.at(-2);
-  const delta = last?.globalVariation !== null && last?.globalVariation !== undefined && previous?.globalVariation !== null && previous?.globalVariation !== undefined ? last.globalVariation - previous.globalVariation : null;
+  const trend = supplierMiniTrend(points);
+  const change = trend.delta === null ? `${points.length} observation${points.length > 1 ? "s" : ""}` : `${trend.delta > 0 ? "+" : ""}${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(trend.delta)} pt${Math.abs(trend.delta) > 1 ? "s" : ""} vs ${monthLabel(trend.previousPeriod)}`;
   if (!points.length) return null;
   return <>
-    <button type="button" className="supplier-sparkline" onClick={() => setOpen(true)} aria-haspopup="dialog"><div><span>Variation fournisseur</span><strong>{percent(last?.globalVariation ?? null)}</strong><small>{delta === null ? `${points.length} observation${points.length > 1 ? "s" : ""}` : `${delta > 0 ? "+" : ""}${percent(delta)} vs précédente`}</small></div><SupplierVariationChart points={points} compact/><b>Ouvrir ↗</b></button>
-    <AppDialog open={open} onClose={() => setOpen(false)} labelledBy={`supplier-dialog-${last?.taskId ?? "series"}`} className="supplier-variation-dialog"><div className="supplier-dialog-heading"><span>Historique fournisseur</span><h2 id={`supplier-dialog-${last?.taskId ?? "series"}`}>{label}</h2><p>{last?.supplierCode ? `Code ${last.supplierCode} · ` : ""}{points.length} observation{points.length > 1 ? "s" : ""}. Survole la courbe pour lire les valeurs.</p></div><SupplierVariationChart points={points}/><div className="supplier-dialog-stats"><article><span>Dernière GLOBAL</span><strong>{percent(last?.globalVariation ?? null)}</strong></article><article><span>Dernière pondérée</span><strong>{percent(last?.weightedVariation ?? null)}</strong></article><article><span>Moyenne GLOBAL</span><strong>{percent(averageVariation(points, "globalVariation"))}</strong></article><article><span>Moyenne pondérée</span><strong>{percent(averageVariation(points, "weightedVariation"))}</strong></article></div></AppDialog>
+    <button type="button" className="supplier-sparkline" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open} aria-label={`${label} · Variation ${trend.label} ${percent(trend.value)}. Ouvrir l’historique fournisseur.`}>
+      <span className="supplier-mini-summary"><span>Variation {trend.label}</span><strong>{percent(trend.value)}</strong><small>{change}</small></span>
+      <SupplierMiniChart points={points}/><span className="supplier-mini-open" aria-hidden="true">↗</span>
+    </button>
+    {open && <AppDialog open onClose={() => setOpen(false)} labelledBy={dialogId} className="supplier-variation-dialog"><div className="supplier-dialog-heading"><span>Historique fournisseur</span><h2 id={dialogId}>{label}</h2><p>{last?.supplierCode ? `Code ${last.supplierCode} · ` : ""}{points.length} observation{points.length > 1 ? "s" : ""}. Survole la courbe pour lire les valeurs.</p></div><SupplierVariationChart points={points}/><div className="supplier-dialog-stats"><article><span>Dernière GLOBAL</span><strong>{percent(last?.globalVariation ?? null)}</strong></article><article><span>Dernière pondérée</span><strong>{percent(last?.weightedVariation ?? null)}</strong></article><article><span>Moyenne GLOBAL</span><strong>{percent(averageVariation(points, "globalVariation"))}</strong></article><article><span>Moyenne pondérée</span><strong>{percent(averageVariation(points, "weightedVariation"))}</strong></article></div></AppDialog>}
   </>;
 }
 

@@ -1412,7 +1412,7 @@
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--text) 40%, transparent);
+  background: var(--surface);
 }
 
 .planner-record-metrics > .supplier-turnover {
@@ -1569,14 +1569,6 @@
 
   .module-layout-editor > header small {
     text-align: left;
-  }
-
-  .supplier-sparkline {
-    grid-template-columns: 1fr;
-  }
-
-  .supplier-sparkline .supplier-line-chart {
-    display: none;
   }
 
   .supplier-dialog-stats, .analyst-point-kpis, .analyst-delay-grid, .analyst-visibility-grid, .analyst-history > div:last-child {

@@ -8,6 +8,7 @@
 - `app/styles/components.css` : styles des modules du point marché, de l’édition et des imports.
 - `app/styles/analyst.css` : modules analystes, graphique hebdomadaire et calendrier.
 - `app/styles/workspace.css` : navigation, mise en page harmonisée et adaptations aux petits écrans.
+- `app/styles/simulations.css` : étapes contrastées et mini-courbes des simulations.
 
 ## Apparence
 
@@ -20,6 +21,8 @@ Les couleurs personnalisées du point sont conservées. `accentTokens` en produi
 Les tableaux de détail sont paginés par 100 lignes après filtrage et tri. Les statistiques utilisent toujours la sélection entière. Les activités d’une simulation sont regroupées en un passage, sans additionner le CA fourni. Les contenus HTML des mails ne sont générés que lorsque leur vue est ouverte.
 
 Les fenêtres partagent une gestion du focus, du clavier et du verrouillage du défilement. Le clic extérieur doit commencer et finir sur le fond. Échap ne ferme que la fenêtre supérieure et respecte les opérations en cours.
+
+Les simulations affichent une mini-courbe SVG de 120 × 36 pixels, réduite sur mobile, à côté de leurs indicateurs. Elle utilise une seule série identifiée, ne relie pas les observations manquantes et montre un point isolé si l’historique ne contient qu’une valeur. L’écart est exprimé en points de pourcentage, pas en pourcentage relatif. Le graphique détaillé à deux séries n’est rendu qu’à l’ouverture de la fenêtre.
 
 ## Contrôles
 
