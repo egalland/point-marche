@@ -9,7 +9,21 @@
 - Préserver les règles Jira, Planner, les points et les exports existants.
 - Sauvegardes explicites sur disque et récupération locale des brouillons.
 
-## État
+## Correction demandée : même application que le site
+
+- Demande utilisateur : « la même chose que le site en export, 0 diff ».
+- L’export doit ouvrir directement `MarketPulseApp`, avec les composants, styles, icônes et graphiques de V38. Aucune interface métier parallèle.
+- L’accueil local obligatoire, la barre de fichiers de 86 px et les décalages de navigation sont retirés. Les commandes de disque sont accessibles dans « Fichier local », au bas de la navigation, avec les styles existants.
+- Les fichiers Geist et Geist Mono utilisés par le site sont conservés dans `offline/fonts` et intégrés en data URLs au HTML. Le titre et le favicon reprennent le site.
+- Les données non-Jira vérifiées s’ouvrent immédiatement. Une extraction partielle n’est jamais activée comme registre Jira complet : les points sauvegardés sont conservés et les calculs qui demandent le registre complet sont bloqués avec un message explicite.
+- Le CSV d’origine peut être repris dans le Centre d’import existant. Cette finalisation conserve les modifications locales intervenues depuis l’ouverture, et l’état de reprise survit à un enregistrement/réouverture.
+- Les boutons habituels de sauvegarde des points déclenchent aussi l’enregistrement du fichier. Ctrl+S conserve tout le fichier et les brouillons ; Ctrl+O l’ouvre.
+- La copie automatique du navigateur est reprise directement. Un ancien classeur de démarrage resté strictement vide ne masque pas la copie du site ; un classeur personnalisé est toujours conservé.
+- Le script de compilation accepte aussi un fichier `.marketpulse.json` complet pour produire ultérieurement un HTML embarquant toutes les données. Aucun déploiement n’est nécessaire.
+- Vérifications de cette correction : compilation complète et autonome réussies, typage réussi, 145 tests passés, 17 fichiers de présentation identiques à V38 et 11 fichiers de polices comparés à ceux du site. Comparaison interactive en navigateur non réalisée.
+- Les seules adaptations d’usage prévues sont celles du stockage sur disque et l’absence de session serveur. Ne pas annoncer une parité complète des données tant que le CSV manque, ni une comparaison visuelle qui n’a pas été effectuée.
+
+## État avant cette correction
 
 - Structure et accès en lecture vérifiés.
 - Connexion applicative existante utilisable pour lire les données complètes des points.

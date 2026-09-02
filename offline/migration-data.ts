@@ -113,3 +113,31 @@ export function completeMigrationFromNative(checkpoint: MigrationCheckpoint) {
   }
   return complete(checkpoint, Array.from(tickets.values()), null);
 }
+
+/** Open the verified non-Jira data without treating the partial registry as complete. */
+export function openMigrationWorkspace(checkpoint: MigrationCheckpoint): WorkspaceData {
+  validateMigrationCheckpoint(checkpoint);
+  if (checkpoint.recoveredTickets.length === checkpoint.expected.tickets && checkpoint.recoveredParticipants.length === checkpoint.expected.participants) return completeMigrationFromNative(checkpoint).data;
+  const data = structuredClone(checkpoint.base);
+  data.source = {
+    exportedAt: data.updatedAt, ...data.source,
+    pendingJira: {
+      csvFilename: checkpoint.csvFilename,
+      expectedTickets: checkpoint.expected.tickets, expectedParticipants: checkpoint.expected.participants,
+      recoveredTickets: checkpoint.recoveredTickets.length, recoveredParticipants: checkpoint.recoveredParticipants.length,
+    },
+  };
+  validateWorkspace(data);
+  return data;
+}
+
+/** Completing Jira must never replace edits made since the local file was opened. */
+export function completeMigrationInWorkspace(checkpoint: MigrationCheckpoint, current: WorkspaceData, csv: string) {
+  if (current.id !== checkpoint.base.id || !current.source?.pendingJira) throw new Error("Ce fichier de données ne correspond pas à cette reprise Jira.");
+  const completed = completeMigrationWithCsv(checkpoint, csv);
+  const source = { ...current.source, notes: [...(current.source.notes ?? []), `Reprise contrôlée avec le CSV d’origine : ${checkpoint.csvFilename}.`] };
+  delete source.pendingJira;
+  const data = { ...structuredClone(current), source, jiraTickets: completed.data.jiraTickets, jiraUpdatedAt: completed.data.jiraUpdatedAt };
+  validateWorkspace(data);
+  return { data, report: completed.report };
+}

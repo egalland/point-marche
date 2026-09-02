@@ -1,50 +1,62 @@
-# Market Pulse — utilisation locale
+# Market Pulse — copie locale du site
 
-L’application reprend les points marché et analystes, les personnes, les imports Jira et Planner, les simulations et les statistiques fournisseurs. Elle fonctionne dans une version récente d’Edge ou de Chrome, depuis un fichier HTML, sans installation et sans serveur.
+## Ouvrir l’application
 
-## Première ouverture : reprendre les données du site
+1. Extraire le ZIP dans un dossier sur le PC.
+2. Ouvrir **MARKET_PULSE_LOCAL.html** par double-clic, dans Edge ou Chrome récent.
+3. Le point marché s’ouvre directement avec les données déjà récupérées. La session précédente est reprise automatiquement si elle existe dans ce navigateur.
 
-1. Extraire tout le ZIP dans un dossier sur le PC.
-2. Ouvrir `MARKET_PULSE_LOCAL.html` par double-clic.
-3. Dans « Retrouver mes données du site », cliquer sur **Choisir le CSV Jira de reprise** et sélectionner le fichier **JIRA WORKSPACE 2026-08-31T09_59_36+0200.csv** déjà utilisé dans le site.
-4. Après le contrôle, cliquer sur **Enregistrer** pour créer le fichier **Market-Pulse-GLOBAL.marketpulse.json** sur le PC.
+L’application utilise les mêmes composants d’interface, feuilles de style, icônes et graphiques que le site V38. Les polices Geist et Geist Mono sont intégrées au HTML et restent disponibles hors connexion. L’écran d’accueil ajouté dans le premier export et la barre supérieure locale ont été retirés.
 
-Le CSV d’origine est nécessaire une seule fois pour cette reprise. Le dernier export accessible contient 10 025 tickets sur 12 491 et 10 025 participations sur 11 214. La copie complète des 4 marchés, 9 personnes, 4 points marché, 2 points analystes et 1 211 tâches Planner est incluse dans le HTML.
+Les menus Point marché, Préparer le point, Point analyste, Statistiques, Centre d’import, Mail du marché et Paramètres gardent leur présentation habituelle. Les modes clair, sombre et système restent disponibles au même endroit.
 
-Le rapprochement attend les totaux exacts et compare les tickets et participants déjà récupérés. Un CSV plus récent ou différent peut être refusé. Pour cette première reprise, retrouver le fichier d’origine ; les imports habituels permettent ensuite de mettre les données à jour.
+## Enregistrer son travail
 
-Le classeur complet n’est pas fourni dans le ZIP, car ce CSV manque encore. Si le fichier d’origine est introuvable sur le PC, le joindre à la conversation dès qu’il est retrouvé. Les données partielles conservées dans la sauvegarde de reprise ne doivent pas servir de base à des statistiques complètes.
+Le bouton **Sauvegarder** du point marché et **Sauvegarder la semaine** du point analyste enregistrent le point, puis proposent de conserver le fichier complet sur disque. À la première sauvegarde, choisir l’emplacement du fichier `.marketpulse.json`.
 
-**Créer un classeur vide** permet d’utiliser immédiatement l’application pour une nouvelle base. Cela ne récupère pas les données du site. La reprise d’origine reste accessible ensuite dans **Aide / options**.
+**Fichier local**, en bas du menu, permet aussi de :
 
-## Utilisation quotidienne
+- enregistrer toutes les données et les brouillons : **Ctrl+S** ;
+- enregistrer une autre copie : **Ctrl+Maj+S** ;
+- ouvrir un fichier de données : **Ctrl+O**.
 
-- Ouvrir `MARKET_PULSE_LOCAL.html`, puis **Ouvrir mon fichier de données** et sélectionner le classeur `.marketpulse.json` enregistré.
-- Effectuer les modifications, imports et points comme dans l’application habituelle.
-- **Sauvegarder la semaine** ajoute ou actualise le point dans l’historique du classeur.
-- **Enregistrer** ou **Ctrl+S** conserve tout le classeur, y compris les brouillons, dans le fichier du PC.
-- **Enregistrer sous** ou **Ctrl+Maj+S** crée une autre copie.
+Ce panneau remplace l’action de connexion/déconnexion du site : l’application locale ne se connecte pas au serveur. Il n’ajoute aucune barre au-dessus de l’espace de travail.
 
-Si le navigateur n’autorise pas l’enregistrement direct, utiliser **Aide / options → Télécharger une copie**, vérifier le téléchargement et confirmer **J’ai bien enregistré la copie**. Pour l’ouverture, le bouton **Choisir un fichier** reste disponible.
+Si le navigateur ne permet pas l’enregistrement direct, l’application télécharge une copie. Vérifier le téléchargement puis cliquer sur **J’ai bien enregistré la copie**. L’option **Choisir un fichier** permet l’ouverture sans accès direct au disque.
 
-Lorsqu’un fichier a été modifié ailleurs, l’application demande d’enregistrer une autre copie. La récupération de la session précédente conserve un brouillon dans le navigateur ; le fichier sur disque reste la sauvegarde à conserver.
+La copie conservée par le navigateur permet de reprendre la session. Le fichier enregistré reste nécessaire pour transférer les données sur un autre PC ou se protéger d’un nettoyage des données du navigateur. Copier ensemble le HTML et le fichier `.marketpulse.json`.
 
-## Ce qui est local
+Si une ancienne session vide s’affiche, utiliser **Fichier local → Autres options → Rouvrir la copie du site**. Les changements non enregistrés doivent être conservés avant de changer de fichier.
 
-Les données, calculs, imports, graphiques et exports sont traités dans le navigateur. La version locale ne synchronise pas ses modifications avec le site. Les liens vers Jira ou Planner et les actions de messagerie ouvrent les outils habituels et demandent la connexion correspondante.
+## Historique Jira encore à compléter
 
-Pour déplacer le travail sur un autre PC, copier l’application HTML et le classeur `.marketpulse.json`. Ce fichier contient des données métier en clair : utiliser un emplacement professionnel autorisé et éviter de modifier la même copie simultanément sur plusieurs postes.
+Les **4 marchés, 9 personnes, 4 points marché, 2 points analystes et 1 211 tâches Planner** récupérés sont inclus. Ils sont accessibles dès l’ouverture.
 
-## Contenu du ZIP
+L’extraction Jira ne contient encore que **10 025 tickets sur 12 491** et **10 025 participations sur 11 214**. Les lignes manquantes ne sont pas inventées. Les tableaux Jira contenus dans les points marché déjà sauvegardés sont conservés ; les recalculs analystes attendent le registre complet et signalent cette limite. Un total indisponible n’est pas présenté comme zéro.
 
-- `MARKET_PULSE_LOCAL.html` : application autonome et reprise guidée des données.
-- `LIRE_MOI.txt` : démarrage rapide et état de la reprise.
-- `GUIDE_UTILISATION.md` : ce guide.
-- `MARKET_PULSE_SOURCES.zip` : code source pour maintenance ou reconstruction ; aucune installation n’est nécessaire pour utiliser le HTML.
-- `Reprise-technique/` : extraction initiale et point de reprise vérifié, pour pouvoir poursuivre sans perdre l’avancement.
+Pour retrouver l’intégralité de l’historique, sélectionner le fichier d’origine :
 
-## Vérifications effectuées
+**JIRA WORKSPACE 2026-08-31T09_59_36+0200.csv**
 
-La compilation locale, le contrôle TypeScript et 33 tests ciblés passent. Les tests couvrent notamment la reprise de plus de 12 000 tickets, l’import de 25 000 tickets, les participants, le refus des CSV incohérents, la relecture des classeurs et les erreurs d’enregistrement.
+Dans **Centre d’import**, déposer ce CSV comme dans le site, vérifier la prévisualisation puis cliquer sur **Importer**. Le bouton **Choisir le CSV Jira de reprise** dans **Fichier local** permet la même opération.
 
-Le rapprochement avec le CSV réel complet et le parcours interactif dans un navigateur restent à effectuer. Le site et ses données en ligne n’ont pas été modifiés par cet export.
+Le contrôle compare les totaux et toutes les lignes déjà récupérées. Il refuse un fichier incohérent sans modifier les données ouvertes. Une reprise réussie complète uniquement Jira : les dossiers, marchés, préférences, personnes et brouillons modifiés entre-temps sont conservés. Enregistrer ensuite le fichier complet.
+
+Une fois cette reprise terminée, les imports Jira habituels redeviennent disponibles. Aucun fichier de données complet n’est présenté comme final dans ce ZIP tant que le CSV d’origine manque.
+
+## Ce que contient le ZIP
+
+- **MARKET_PULSE_LOCAL.html** : application autonome, polices et données de reprise intégrées.
+- **LIRE_MOI.txt** : démarrage rapide.
+- **GUIDE_UTILISATION.md** : ce guide.
+- **MARKET_PULSE_SOURCES.zip** : sources nécessaires à la maintenance et à la reconstruction.
+- **Reprise-technique/** : copie initiale et checkpoint vérifié, conservés pour terminer la reprise.
+- **VERIFICATION.json** : contrôles de l’export et limites restantes.
+
+Les liens Jira/Planner et la messagerie ouvrent les outils habituels et nécessitent leur connexion. Les modifications locales ne sont pas synchronisées avec le site. Les données du fichier sont en clair : conserver le fichier dans un emplacement professionnel approprié.
+
+## Vérifications et limites
+
+La compilation autonome, le typage et les 145 tests de l’application passent, notamment pour la sauvegarde, les imports et la conservation des modifications pendant la reprise Jira. Les ressources de présentation du site sont conservées et les polices intégrées sont comparées aux fichiers du site.
+
+Aucune comparaison visuelle interactive dans un navigateur n’a été exécutée. La parité intégrale des données Jira ne peut pas être validée sans le CSV d’origine. Le site V38 et sa base en ligne restent inchangés.

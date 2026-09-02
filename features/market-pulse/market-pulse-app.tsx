@@ -1,6 +1,6 @@
 "use client";
 
-import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft } from "@/lib/app-transport";
+import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft, saveLocalFile } from "@/lib/app-transport";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type FormEvent, type ReactNode } from "react";
 import { AppDialog } from "@/components/app-dialog";
 import { AppIcon as Icon } from "@/components/app-icon";
@@ -1030,7 +1030,12 @@ function MarketPulseWorkspace() {
       const payload = await response.json() as { point?: PointRecord; error?: string };
       if (!response.ok || !payload.point) throw new Error(payload.error || "Échec de la sauvegarde.");
       const savedData = normalizePointData(payload.point.data, marketId, market); const saved = { ...payload.point, data: savedData };
-      setData(savedData); setArchive((current) => [saved, ...current.filter((item) => !(item.year === saved.year && item.week === saved.week))].sort((a, b) => b.year - a.year || b.week - a.week)); setActiveRecordId(saved.id); setSavedAt(new Date()); setLastSavedSignature(pointSignature(marketId, savedData)); setArchiveError(""); setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} ${isLocalWorkspace() ? "ajoutée au classeur. Enregistre le fichier pour la conserver sur disque." : "enregistrée en ligne."}`);
+      setData(savedData); setArchive((current) => [saved, ...current.filter((item) => !(item.year === saved.year && item.week === saved.week))].sort((a, b) => b.year - a.year || b.week - a.week)); setActiveRecordId(saved.id); setSavedAt(new Date()); setLastSavedSignature(pointSignature(marketId, savedData)); setArchiveError("");
+      if (isLocalWorkspace()) {
+        writeLocalDraft({ scope: "market", ownerId: marketId, data: savedData });
+        const onDisk = await saveLocalFile();
+        setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} ${onDisk ? "enregistrée dans le fichier." : "conservée dans la session. Le fichier reste à enregistrer."}`);
+      } else setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} enregistrée en ligne.`);
     } catch (error) { setToast(error instanceof Error ? error.message : "Échec de la sauvegarde."); }
     finally { setSaving(false); }
   };

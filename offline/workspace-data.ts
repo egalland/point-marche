@@ -25,7 +25,10 @@ export type WorkspaceData = {
   analystPoints: AnalystPointRecord[]; plannerTasks: PlannerTask[]; plannerUpdatedAt: string;
   jiraTickets: JiraCsvTicket[]; jiraImports: LocalJiraBatch[]; jiraUpdatedAt: string;
   drafts: LocalDraft[]; preferences: Record<string, string>;
-  source?: { exportedAt: string; siteUrl?: string; version?: number; notes?: string[] };
+  source?: {
+    exportedAt: string; siteUrl?: string; version?: number; notes?: string[];
+    pendingJira?: { csvFilename: string; expectedTickets: number; expectedParticipants: number; recoveredTickets: number; recoveredParticipants: number };
+  };
 };
 export type WorkspaceEnvelope = {
   format: "market-pulse-local"; schemaVersion: 1; savedAt: string; checksum: string; data: WorkspaceData;
@@ -39,6 +42,11 @@ export function newWorkspace(): WorkspaceData {
     users: [], points: [], analystPoints: [], plannerTasks: [], plannerUpdatedAt: "",
     jiraTickets: [], jiraImports: [], jiraUpdatedAt: "", drafts: [], preferences: {},
   };
+}
+
+export function isEmptyStarterWorkspace(data: WorkspaceData) {
+  const market = data.markets[0];
+  return data.name === "Mes points marché" && data.markets.length === 1 && market?.id === "market-local" && market.name === "Mon marché" && market.shortCode === "MARCHÉ" && market.tone === "mint" && market.colorHex === "" && !market.plannerTags.length && market.jiraWarningDays === 10 && market.jiraCriticalDays === 20 && !data.users.length && !data.points.length && !data.analystPoints.length && !data.plannerTasks.length && !data.jiraTickets.length && !data.jiraImports.length && !data.drafts.length && !data.source;
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -67,6 +75,10 @@ export function validateWorkspace(value: unknown): asserts value is WorkspaceDat
   rows(value.jiraImports, "imports Jira", "id");
   if (!Array.isArray(value.drafts) || !object(value.preferences)) throw new Error("Brouillons ou préférences absents du classeur.");
   const data = value as unknown as WorkspaceData;
+  if (data.source?.pendingJira) {
+    const pending = data.source.pendingJira;
+    if (typeof pending.csvFilename !== "string" || ![pending.expectedTickets, pending.expectedParticipants, pending.recoveredTickets, pending.recoveredParticipants].every((count) => Number.isSafeInteger(count) && count >= 0) || pending.recoveredTickets > pending.expectedTickets || pending.recoveredParticipants > pending.expectedParticipants || data.jiraTickets.length) throw new Error("L’état de reprise Jira est incohérent.");
+  }
   if (!data.markets.some((market) => market.isActive !== false)) throw new Error("Le classeur doit contenir au moins un marché actif.");
   for (const market of data.markets) {
     if (typeof market.name !== "string" || typeof market.shortCode !== "string" || !Array.isArray(market.plannerTags) || !market.plannerTags.every((tag) => typeof tag === "string")) throw new Error("Marché invalide dans le classeur.");

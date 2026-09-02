@@ -8,7 +8,7 @@ async function loadModule(file) {
 }
 const { WorkspaceStore } = await loadModule("../offline/workspace-store.ts");
 const { createLocalApi } = await loadModule("../offline/local-api.ts");
-const { newWorkspace, encodeWorkspace, decodeWorkspace, validateWorkspace } = await loadModule("../offline/workspace-data.ts");
+const { newWorkspace, encodeWorkspace, decodeWorkspace, validateWorkspace, isEmptyStarterWorkspace } = await loadModule("../offline/workspace-data.ts");
 const { readWorkspaceFile, writeWorkspaceFile, fingerprint } = await loadModule("../offline/file-session.ts");
 const { parseJiraCsv } = await loadModule("../lib/jira-csv.ts");
 
@@ -267,4 +267,31 @@ test("write errors abort the file transaction without changing the previous file
   await assert.rejects(writeWorkspaceFile(handle, fixture(), fingerprint(await handle.getFile())), /Disque plein/);
   assert.equal(handle.read(), "original");
   assert.equal(handle.wasAborted(), true);
+});
+
+test("an incomplete migration preserves saved market Jira and refuses partial analyst statistics", async () => {
+  const data = fixture();
+  data.source = { exportedAt: "2026-09-02T10:00:00Z", pendingJira: { csvFilename: "origine.csv", expectedTickets: 12491, expectedParticipants: 11214, recoveredTickets: 10025, recoveredParticipants: 10025 } };
+  const api = createLocalApi(new WorkspaceStore(data));
+  const market = await call(api, "/api/jira-week?marketId=market-local&year=2026&week=35");
+  assert.equal(market.snapshot, null);
+  const stats = await call(api, "/api/analyst-jira?analystId=analyst&view=history&from=2026-08-03&to=2026-08-30");
+  assert.equal(stats.status, 409);
+  assert.match(stats.error, /origine.csv/);
+  const imports = await call(api, "/api/jira-imports");
+  assert.deepEqual(imports.registry, { ticketCount: null, participantCount: null });
+  assert.match(imports.warning, /compléter/);
+  const unchecked = await call(api, "/api/jira-imports", { action: "start", filename: "other.csv", rowCount: 5 });
+  assert.equal(unchecked.status, 409);
+  assert.throws(() => validateWorkspace({ ...data, jiraTickets: [ticket("GLOBAL-1")] }), /incohérent/);
+});
+
+test("only a pristine empty starter yields to the embedded site at startup", () => {
+  const empty = newWorkspace();
+  assert.equal(isEmptyStarterWorkspace(empty), true);
+  const renamed = structuredClone(empty); renamed.markets[0].name = "Mon marché personnalisé";
+  assert.equal(isEmptyStarterWorkspace(renamed), false);
+  const edited = structuredClone(empty); edited.drafts.push({ scope: "market", ownerId: "market-local", data: { note: "Conserver ce travail" } });
+  assert.equal(isEmptyStarterWorkspace(edited), false);
+  assert.equal(isEmptyStarterWorkspace(fixture()), false);
 });
