@@ -90,6 +90,29 @@ test("supports combined analyst, market and specialty filters", () => {
   assert.equal(stats.delaySummaries.every((item) => item.sampleCount === 1), true);
 });
 
+test("keeps the imported supplier amount on each activity without a cumulative KPI", () => {
+  const amounts = [473398.58, 89613.02, 0, null];
+  const tasks = amounts.map((purchases12m, index) => ({
+    ...baseTask,
+    externalId: `simulation-${index}`,
+    metrics: { ...baseTask.metrics, supplierCode: "F1000", purchases12m },
+  }));
+  const stats = analytics.buildAnalystStats(tasks, users, markets, {
+    from: "2026-05-01", to: "2026-06-30", marketId: "all", specialty: "all", analystIds: [],
+  });
+  for (const [index, purchases12m] of amounts.entries()) {
+    const activities = stats.contributions.filter((item) => item.taskId === `simulation-${index}`);
+    assert.equal(activities.length, 3);
+    assert.ok(activities.every((item) => item.purchases12m === purchases12m));
+  }
+  assert.equal(stats.distinctTasks, 4);
+  assert.equal(stats.totalActivities, 12);
+  assert.equal("purchases12m" in stats, false);
+  assert.equal("totalTurnover" in stats, false);
+  const legacy = analytics.plannerContributions([{ ...baseTask, metrics: undefined }], users, markets);
+  assert.ok(legacy.every((item) => item.purchases12m === null));
+});
+
 test("ignores incomplete or chronologically inconsistent date pairs without creating a failure", () => {
   const incompleteTask = {
     ...baseTask,

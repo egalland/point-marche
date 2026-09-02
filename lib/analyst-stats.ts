@@ -18,6 +18,7 @@ export type AnalystStatsFilters = {
 export type AnalystContribution = {
   taskId: string;
   taskName: string;
+  purchases12m: number | null;
   effectiveMonth: string;
   category: string;
   stepLabel: string;
@@ -120,6 +121,7 @@ export function plannerContributions(tasks: PlannerTask[], users: GlobalDirector
       return {
         taskId: task.externalId,
         taskName: task.taskName,
+        purchases12m: task.metrics?.purchases12m ?? null,
         effectiveMonth: task.effectiveMonth,
         category: task.category,
         stepLabel: item.label,

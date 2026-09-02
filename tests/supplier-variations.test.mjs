@@ -40,3 +40,12 @@ test("uses the normalized task supplier when no supplier code exists", () => {
   assert.equal(variations.supplierLabelFromTask(item.taskName), "NEUTRAL SUPPLIER");
   assert.equal(variations.supplierKeyForTask(item), "neutral supplier");
 });
+
+test("preserves the amount for each observation rather than a supplier total", () => {
+  const amounts = [473398.58, 89613.02, 0, null];
+  const tasks = amounts.map((purchases12m, index) => {
+    const item = task(`sim-${index}`, `2026-0${index + 5}`, "JOHN INDUSTRY", "A1234", 3, 2.8);
+    return { ...item, metrics: { ...item.metrics, purchases12m } };
+  });
+  assert.deepEqual(variations.supplierSeriesForTask(tasks[0], tasks).map((point) => point.purchases12m), amounts);
+});

@@ -7,6 +7,7 @@ export type SupplierVariationPoint = {
   supplierLabel: string;
   supplierCode: string;
   period: string;
+  purchases12m?: number | null;
   globalVariation: number | null;
   weightedVariation: number | null;
   labels: string[];
@@ -36,6 +37,7 @@ export function buildSupplierVariations(tasks: PlannerTask[]) {
       supplierLabel,
       supplierCode: task.metrics.supplierCode,
       period: task.effectiveMonth,
+      purchases12m: task.metrics.purchases12m ?? null,
       globalVariation: task.metrics.globalVariation,
       weightedVariation: task.metrics.weightedVariation,
       labels: task.labels,

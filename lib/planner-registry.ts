@@ -202,6 +202,7 @@ export function recoverPlannerTasksFromPoints(points: PlannerArchivePoint[], mar
           labels: uniqueLabels(item.labels).length ? uniqueLabels(item.labels) : labels,
           metrics: mergeMetrics({
             ...emptyMetrics(),
+            purchases12m: numberOrNull(item.purchases12m),
             supplierCode: text(item.supplierCode).toLocaleUpperCase("fr-FR"),
             globalVariation: numberOrNull(item.globalVariation),
             weightedVariation: numberOrNull(item.weightedVariation),

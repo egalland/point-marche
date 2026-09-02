@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AppDialog } from "@/components/app-dialog";
+import { SupplierTurnover } from "@/components/supplier-turnover";
 import { parsePlannerTasks } from "@/lib/planner-import";
 
 type Market = { id: string; name: string; plannerTags: string[] };
@@ -56,7 +57,7 @@ export function PlannerImportDialog({ markets, onImport }: Props) {
         <article className={unmatched ? "warning" : ""}><span>Sans tag paramétré</span><strong>{unmatched}</strong></article>
         <article><span>Lignes ignorées</span><strong>{parsed.ignoredRows}</strong></article>
       </div>
-      {parsed.tasks.length > 0 && <div className="planner-preview-list">{mapped.slice(0, 8).map(({ task, markets: taskMarkets }) => <article key={task.externalId}><div><strong>{task.taskName}</strong><small>{task.category || task.plannerStatus || "Étape non renseignée"}</small></div><span>{taskMarkets.map((market) => market.name).join(" · ") || task.labels.join(" · ") || "Aucun tag"}</span></article>)}{parsed.tasks.length > 8 && <small>+ {parsed.tasks.length - 8} autres tâches reconnues</small>}</div>}
+      {parsed.tasks.length > 0 && <div className="planner-preview-list">{mapped.slice(0, 8).map(({ task, markets: taskMarkets }) => <article key={task.externalId}><div><strong>{task.taskName}</strong><small>{task.category || task.plannerStatus || "Étape non renseignée"}</small><SupplierTurnover value={task.metrics.purchases12m}/></div><span>{taskMarkets.map((market) => market.name).join(" · ") || task.labels.join(" · ") || "Aucun tag"}</span></article>)}{parsed.tasks.length > 8 && <small>+ {parsed.tasks.length - 8} autres tâches reconnues</small>}</div>}
       <div className="planner-import-footer"><span>{message || "Les anciennes simulations sans nom d’analyste restent importables."}</span><div><button className="secondary-button" type="button" disabled={saving} onClick={() => setOpen(false)}>Fermer</button><button className="primary-button" type="button" disabled={saving || !parsed.tasks.length} onClick={submit}>{saving ? "Import…" : `Enregistrer ${parsed.tasks.length || ""}`}</button></div></div>
     </AppDialog>
   </>;

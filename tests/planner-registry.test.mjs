@@ -98,3 +98,23 @@ test("recovers historical variation series kept inside a saved point", () => {
   assert.deepEqual(recovered.map((task) => task.externalId).sort(), ["current", "previous"]);
   assert.equal(recovered.find((task) => task.externalId === "previous")?.metrics.weightedVariation, 2.3);
 });
+
+test("recovers per-simulation amounts without copying a later supplier amount into older records", () => {
+  const payload = { operations: [{
+    name: "2026-08-AOUT-EXAMPLE SUPPLIER", month: "Août 2026",
+    plannerSource: {
+      externalId: "current", metrics: { supplierCode: "S1000", purchases12m: 89613.02 },
+      variationHistory: [
+        { taskId: "previous", taskName: "2026-07-JUILLET-EXAMPLE SUPPLIER", period: "2026-07", supplierCode: "S1000", purchases12m: 473398.58 },
+        { taskId: "current", period: "2026-08", supplierCode: "S1000", purchases12m: 89613.02 },
+        { taskId: "legacy", period: "2026-06", supplierCode: "S1000" },
+        { taskId: "zero", period: "2026-05", supplierCode: "S1000", purchases12m: 0 },
+      ],
+    },
+  }] };
+  const recovered = registry.recoverPlannerTasksFromPoints([{ marketId: "market", payload }], { market: ["REV-PB"] });
+  const amounts = Object.fromEntries(recovered.map((task) => [task.externalId, task.metrics.purchases12m]));
+  assert.deepEqual(amounts, { current: 89613.02, previous: 473398.58, legacy: null, zero: 0 });
+  const imported = { ...importedTask("current"), metrics: { ...importedTask("current").metrics, purchases12m: 0 } };
+  assert.equal(registry.mergePlannerTaskRegistry([imported], recovered).tasks.find((task) => task.externalId === "current").metrics.purchases12m, 0);
+});
