@@ -1,6 +1,13 @@
 import type { LocalDraft } from "../lib/app-transport";
 import type { JiraCsvTicket } from "../lib/jira-csv";
 import { newWorkspace, validateWorkspace, type WorkspaceData } from "./workspace-data";
+import { isIsoDate, isoWeekParts } from "../lib/iso-week";
+
+function draftPeriod(meetingDate: unknown) {
+  if (typeof meetingDate !== "string" || !isIsoDate(meetingDate)) return "";
+  const period = isoWeekParts(meetingDate);
+  return `${period.year}:${period.week}`;
+}
 
 export class WorkspaceStore {
   private data: WorkspaceData;
@@ -20,6 +27,7 @@ export class WorkspaceStore {
   snapshot() { return structuredClone(this.data); }
   version = () => this.revision;
   isDirty() { return this.revision !== this.savedRevision || this.pendingForms.size > 0; }
+  hasPendingForms() { return this.pendingForms.size > 0; }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
 
   update(change: (current: WorkspaceData) => WorkspaceData) {
@@ -50,10 +58,22 @@ export class WorkspaceStore {
     if (existed !== pending) this.notify();
   }
 
-  readDraft = (scope: LocalDraft["scope"], ownerId: string) => this.data.drafts.find((draft) => draft.scope === scope && draft.ownerId === ownerId) ?? null;
+  readDraft = (scope: LocalDraft["scope"], ownerId: string, meetingDate?: string) => {
+    const period = meetingDate === undefined ? undefined : draftPeriod(meetingDate);
+    const draft = this.data.drafts.findLast((item) => item.scope === scope && item.ownerId === ownerId && (period === undefined || draftPeriod(item.data.meetingDate) === period));
+    return draft ? structuredClone(draft) : null;
+  };
   writeDraft = (draft: LocalDraft) => {
-    if (JSON.stringify(this.readDraft(draft.scope, draft.ownerId)?.data) === JSON.stringify(draft.data)) return;
-    this.update((current) => ({ ...current, drafts: [...current.drafts.filter((item) => item.scope !== draft.scope || item.ownerId !== draft.ownerId), structuredClone(draft)] }));
+    const period = draftPeriod(draft.data.meetingDate);
+    const matches = (item: LocalDraft) => item.scope === draft.scope && item.ownerId === draft.ownerId && draftPeriod(item.data.meetingDate) === period;
+    if (JSON.stringify(this.data.drafts.find(matches)?.data) === JSON.stringify(draft.data)) return;
+    this.update((current) => ({ ...current, drafts: [...current.drafts.filter((item) => !matches(item)), structuredClone(draft)] }));
+  };
+
+  readPreference = (key: string) => this.data.preferences[key];
+  writePreference = (key: string, value: string) => {
+    if (this.data.preferences[key] === value) return;
+    this.update((current) => ({ ...current, preferences: { ...current.preferences, [key]: value } }));
   };
 
   jiraForPerson(usercode: string) { return Array.from(this.jiraIndex.get(usercode.trim().toUpperCase())?.values() ?? []); }

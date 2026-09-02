@@ -9,9 +9,10 @@ import { moduleUrl, sourceUrl } from "./helpers/module-url.mjs";
 import { reactImports, dialogUrl } from "./helpers/ui-modules.mjs";
 
 const appearanceUrl = moduleUrl("../../lib/appearance.ts");
+const transportImports = { "@/lib/app-transport": moduleUrl("../../lib/app-transport.ts") };
 const { appearanceStorageKey, normalizeAppearance, resolveAppearance, appearanceBootstrapScript } = await import(appearanceUrl);
 const { accentTokens, contrastRatio } = await import(moduleUrl("../../lib/color-contrast.ts"));
-const providerUrl = moduleUrl("../../components/appearance-provider.tsx", { ...reactImports, "@/lib/appearance": appearanceUrl });
+const providerUrl = moduleUrl("../../components/appearance-provider.tsx", { ...reactImports, ...transportImports, "@/lib/appearance": appearanceUrl });
 const iconUrl = moduleUrl("../../components/app-icon.tsx", reactImports);
 const { AppearanceProvider } = await import(providerUrl);
 const { AppearanceControl, AppearanceSettings } = await import(moduleUrl("../../components/appearance-control.tsx", {
@@ -71,7 +72,7 @@ test("renders theme controls and an accessible current destination without clien
   assert.match(html, /Système/);
   assert.match(html, /aria-pressed="true"/);
   assert.match(html, /fond blanc des mails/);
-  const { WorkspaceNavigation } = await import(moduleUrl("../../features/market-pulse/workspace-navigation.tsx", { ...reactImports, "@/components/app-dialog": dialogUrl, "@/components/app-icon": iconUrl }));
+  const { WorkspaceNavigation } = await import(moduleUrl("../../features/market-pulse/workspace-navigation.tsx", { ...reactImports, ...transportImports, "@/components/app-dialog": dialogUrl, "@/components/app-icon": iconUrl }));
   const nav = renderToStaticMarkup(createElement(WorkspaceNavigation, { view: "imports", userName: null, onSelect() {}, onLogin() {}, onLogout() {} }));
   assert.equal((nav.match(/aria-current="page"/g) ?? []).length, 1);
   assert.match(nav, /Centre d’import/);
@@ -82,7 +83,7 @@ test("renders theme controls and an accessible current destination without clien
 test("theme controller follows system changes only in system mode and syncs other tabs", async (t) => {
   const hooksUrl = sourceUrl(`export * from "${reactImports.react}"; export const effects=[]; export const useEffect=setup=>effects.push(setup); export const useCallback=fn=>fn; export const useRef=value=>({current:value}); export const useState=value=>[value,()=>{}];`);
   const { effects } = await import(hooksUrl);
-  const { AppearanceProvider: Controller } = await import(moduleUrl("../../components/appearance-provider.tsx", { ...reactImports, react: hooksUrl, "@/lib/appearance": appearanceUrl }));
+  const { AppearanceProvider: Controller } = await import(moduleUrl("../../components/appearance-provider.tsx", { ...reactImports, ...transportImports, react: hooksUrl, "@/lib/appearance": appearanceUrl }));
   const windowListeners = new Map(); const mediaListeners = new Map(); const writes = [];
   const dataset = {};
   const media = { matches: false, addEventListener: (key, callback) => mediaListeners.set(key, callback), removeEventListener: (key) => mediaListeners.delete(key) };

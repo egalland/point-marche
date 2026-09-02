@@ -25,6 +25,8 @@ test("parses repeated Jira participant columns and repairs mojibake only when pr
   assert.ok(decoded.repairedTextCount > 0);
   assert.equal(result.tickets.length, 1);
   assert.equal(result.tickets[0].summary, "MEN : erreur, tarif");
+  assert.equal(result.tickets[0].createdAt, "2026-08-12T09:15:00");
+  assert.equal(result.tickets[0].updatedAt, "2026-08-13T11:20:00");
   assert.deepEqual(result.tickets[0].participants, [
     { usercode: "B6549679", jiraUserId: "JIRAUSER70973" },
     { usercode: "A8512790", jiraUserId: "JIRAUSER79013" },
@@ -47,6 +49,24 @@ test("keeps valid UTF-8 accents unchanged", () => {
   assert.equal(result.closedTicketCount, 1);
   assert.equal(result.resolvedDatedCount, 1);
   assert.equal(result.closedWithoutResolutionDate, 0);
+  assert.equal(result.tickets[0].resolutionAt, "2026-08-02T08:30:00");
+});
+
+test("reads complete four-digit years and short years without truncation", () => {
+  const header = "Clé de ticket;État;Résumé;Création;Personne assignée;Mise à jour";
+  const result = csv.parseJiraCsv([
+    header,
+    "GLOBAL-1;Fini;Année complète;01/08/2026 08:15;A1234567;28/08/2026 10:45",
+    "GLOBAL-2;Fini;Année courte;01/08/26 08:15;A1234567;28/08/26 10:45",
+    "GLOBAL-3;Fini;Date invalide;31/02/2026 08:15;A1234567;28/08/2026 10:77",
+  ].join("\n"));
+  for (const ticket of result.tickets.slice(0, 2)) {
+    assert.equal(ticket.createdAt, "2026-08-01T08:15:00");
+    assert.equal(ticket.updatedAt, "2026-08-28T10:45:00");
+  }
+  assert.equal(result.tickets[2].createdAt, "");
+  assert.equal(result.tickets[2].updatedAt, "");
+  assert.equal(result.invalidDateRows, 1);
 });
 
 test("flags an open-only Jira export without a resolution column", () => {

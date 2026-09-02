@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { appearanceStorageKey, normalizeAppearance, resolveAppearance, type AppearanceMode } from "@/lib/appearance";
+import { isLocalWorkspace, readLocalPreference, writeLocalPreference } from "@/lib/app-transport";
 
 const AppearanceContext = createContext<{ mode: AppearanceMode; chooseMode: (mode: AppearanceMode) => void } | null>(null);
 
@@ -22,10 +23,12 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let saved: AppearanceMode = "system";
     try { saved = normalizeAppearance(window.localStorage.getItem(appearanceStorageKey)); } catch {}
+    if (isLocalWorkspace()) saved = normalizeAppearance(readLocalPreference(appearanceStorageKey));
     updateMode(saved);
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onSystemChange = () => { if (modeRef.current === "system") applyMode("system"); };
     const onStorage = (event: StorageEvent) => {
+      if (isLocalWorkspace()) return;
       if (event.key === appearanceStorageKey || event.key === null) updateMode(normalizeAppearance(event.newValue));
     };
     media.addEventListener("change", onSystemChange);
@@ -39,6 +42,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   const chooseMode = useCallback((next: AppearanceMode) => {
     updateMode(next);
     try { window.localStorage.setItem(appearanceStorageKey, next); } catch {}
+    writeLocalPreference(appearanceStorageKey, next);
   }, [updateMode]);
 
   return <AppearanceContext.Provider value={{ mode, chooseMode }}>{children}</AppearanceContext.Provider>;

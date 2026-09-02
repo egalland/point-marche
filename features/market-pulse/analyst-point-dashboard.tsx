@@ -1,5 +1,6 @@
 "use client";
 
+import { appFetch as fetch, readLocalDraft, writeLocalDraft, isLocalWorkspace, readLocalPreference, writeLocalPreference } from "@/lib/app-transport";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { SafeDateInput } from "@/components/safe-date-input";
 import { SupplierTurnover } from "@/components/supplier-turnover";
@@ -66,7 +67,9 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
   const analysts = useMemo(() => users.filter((user) => user.role === "analyste-tarif-referentiel").sort((left, right) => left.name.localeCompare(right.name, "fr")), [users]);
   const manager = users.find((user) => user.role === "manager-tarif");
   const [analystId, setAnalystId] = useState(() => {
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem("market-pulse:analyst-id") : "";
+    let stored = "";
+    try { stored = typeof window !== "undefined" ? window.localStorage.getItem("market-pulse:analyst-id") ?? "" : ""; } catch {}
+    if (isLocalWorkspace()) stored = readLocalPreference("market-pulse:analyst-id") ?? "";
     return analysts.some((item) => item.id === stored) ? stored ?? "" : analysts[0]?.id ?? "";
   });
   const analyst = analysts.find((user) => user.id === analystId) ?? analysts[0];
@@ -92,7 +95,8 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
 
   useEffect(() => {
     if (!analyst) return;
-    window.localStorage.setItem("market-pulse:analyst-id", analyst.id);
+    try { window.localStorage.setItem("market-pulse:analyst-id", analyst.id); } catch {}
+    writeLocalPreference("market-pulse:analyst-id", analyst.id);
     let active = true;
     void fetch(`/api/analyst-points?analystId=${encodeURIComponent(analyst.id)}`, { cache: "no-store" }).then(async (response) => {
       const payload = await response.json() as { points?: AnalystPointRecord[]; error?: string };
@@ -103,9 +107,11 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
       const previous = previousWeekRange();
       const period = isoWeekParts(previous.to);
       const matching = normalized.find((record) => record.year === period.year && record.week === period.week);
-      const next = matching?.data ?? initialAnalystPoint(analyst, manager);
+      const localDraft = readLocalDraft("analyst", analyst.id);
+      const next = localDraft ? normalizeAnalystPoint(localDraft.data, analyst, manager) : matching?.data ?? initialAnalystPoint(analyst, manager);
       setData(automaticRecipients(next, analyst, manager));
-      setActiveRecordId(matching?.id ?? "");
+      const nextPeriod = isoWeekParts(next.meetingDate);
+      setActiveRecordId(normalized.find((record) => record.year === nextPeriod.year && record.week === nextPeriod.week)?.id ?? "");
       setChartReferenceDate(next.meetingDate);
     }).catch((error) => { if (active) { setRecords([]); setData(initialAnalystPoint(analyst, manager)); setToast(error instanceof Error ? error.message : "Chargement impossible."); } }).finally(() => { if (active) { setLoading(false); setJiraReload((current) => current + 1); } });
     return () => { active = false; };
@@ -125,6 +131,10 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
     return () => { active = false; controller.abort(); };
   }, [jiraKey, jiraAnalystId, jiraPointDate]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2800); return () => window.clearTimeout(timer); }, [toast]);
+  useEffect(() => {
+    if (!isLocalWorkspace() || loading || !data || !analyst || data.analystId !== analyst.id) return;
+    writeLocalDraft({ scope: "analyst", ownerId: analyst.id, data });
+  }, [analyst, data, loading]);
 
   const chartSettings = data?.preferences.jiraChart ?? { horizon: "3" as const, ...previousWeekRange() };
   const historyRange = useMemo(() => jiraHistoryRange(chartReferenceDate || jiraPointDate || previousWeekRange().to, chartSettings), [chartReferenceDate, chartSettings, jiraPointDate]);
@@ -148,10 +158,12 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
     if (loading || saving || nextParts.year < 2020 || nextParts.year > 2200) return;
     if (nextParts.year === period.year && nextParts.week === period.week) return;
     drafts.current.set(`${analyst.id}:${period.year}:${period.week}`, data);
+    writeLocalDraft({ scope: "analyst", ownerId: analyst.id, data });
     const nextRange = isoWeekRange(nextParts.year, nextParts.week);
     const saved = records.find((record) => record.year === nextParts.year && record.week === nextParts.week);
     const draft = drafts.current.get(`${analyst.id}:${nextParts.year}:${nextParts.week}`);
-    const base = draft ?? saved?.data;
+    const localDraft = readLocalDraft("analyst", analyst.id, nextRange.to);
+    const base = draft ?? (localDraft ? normalizeAnalystPoint(localDraft.data, analyst, manager) : saved?.data);
     const next = base ?? {
       ...initialAnalystPoint(analyst, manager),
       periodFrom: nextRange.from, periodTo: nextRange.to, meetingDate: nextRange.to,

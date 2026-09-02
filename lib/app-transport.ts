@@ -1,8 +1,11 @@
 export type AppTransport = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 export type LocalDraft = { scope: "market" | "analyst"; ownerId: string; data: Record<string, unknown> };
 export type LocalDraftBridge = {
-  read: (scope: LocalDraft["scope"], ownerId: string) => LocalDraft | null;
+  read: (scope: LocalDraft["scope"], ownerId: string, meetingDate?: string) => LocalDraft | null;
   write: (draft: LocalDraft) => void;
+  pending?: (key: string, pending: boolean) => void;
+  readPreference?: (key: string) => string | undefined;
+  writePreference?: (key: string, value: string) => void;
 };
 
 let transport: AppTransport | null = null;
@@ -21,10 +24,22 @@ export function appFetch(input: RequestInfo | URL, init?: RequestInit) {
   return transport ? transport(input, init) : fetch(input, init);
 }
 
-export function readLocalDraft(scope: LocalDraft["scope"], ownerId: string) {
-  return drafts?.read(scope, ownerId) ?? null;
+export function readLocalDraft(scope: LocalDraft["scope"], ownerId: string, meetingDate?: string) {
+  return drafts?.read(scope, ownerId, meetingDate) ?? null;
 }
 
 export function writeLocalDraft(draft: LocalDraft) {
   drafts?.write(draft);
+}
+
+export function markLocalFormPending(key: string, pending: boolean) {
+  drafts?.pending?.(key, pending);
+}
+
+export function readLocalPreference(key: string) {
+  return drafts?.readPreference?.(key);
+}
+
+export function writeLocalPreference(key: string, value: string) {
+  drafts?.writePreference?.(key, value);
 }

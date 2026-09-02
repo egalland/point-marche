@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
+import { moduleUrl } from "./helpers/module-url.mjs";
 
 const source = ts.transpileModule(readFileSync(new URL("../lib/analyst-jira-client.ts", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
-}).outputText;
+}).outputText.replace('from "./app-transport"', `from "${moduleUrl("../../lib/app-transport.ts")}"`);
 const { fetchAnalystJiraSnapshot, fetchAnalystJiraHistory } = await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 
 test("fetches the selected analyst week without cache and preserves both ticket lists", async (t) => {
