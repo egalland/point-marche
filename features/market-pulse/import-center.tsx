@@ -1,5 +1,6 @@
 "use client";
 
+import { appFetch as fetch } from "@/lib/app-transport";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { buildGlobalJiraImportJql, type GlobalDirectoryUser } from "@/lib/global-directory";
 import { decodeJiraCsv, parseJiraCsv, type JiraCsvParseResult } from "@/lib/jira-csv";

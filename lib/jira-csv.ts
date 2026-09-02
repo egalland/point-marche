@@ -98,6 +98,7 @@ function column(headers: string[], alternatives: RegExp[]) {
 
 function isoDateTime(parts: { year: number; month: number; day: number; hour?: number; minute?: number }) {
   const { year, month, day, hour = 0, minute = 0 } = parts;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
   const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
   return date.toISOString().slice(0, 19);
@@ -108,7 +109,7 @@ function jiraDate(value: string) {
   if (!clean || /^#+$/.test(clean)) return "";
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{2}))?/.exec(clean);
   if (iso) return isoDateTime({ year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]), hour: Number(iso[4] || 0), minute: Number(iso[5] || 0) });
-  const french = /^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2}|\d{4})(?:\s+(\d{1,2}):(\d{2}))?/.exec(clean);
+  const french = /^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4}|\d{2})(?!\d)(?:\s+(\d{1,2}):(\d{2}))?/.exec(clean);
   if (french) {
     const shortYear = Number(french[3]);
     return isoDateTime({ year: shortYear < 100 ? 2000 + shortYear : shortYear, month: Number(french[2]), day: Number(french[1]), hour: Number(french[4] || 0), minute: Number(french[5] || 0) });

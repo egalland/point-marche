@@ -1,3 +1,4 @@
+import { appFetch as fetch } from "./app-transport";
 import type { AnalystPointData } from "./analyst-point";
 import type { AnalystJiraHistory, JiraHistoryRange } from "./analyst-jira-history";
 

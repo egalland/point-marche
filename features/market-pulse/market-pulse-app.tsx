@@ -1,5 +1,6 @@
 "use client";
 
+import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft } from "@/lib/app-transport";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type FormEvent, type ReactNode } from "react";
 import { AppDialog } from "@/components/app-dialog";
 import { AppIcon as Icon } from "@/components/app-icon";
@@ -718,8 +719,17 @@ function MarketPulseWorkspace() {
       if (requestId !== archiveRequest.current) return;
       setArchive(points);
       if (loadLatest) {
+        const draft = readLocalDraft("market", nextMarket);
         const latest = points[0];
-        if (latest) {
+        if (draft) {
+          const nextData = await applyJiraWeek(normalizePointData(draft.data, nextMarket, marketOverride), nextMarket);
+          setData(nextData);
+          setCalendarMonth(monthStart(nextData.meetingDate));
+          const saved = points.find((point) => point.year === isoWeekYear(nextData.meetingDate) && point.week === isoWeek(nextData.meetingDate));
+          setActiveRecordId(saved?.id ?? null);
+          setSavedAt(saved ? new Date(saved.createdAt) : null);
+          setLastSavedSignature(saved ? pointSignature(nextMarket, saved.data) : "");
+        } else if (latest) {
           const nextData = await applyJiraWeek(normalizePointData(latest.data, nextMarket, marketOverride), nextMarket);
           setData(nextData);
           setCalendarMonth(monthStart(nextData.meetingDate));
@@ -822,9 +832,17 @@ function MarketPulseWorkspace() {
     return () => window.clearTimeout(timer);
   }, [data.meetingDate, market, marketPlannerTagsKey, plannerReady, plannerTasks, ready, session.user]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(timer); }, [toast]);
+  useEffect(() => {
+    if (!isLocalWorkspace() || !ready || archiveLoading || (view !== "edit" && view !== "settings")) return;
+    writeLocalDraft({ scope: "market", ownerId: marketId, data });
+  }, [archiveLoading, data, marketId, ready, view]);
+  useEffect(() => {
+    markLocalFormPending("directory-editor", directoryEditor !== null);
+    return () => markLocalFormPending("directory-editor", false);
+  }, [directoryEditor]);
   useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [view]);
   useEffect(() => {
-    if (!isDirty || (view !== "edit" && view !== "settings")) return;
+    if (isLocalWorkspace() || !isDirty || (view !== "edit" && view !== "settings")) return;
     const protectDraft = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
     window.addEventListener("beforeunload", protectDraft);
     return () => window.removeEventListener("beforeunload", protectDraft);
@@ -893,7 +911,8 @@ function MarketPulseWorkspace() {
   };
 
   const chooseMarket = async (nextMarket: string) => {
-    if (nextMarket !== marketId && (view === "edit" || view === "settings") && isDirty && !await requestConfirmation({ title: "Changer de marché ?", detail: "Les modifications du brouillon actuel ne seront pas enregistrées.", confirmLabel: "Changer de marché", destructive: true })) return;
+    if (!isLocalWorkspace() && nextMarket !== marketId && (view === "edit" || view === "settings") && isDirty && !await requestConfirmation({ title: "Changer de marché ?", detail: "Les modifications du brouillon actuel ne seront pas enregistrées.", confirmLabel: "Changer de marché", destructive: true })) return;
+    if (view === "edit" || view === "settings") writeLocalDraft({ scope: "market", ownerId: marketId, data });
     setSection("general");
     await loadMarket(nextMarket, true, marketOptions.find((item) => item.id === nextMarket));
     setCalendarExpanded(true);
@@ -972,9 +991,19 @@ function MarketPulseWorkspace() {
     const meetingDate = dateFromWeekInput(value);
     const year = isoWeekYear(meetingDate); const week = isoWeek(meetingDate);
     if (year === currentWeekYear && week === currentWeek) { setCalendarMonth(monthStart(meetingDate)); setCalendarExpanded(false); return; }
-    if ((view === "edit" || view === "settings") && isDirty && !await requestConfirmation({ title: "Changer de semaine ?", detail: "Les modifications du brouillon actuel ne seront pas enregistrées.", confirmLabel: "Changer de semaine", destructive: true })) return;
+    if (!isLocalWorkspace() && (view === "edit" || view === "settings") && isDirty && !await requestConfirmation({ title: "Changer de semaine ?", detail: "Les modifications du brouillon actuel ne seront pas enregistrées.", confirmLabel: "Changer de semaine", destructive: true })) return;
+    if (view === "edit" || view === "settings") writeLocalDraft({ scope: "market", ownerId: marketId, data });
     setCalendarMonth(monthStart(meetingDate));
     const latest = archive.find((record) => record.year === year && record.week === week);
+    const draft = readLocalDraft("market", marketId, meetingDate);
+    if (draft) {
+      const nextData = await applyJiraWeek(normalizePointData(draft.data, marketId, market), marketId);
+      setData(nextData); setCalendarMonth(monthStart(nextData.meetingDate)); setCalendarExpanded(false);
+      setActiveRecordId(latest?.id ?? null); setSavedAt(latest ? new Date(latest.createdAt) : null);
+      setLastSavedSignature(latest ? pointSignature(marketId, latest.data) : "");
+      setToast(`${year} · S${String(week).padStart(2, "0")} · brouillon du classeur repris.`);
+      return;
+    }
     if (latest) { await loadRecord(latest, view, true); setCalendarExpanded(false); return; }
     const fresh = initialData(marketId, market);
     fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail;
@@ -1001,13 +1030,13 @@ function MarketPulseWorkspace() {
       const payload = await response.json() as { point?: PointRecord; error?: string };
       if (!response.ok || !payload.point) throw new Error(payload.error || "Échec de la sauvegarde.");
       const savedData = normalizePointData(payload.point.data, marketId, market); const saved = { ...payload.point, data: savedData };
-      setData(savedData); setArchive((current) => [saved, ...current.filter((item) => !(item.year === saved.year && item.week === saved.week))].sort((a, b) => b.year - a.year || b.week - a.week)); setActiveRecordId(saved.id); setSavedAt(new Date()); setLastSavedSignature(pointSignature(marketId, savedData)); setArchiveError(""); setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} enregistrée en ligne.`);
-    } catch (error) { setToast(error instanceof Error ? error.message : "Échec de la sauvegarde en ligne."); }
+      setData(savedData); setArchive((current) => [saved, ...current.filter((item) => !(item.year === saved.year && item.week === saved.week))].sort((a, b) => b.year - a.year || b.week - a.week)); setActiveRecordId(saved.id); setSavedAt(new Date()); setLastSavedSignature(pointSignature(marketId, savedData)); setArchiveError(""); setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} ${isLocalWorkspace() ? "ajoutée au classeur. Enregistre le fichier pour la conserver sur disque." : "enregistrée en ligne."}`);
+    } catch (error) { setToast(error instanceof Error ? error.message : "Échec de la sauvegarde."); }
     finally { setSaving(false); }
   };
   useEffect(() => {
     const handleSaveShortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("fr-FR") === "s" && (view === "edit" || view === "settings") && session.user) {
+      if (!isLocalWorkspace() && (event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("fr-FR") === "s" && (view === "edit" || view === "settings") && session.user) {
         event.preventDefault();
         void savePoint();
       }
@@ -1015,7 +1044,7 @@ function MarketPulseWorkspace() {
     window.addEventListener("keydown", handleSaveShortcut);
     return () => window.removeEventListener("keydown", handleSaveShortcut);
   });
-  const updateMarketDraft = (id: string, patch: Partial<Market>) => setMarketOptions((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
+  const updateMarketDraft = (id: string, patch: Partial<Market>) => { markLocalFormPending(`market:${id}`, true); setMarketOptions((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item)); };
   const createMarket = async () => {
     if (creatingMarket) return;
     setCreatingMarket(true);
@@ -1041,6 +1070,7 @@ function MarketPulseWorkspace() {
       if (!response.ok || !payload.market) throw new Error(payload.error || "Modification impossible.");
       const saved: Market = { id: payload.market.id, name: payload.market.name, short: payload.market.shortCode, tone: payload.market.tone, colorHex: normalizeHex(payload.market.colorHex), plannerTags: payload.market.plannerTags ?? [], position: payload.market.position, jiraWarningDays: payload.market.jiraWarningDays, jiraCriticalDays: payload.market.jiraCriticalDays };
       setMarketOptions((current) => current.map((item) => item.id === id ? saved : item));
+      markLocalFormPending(`market:${id}`, false);
       if (id === marketId) setData((current) => ({ ...current, themeColor: saved.tone, customColor: saved.colorHex, mail: { ...current.mail, subject: /^Point marché —/.test(current.mail.subject) ? `Point marché — ${saved.name}` : current.mail.subject } }));
       setToast(`Marché « ${saved.name} » enregistré.`);
     } catch (error) { setToast(error instanceof Error ? error.message : "Modification du marché impossible."); }
@@ -1057,6 +1087,7 @@ function MarketPulseWorkspace() {
       if (!response.ok || !payload.removedId) throw new Error(payload.error || "Suppression impossible.");
       const remaining = marketOptions.filter((item) => item.id !== id);
       setMarketOptions(remaining);
+      markLocalFormPending(`market:${id}`, false);
       if (id === marketId) {
         const replacement = remaining[0];
         await loadMarket(replacement.id, true, replacement);
