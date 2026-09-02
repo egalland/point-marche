@@ -22,6 +22,7 @@ test("keeps open En cours tickets for the selected analyst USERCODE", () => {
     "GLOBAL-101\t1000002\tRésolu\tTicket analyste terminé\t20/08/2026 09:00\tA1234567\t27/08/2026 10:00",
     "GLOBAL-102\t1000003\tEn cours\tTicket d’un autre analyste\t20/08/2026 09:00\tB1234567\t27/08/2026 10:00",
     "GLOBAL-103\t1000004\tFini\tTicket analyste fini\t20/08/2026 09:00\tA1234567\t27/08/2026 10:00",
+    "GLOBAL-104\t1000005\tAbandonnée\tTicket analyste abandonné\t20/08/2026 09:00\tA1234567\t27/08/2026 10:00",
   ].join("\n");
 
   const tickets = analystPoint.analystJiraTickets(table, analyst);
@@ -35,6 +36,20 @@ test("keeps older saved analyst points compatible with weekly resolved tickets",
   const normalized = analystPoint.normalizeAnalystPoint({ meetingDate: "2026-08-30", jira: [] }, analyst);
 
   assert.deepEqual(normalized.jiraResolved, []);
+});
+
+test("removes abandoned tickets from saved points without changing the imported data", () => {
+  const saved = {
+    meetingDate: "2026-08-30",
+    jira: [{ key: "GLOBAL-10858", status: "Abandonnée" }, { key: "GLOBAL-10895", status: "Abandonnés" }, { key: "GLOBAL-10935", status: "ABANDONNEE" }, { key: "GLOBAL-1", status: "En cours" }],
+    jiraResolved: [{ key: "GLOBAL-2", status: "Abandonné" }, { key: "GLOBAL-3", status: "Fini" }],
+  };
+  const before = structuredClone(saved);
+  const normalized = analystPoint.normalizeAnalystPoint(saved, analyst);
+  assert.deepEqual(normalized.jira.map((item) => item.key), ["GLOBAL-1"]);
+  assert.deepEqual(normalized.jiraResolved.map((item) => item.key), ["GLOBAL-3"]);
+  assert.deepEqual(saved, before);
+  assert.deepEqual(analystPoint.jiraStatusBreakdown(saved.jira), [{ status: "En cours", count: 1 }]);
 });
 
 test("counts assigned non-closed tickets by their Jira status", () => {

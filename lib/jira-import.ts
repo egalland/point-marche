@@ -61,8 +61,12 @@ export function repairJiraTextWithCount(value: string) {
   return { text: repaired, repairedTextCount };
 }
 
+export function isAbandonedJiraStatus(status: string) {
+  return /^abandonne(?:e)?s?$/.test(normalized(status));
+}
+
 export function isClosedJiraStatus(status: string) {
-  return /(termin|cl[oô]tur|r[eé]solu|ferm|annul|done|closed)/i.test(status) || /^fini(?:e)?s?$/i.test(status.trim());
+  return isAbandonedJiraStatus(status) || /(termin|cl[oô]tur|r[eé]solu|ferm|annul|done|closed)/i.test(status) || /^fini(?:e)?s?$/i.test(status.trim());
 }
 
 function decodeEntities(value: string) {

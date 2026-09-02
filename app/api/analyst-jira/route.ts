@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { globalUsers, jiraAnalystWeeklySnapshots } from "../../../db/schema";
 import { analystJiraTickets, type AnalystJiraTicket } from "../../../lib/analyst-point";
 import type { GlobalDirectoryUser } from "../../../lib/global-directory";
+import { isAbandonedJiraStatus } from "../../../lib/jira-import";
 import { latestCompletedJiraBatch, loadJiraActivityForAnalyst } from "../../../lib/jira-registry-server";
 import { shouldPreferCentralJira } from "../../../lib/jira-source-priority";
 import { getEditorUser } from "../../simple-auth";
@@ -23,7 +24,7 @@ function serialize(snapshot: typeof jiraAnalystWeeklySnapshots.$inferSelect) {
     year: snapshot.year,
     week: snapshot.week,
     rawText: snapshot.rawText,
-    tickets: JSON.parse(snapshot.payload) as AnalystJiraTicket[],
+    tickets: (JSON.parse(snapshot.payload) as AnalystJiraTicket[]).filter((ticket) => !isAbandonedJiraStatus(ticket.status)),
     updatedAt: snapshot.updatedAt,
   };
 }

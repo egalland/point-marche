@@ -97,6 +97,21 @@ test("limits completed participation to the selected week and keeps older assign
   assert.deepEqual(activity.resolved.map((ticket) => ticket.key), ["GLOBAL-2", "GLOBAL-1"]);
 });
 
+test("excludes imported abandoned tickets from the analyst stock and weekly completions without deleting them", async (t) => {
+  const db = fixture(t);
+  db.ticket("GLOBAL-10858", "Abandonnée", "A1234567", "2026-02-19T09:00:00");
+  db.ticket("GLOBAL-10895", "Abandonnée", "A1234567", "2026-02-24T09:00:00");
+  db.ticket("GLOBAL-10935", "Abandonnée", "A1234567", "2026-02-26T09:00:00");
+  db.ticket("GLOBAL-1", "Abandonné", "B1234567");
+  db.participant("GLOBAL-1", "A1234567");
+  db.ticket("GLOBAL-2", "Abandonnées", "A1234567");
+  db.ticket("GLOBAL-3", "Fini", "A1234567");
+  const activity = await db.run(() => loadJiraActivityForAnalyst("A1234567", 2026, 35));
+  assert.deepEqual(activity.open, []);
+  assert.deepEqual(activity.resolved.map((ticket) => ticket.key), ["GLOBAL-3"]);
+  assert.equal(db.sqlite.prepare("SELECT COUNT(*) AS count FROM jira_tickets").get().count, 6);
+});
+
 test("reads a market with 150 people and 13,000 tickets without participant hydration or unbounded bindings", async (t) => {
   const db = fixture(t);
   db.sqlite.exec("INSERT INTO market_definitions (id, name, short_code) VALUES ('scale-market', 'Marché test', 'TEST')");
@@ -114,6 +129,8 @@ test("reads a market with 150 people and 13,000 tickets without participant hydr
   db.ticket("GLOBAL-99998", "En cours", "A0000150");
   db.ticket("GLOBAL-99999", "En cours", "B1234567");
   db.participant("GLOBAL-99999", "A0000001");
+  db.ticket("GLOBAL-99996", "Abandonnée", "A0000001");
+  db.ticket("GLOBAL-99997", "Abandonnés", "A0000002");
   db.sqlite.exec("COMMIT");
 
   const summary = await db.run(() => loadOpenMarketJiraSummary("scale-market"));

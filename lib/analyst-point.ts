@@ -1,6 +1,6 @@
 import type { ModuleWidth } from "@/components/module-layout-editor";
 import type { GlobalDirectoryUser } from "./global-directory";
-import { isClosedJiraStatus, parseJiraAssigneeSummary } from "./jira-import";
+import { isAbandonedJiraStatus, isClosedJiraStatus, parseJiraAssigneeSummary } from "./jira-import";
 
 export type AnalystPointModule = "overview" | "jira" | "planner" | "cycle20" | "dossiers";
 export type AnalystJiraTicket = { id: string; key: string; internalId: string; summary: string; status: string; createdAt: string; updatedAt: string; link: string };
@@ -129,8 +129,8 @@ export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUs
     ...source,
     analystId: analyst.id,
     dossiers: Array.isArray(source.dossiers) ? source.dossiers : [],
-    jira: Array.isArray(source.jira) ? source.jira : [],
-    jiraResolved: Array.isArray(source.jiraResolved) ? source.jiraResolved : [],
+    jira: Array.isArray(source.jira) ? source.jira.filter((ticket) => !isAbandonedJiraStatus(ticket.status)) : [],
+    jiraResolved: Array.isArray(source.jiraResolved) ? source.jiraResolved.filter((ticket) => !isAbandonedJiraStatus(ticket.status)) : [],
     preferences: {
       ...fallback.preferences,
       ...preferences,
@@ -161,7 +161,7 @@ export function daysBetween(from: string, to: string) {
 }
 
 export function jiraStatusBreakdown(tickets: AnalystJiraTicket[]): AnalystJiraStatusCount[] {
-  const counts = tickets.reduce((result, ticket) => {
+  const counts = tickets.filter((ticket) => !isAbandonedJiraStatus(ticket.status)).reduce((result, ticket) => {
     const status = ticket.status.trim() || "Sans statut";
     result.set(status, (result.get(status) ?? 0) + 1);
     return result;

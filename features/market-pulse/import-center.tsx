@@ -98,7 +98,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
       setPreview(parsed);
       setEncoding(decoded.encoding);
       setRepairedTextCount(decoded.repairedTextCount + parsed.repairedTextCount);
-      setMessage(parsed.missingColumns.length ? `Colonnes manquantes : ${parsed.missingColumns.join(", ")}.` : `${parsed.tickets.length} tickets prêts, dont ${parsed.closedTicketCount} terminé${parsed.closedTicketCount > 1 ? "s" : ""} rattaché${parsed.closedTicketCount > 1 ? "s" : ""} par la dernière modification.`);
+      setMessage(parsed.missingColumns.length ? `Colonnes manquantes : ${parsed.missingColumns.join(", ")}.` : `${parsed.tickets.length} tickets prêts, dont ${parsed.closedTicketCount} terminé${parsed.closedTicketCount > 1 ? "s" : ""} rattaché${parsed.closedTicketCount > 1 ? "s" : ""} par la dernière modification.${parsed.abandonedTicketCount ? ` ${parsed.abandonedTicketCount} abandonné(s) conservé(s) dans l’import, exclu(s) des points.` : ""}`);
     } catch (error) {
       setFile(nextFile);
       setPreview(null);
@@ -131,7 +131,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
       const finished = await finishedResponse.json() as { batch?: ImportBatch; error?: string };
       if (!finishedResponse.ok || !finished.batch) throw new Error(finished.error || "Finalisation impossible.");
       await Promise.all([loadHistory(), onJiraImported()]);
-      setMessage(`${preview.tickets.length} tickets enregistrés : ${preview.openTicketCount} non terminés et ${preview.closedTicketCount} terminés. Les points sont maintenant alimentés.`);
+      setMessage(`${preview.tickets.length} tickets enregistrés : ${preview.openTicketCount} non terminés et ${preview.closedTicketCount} terminés.${preview.abandonedTicketCount ? ` ${preview.abandonedTicketCount} abandonné(s) conservé(s) dans l’import, exclu(s) des points.` : ""} Les points sont maintenant alimentés.`);
       setProgress(100);
     } catch (error) {
       if (importId) await fetch("/api/jira-imports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "fail", importId }) }).catch(() => undefined);

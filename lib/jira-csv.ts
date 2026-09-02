@@ -1,4 +1,4 @@
-import { canonicalJiraStatus, isClosedJiraStatus, repairJiraTextWithCount, type JiraDetailedTicket, type JiraParticipant } from "./jira-import";
+import { canonicalJiraStatus, isAbandonedJiraStatus, isClosedJiraStatus, repairJiraTextWithCount, type JiraDetailedTicket, type JiraParticipant } from "./jira-import";
 
 export type JiraCsvTicket = JiraDetailedTicket & { participants: JiraParticipant[]; resolutionAt: string };
 
@@ -12,6 +12,7 @@ export type JiraCsvParseResult = {
   repairedTextCount: number;
   openTicketCount: number;
   closedTicketCount: number;
+  abandonedTicketCount: number;
   resolvedDatedCount: number;
   closedWithoutResolutionDate: number;
   hasResolutionColumn: boolean;
@@ -163,7 +164,7 @@ export function parseJiraCsv(value: string): JiraCsvParseResult {
   const participantIndexes = headers.map((header, index) => /participant/.test(header) ? index : -1).filter((index) => index >= 0);
   const required = [[keyIndex, "Clé de ticket"], [statusIndex, "État"], [summaryIndex, "Résumé"], [createdIndex, "Création"], [updatedIndex, "Mise à jour"]] as const;
   const missingColumns = required.filter(([index]) => index < 0).map(([, label]) => label);
-  if (!rows.length || missingColumns.length) return { tickets: [], rows: Math.max(0, rows.length - 1), rejectedRows: Math.max(0, rows.length - 1), invalidDateRows: 0, duplicateKeys: 0, participantCount: 0, repairedTextCount: repaired.repairedTextCount, openTicketCount: 0, closedTicketCount: 0, resolvedDatedCount: 0, closedWithoutResolutionDate: 0, hasResolutionColumn: resolutionIndex >= 0, delimiter: delimiter === "," ? "comma" : delimiter === ";" ? "semicolon" : delimiter === "\t" ? "tab" : "unknown", missingColumns };
+  if (!rows.length || missingColumns.length) return { tickets: [], rows: Math.max(0, rows.length - 1), rejectedRows: Math.max(0, rows.length - 1), invalidDateRows: 0, duplicateKeys: 0, participantCount: 0, repairedTextCount: repaired.repairedTextCount, openTicketCount: 0, closedTicketCount: 0, abandonedTicketCount: 0, resolvedDatedCount: 0, closedWithoutResolutionDate: 0, hasResolutionColumn: resolutionIndex >= 0, delimiter: delimiter === "," ? "comma" : delimiter === ";" ? "semicolon" : delimiter === "\t" ? "tab" : "unknown", missingColumns };
 
   const tickets = new Map<string, JiraCsvTicket>();
   let rejectedRows = 0;
@@ -202,7 +203,7 @@ export function parseJiraCsv(value: string): JiraCsvParseResult {
     }
   });
   const parsedTickets = Array.from(tickets.values());
-  const closedTickets = parsedTickets.filter((ticket) => isClosedJiraStatus(ticket.status));
+  const closedTickets = parsedTickets.filter((ticket) => isClosedJiraStatus(ticket.status) && !isAbandonedJiraStatus(ticket.status));
   return {
     tickets: parsedTickets,
     rows: Math.max(0, rows.length - 1),
@@ -211,8 +212,9 @@ export function parseJiraCsv(value: string): JiraCsvParseResult {
     duplicateKeys,
     participantCount: parsedTickets.reduce((total, ticket) => total + ticket.participants.length, 0),
     repairedTextCount: repaired.repairedTextCount,
-    openTicketCount: parsedTickets.length - closedTickets.length,
+    openTicketCount: parsedTickets.filter((ticket) => !isClosedJiraStatus(ticket.status)).length,
     closedTicketCount: closedTickets.length,
+    abandonedTicketCount: parsedTickets.filter((ticket) => isAbandonedJiraStatus(ticket.status)).length,
     resolvedDatedCount: closedTickets.filter((ticket) => Boolean(ticket.resolutionAt)).length,
     closedWithoutResolutionDate: closedTickets.filter((ticket) => !ticket.resolutionAt).length,
     hasResolutionColumn: resolutionIndex >= 0,
