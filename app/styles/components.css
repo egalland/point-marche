@@ -1633,7 +1633,7 @@ button {
   margin-top: 4px;
   padding: 7px 8px;
   border-radius: 9px;
-  background: color-mix(in srgb, var(--text) 78%, transparent);
+  background: var(--surface);
 }
 
 .report-step>span {
@@ -9027,56 +9027,6 @@ button {
   background: var(--accent);
 }
 
-.supplier-sparkline {
-  position: relative;
-  display: grid;
-  grid-template-columns: 145px 1fr auto;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 92px;
-  margin: 12px 0;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--aqua) 17%, transparent);
-  border-radius: 13px;
-  color: inherit;
-  background: linear-gradient(90deg,color-mix(in srgb, var(--aqua) 6.5%, transparent),color-mix(in srgb, var(--violet) 3.5%, transparent));
-  text-align: left;
-  cursor: pointer;
-  overflow: hidden;
-}
-
-.supplier-sparkline:hover {
-  border-color: color-mix(in srgb, var(--aqua) 40%, transparent);
-  transform: translateY(-1px);
-}
-
-.supplier-sparkline>div:first-child {
-  display: grid;
-  gap: 3px;
-}
-
-.supplier-sparkline>div:first-child span {
-  color: var(--aqua);
-  font: 730 0.875rem/1.4 var(--font-mono);
-  text-transform: uppercase;
-}
-
-.supplier-sparkline>div:first-child strong {
-  font-size: 1.3125rem;
-}
-
-.supplier-sparkline>div:first-child small {
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.supplier-sparkline>b {
-  align-self: end;
-  color: var(--aqua);
-  font-size: 0.875rem;
-}
-
 .supplier-line-chart {
   min-width: 0;
 }
@@ -9124,10 +9074,6 @@ button {
 .supplier-chart-stage {
   position: relative;
   min-height: 210px;
-}
-
-.supplier-line-chart.compact .supplier-chart-stage {
-  min-height: 64px;
 }
 
 .supplier-chart-stage svg {

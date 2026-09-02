@@ -350,10 +350,6 @@ table { font-variant-numeric: tabular-nums; }
 .supplier-source-note p { font-size: .8125rem; }
 .supplier-source-note > div:last-child { flex-wrap: wrap; gap: 8px; }
 .supplier-source-note > div:last-child span { padding: 8px 10px; font-size: .75rem; background: var(--surface-subtle); }
-.supplier-sparkline { grid-template-columns: minmax(125px, auto) minmax(100px, 1fr) auto; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.supplier-sparkline > div:first-child > span { font-size: .8125rem; }
-.supplier-sparkline > div:first-child strong { font-size: 1.5rem; }
-.supplier-sparkline > div:first-child small, .supplier-sparkline > b { font-size: .75rem; }
 .supplier-chart-toggles { flex-wrap: wrap; gap: 8px; }
 .supplier-chart-toggles button { min-height: 38px; padding: 8px 12px; background: var(--surface); font-size: .8125rem; }
 .supplier-chart-toggles button.active { border-color: var(--line-strong); }
@@ -437,7 +433,7 @@ table { font-variant-numeric: tabular-nums; }
 .font-large .report-canvas { --report-body: 1.0625rem; --report-caption: .9375rem; --report-title: 1.25rem; --report-section: 1.5rem; }
 .report-canvas :is(.report-dossier p, .report-simulation > p, .jira-read-ticket strong, .alert-line strong, .report-priority strong) { font-size: var(--report-body); }
 .report-canvas :is(.report-dossier > div strong, .report-simulation h3, .jira-person-toggle strong) { font-size: var(--report-title); }
-.report-canvas :is(.report-dossier > div small, .report-step > span, .report-step > strong, .report-simulation > small, .jira-read-ticket small, .alert-line small, .jira-person-toggle small) { font-size: var(--report-caption); }
+.report-canvas :is(.report-dossier > div small, .report-simulation > small, .jira-read-ticket small, .alert-line small, .jira-person-toggle small) { font-size: var(--report-caption); }
 .report-canvas :is(.report-heading h2, .jira-command-header h2) { font-size: var(--report-section); }
 .density-compact .report-dossier, .density-compact .jira-read-ticket { padding-block: 12px; }
 .density-compact .report-simulation, .density-compact .report-standalone { padding: 18px; }
@@ -449,8 +445,6 @@ table { font-variant-numeric: tabular-nums; }
   .appearance-switch strong { display: none; }
   .appearance-switch > button { padding-inline: 9px; }
   .stats-delay-grid, .analyst-delay-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .supplier-sparkline { grid-template-columns: 120px minmax(90px, 1fr); }
-  .supplier-sparkline > b { grid-column: 1 / -1; text-align: right; }
   .stats-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -590,7 +584,6 @@ table { font-variant-numeric: tabular-nums; }
   .jira-command-kpis > button strong { grid-column: 2; grid-row: 1 / 3; align-self: center; font-size: 1.75rem; }
   .jira-command-kpis > button small { grid-column: 1; }
   .report-simulation { padding: 16px; }
-  .report-simulation .supplier-sparkline { grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr); padding: 10px; }
   .report-step { align-items: start; flex-wrap: wrap; }
   .analyst-delay-grid, .stats-delay-grid { grid-template-columns: minmax(0, 1fr); }
   .supplier-dashboard-filters > label:last-child { grid-column: 1 / -1; }
