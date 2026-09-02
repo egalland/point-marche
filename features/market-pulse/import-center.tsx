@@ -59,8 +59,9 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("");
   const [queryCopied, setQueryCopied] = useState(false);
+  const [queryError, setQueryError] = useState("");
   const [batches, setBatches] = useState<ImportBatch[]>([]);
-  const [registry, setRegistry] = useState({ ticketCount: 0, participantCount: 0 });
+  const [registry, setRegistry] = useState<{ ticketCount: number | null; participantCount: number | null }>({ ticketCount: null, participantCount: null });
   const [historyLoading, setHistoryLoading] = useState(true);
   const knownUserCodes = useMemo(() => new Set(users.map((user) => user.usercode.trim().toUpperCase()).filter(Boolean)), [users]);
   const globalJql = useMemo(() => buildGlobalJiraImportJql(), []);
@@ -87,6 +88,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
   }, [loadHistory]);
 
   const readFile = async (nextFile: File) => {
+    if (importing || loadingFile) return;
     setLoadingFile(true);
     setMessage("");
     setProgress(0);
@@ -152,18 +154,30 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
     if (inputRef.current) inputRef.current.value = "";
   };
 
+  const copyQuery = async () => {
+    setQueryError("");
+    try {
+      await navigator.clipboard.writeText(globalJql);
+      setQueryCopied(true);
+      window.setTimeout(() => setQueryCopied(false), 2200);
+    } catch {
+      setQueryError("Copie automatique indisponible. Sélectionne la requête ci-dessous pour la copier.");
+    }
+  };
+
   return <main className="import-center-page">
     <section className="import-center-hero">
       <div><span>Sources centralisées</span><h1>Centre d’import</h1><p>Un seul registre alimente les points marché, les points analystes et les statistiques.</p></div>
-      <div className="import-registry-kpis"><article><span>Tickets en registre</span><strong>{registry.ticketCount}</strong></article><article><span>Liens participants</span><strong>{registry.participantCount}</strong></article><article><span>Simulations Planner</span><strong>{plannerTasks.length}</strong></article></div>
+      <div className="import-registry-kpis"><article><span>Tickets en registre</span><strong>{historyLoading ? "…" : registry.ticketCount ?? "—"}</strong></article><article><span>Liens participants</span><strong>{historyLoading ? "…" : registry.participantCount ?? "—"}</strong></article><article><span>Simulations Planner</span><strong>{plannerTasks.length}</strong></article></div>
     </section>
 
     <div className="import-source-grid">
       <section className="surface jira-source-card">
         <header><div><span>Source 01 · Jira</span><h2>Tickets et participants</h2><p>Dépose le CSV UTF-8 exporté depuis Jira. Les fichiers de plus de 12 000 lignes sont envoyés au registre par lots.</p></div><b>CSV</b></header>
-        <section className="jira-query-card import-jira-query"><div className="jira-query-heading"><div><span>Requête globale prête à copier</span><strong>Tickets ouverts + terminés depuis le début de l’année précédente</strong></div><button type="button" className="secondary-button" onClick={async () => { await navigator.clipboard.writeText(globalJql); setQueryCopied(true); window.setTimeout(() => setQueryCopied(false), 1600); }}>{queryCopied ? "Requête copiée" : "Copier la requête"}</button></div><pre className="jira-query-code">{globalJql}</pre><p>Dans l’export CSV, conserve : Clé, ID, État, Résumé, Création, Personne assignée, <strong>Mise à jour</strong> et toutes les colonnes Participants à la requête. La date de résolution reste facultative.</p></section>
-        <input ref={inputRef} type="file" accept=".csv,text/csv,text/plain" hidden onChange={(event) => { const nextFile = event.target.files?.[0]; if (nextFile) void readFile(nextFile); }}/>
-        {!file ? <button type="button" className="jira-file-drop" onClick={() => inputRef.current?.click()} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); const dropped = event.dataTransfer.files?.[0]; if (dropped) void readFile(dropped); }}><span>CSV</span><strong>{loadingFile ? "Lecture du fichier…" : "Déposer le fichier Jira"}</strong><small>ou cliquer pour sélectionner un CSV</small></button> : <div className="jira-file-selected"><div><span>{encoding}</span><strong>{file.name}</strong><small>{formatBytes(file.size)} · {preview?.rows ?? 0} lignes lues</small></div><button type="button" className="secondary-button" disabled={importing} onClick={clearFile}>Changer de fichier</button></div>}
+        <section className="jira-query-card import-jira-query"><div className="jira-query-heading"><div><span>Requête globale prête à copier</span><strong>Tickets ouverts + terminés depuis le début de l’année précédente</strong></div><button type="button" className="secondary-button" onClick={() => { void copyQuery(); }}>{queryCopied ? "Requête copiée" : "Copier la requête"}</button></div>{queryError && <p role="status" className="import-feedback">{queryError}</p>}<pre tabIndex={0} aria-label="Requête Jira à copier" className="jira-query-code">{globalJql}</pre><p>Dans l’export CSV, conserve : Clé, ID, État, Résumé, Création, Personne assignée, <strong>Mise à jour</strong> et toutes les colonnes Participants à la requête. La date de résolution reste facultative.</p></section>
+        <input ref={inputRef} type="file" disabled={loadingFile || importing} accept=".csv,text/csv,text/plain" hidden onChange={(event) => { const nextFile = event.target.files?.[0]; if (nextFile) void readFile(nextFile); }}/>
+        {!file ? <button type="button" className="jira-file-drop" disabled={loadingFile || importing} onClick={() => inputRef.current?.click()} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); const dropped = event.dataTransfer.files?.[0]; if (dropped) void readFile(dropped); }}><span>CSV</span><strong>{loadingFile ? "Lecture du fichier…" : "Déposer le fichier Jira"}</strong><small>ou cliquer pour sélectionner un CSV</small></button> : <div className="jira-file-selected"><div><span>{encoding}</span><strong>{file.name}</strong><small>{formatBytes(file.size)} · {preview?.rows ?? 0} lignes lues</small></div><button type="button" className="secondary-button" disabled={importing || loadingFile} onClick={clearFile}>Changer de fichier</button></div>}
+        {!preview && message && <p className="import-feedback" role="alert">{message}</p>}
 
         {preview && <>
           <div className="jira-file-kpis">
@@ -176,7 +190,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
           {preview.missingColumns.length ? <div className="import-quality-alert danger"><strong>Import bloqué</strong><span>Colonnes manquantes : {preview.missingColumns.join(", ")}.</span></div> : !preview.closedTicketCount ? <div className="import-quality-alert warning"><strong>Aucun ticket terminé dans le fichier</strong><span>Vérifie que la requête copiée a bien été utilisée : un export limité à « statusCategory != Done » ne peut pas alimenter les terminés hebdomadaires.</span></div> : <div className={`import-quality-alert ${preview.invalidDateRows ? "warning" : "ok"}`}><strong>{preview.invalidDateRows ? `${preview.invalidDateRows} date(s) illisible(s)` : "Structure complète reconnue"}</strong><span>{preview.closedTicketCount} ticket{preview.closedTicketCount > 1 ? "s" : ""} terminé{preview.closedTicketCount > 1 ? "s" : ""} exploitable{preview.closedTicketCount > 1 ? "s" : ""} via la dernière modification. {repairedTextCount ? `${repairedTextCount} séquence(s) d’accents réparée(s). ` : ""}{preview.duplicateKeys ? `${preview.duplicateKeys} doublon(s) fusionné(s).` : "Aucun doublon détecté."}</span></div>}
           {unknownUserCodes.length > 0 && <div className="unknown-usercode-list"><span>À rapprocher dans l’annuaire</span><div>{unknownUserCodes.slice(0, 12).map((usercode) => <b key={usercode}>{usercode}</b>)}{unknownUserCodes.length > 12 && <b>+{unknownUserCodes.length - 12}</b>}</div></div>}
           {preview.tickets.length > 0 && <div className="jira-csv-preview"><table><thead><tr><th>Ticket</th><th>État</th><th>Résumé</th><th>Assigné</th><th>Participants</th><th>Mise à jour</th></tr></thead><tbody>{preview.tickets.slice(0, 25).map((ticket) => <tr key={ticket.key}><td><a href={ticket.link} target="_blank" rel="noreferrer">{ticket.key}</a></td><td>{ticket.status}</td><td>{ticket.summary}</td><td>{ticket.assigneeUserCode || "—"}</td><td>{ticket.participants.map((participant) => participant.usercode).join(" · ") || "—"}</td><td>{ticket.updatedAt ? ticket.updatedAt.slice(0, 16).replace("T", " ") : "—"}</td></tr>)}</tbody></table>{preview.tickets.length > 25 && <small>Prévisualisation limitée à 25 lignes · {preview.tickets.length - 25} autres tickets seront importés.</small>}</div>}
-          <div className="jira-import-progress"><div><span style={{ width: `${progress}%` }}/></div><footer><span>{message}</span><button type="button" className="primary-button" disabled={importing || !preview.tickets.length || Boolean(preview.missingColumns.length)} onClick={() => { void importFile(); }}>{importing ? `Import ${progress}%` : `Importer ${preview.tickets.length} tickets`}</button></footer></div>
+          <div className="jira-import-progress"><div><span style={{ width: `${progress}%` }}/></div><footer><span role="status">{message}</span><button type="button" className="primary-button" disabled={importing || !preview.tickets.length || Boolean(preview.missingColumns.length)} onClick={() => { void importFile(); }}>{importing ? `Import ${progress}%` : `Importer ${preview.tickets.length} tickets`}</button></footer></div>
         </>}
       </section>
 
