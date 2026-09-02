@@ -11,6 +11,7 @@ import { jiraHistoryRange } from "@/lib/analyst-jira-history";
 import { isIsoDate, isoWeekRange } from "@/lib/iso-week";
 import { ModuleLayoutEditor, type ModuleWidth } from "@/components/module-layout-editor";
 import { buildAnalystStats, type AnalystStatsMarket } from "@/lib/analyst-stats";
+import { groupAnalystActivities } from "@/lib/analyst-activity-groups";
 import { fetchAnalystJiraSnapshot } from "@/lib/analyst-jira-client";
 import { analystPointModules, initialAnalystPoint, isoWeekParts, normalizeAnalystPoint, previousWeekRange, type AnalystDossier, type AnalystPointData, type AnalystPointModule, type AnalystPointRecord } from "@/lib/analyst-point";
 import type { GlobalDirectoryUser } from "@/lib/global-directory";
@@ -133,13 +134,13 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
 
   const stats = useMemo(() => data && analyst ? buildAnalystStats(tasks, users, markets, { from: data.periodFrom, to: data.periodTo, marketId: "all", specialty: "all", analystIds: [analyst.id] }) : null, [analyst, data, markets, tasks, users]);
   const cycleStats = useMemo(() => data && analyst ? buildAnalystStats(tasks, users, markets, { from: data.cycleFrom, to: data.cycleTo, marketId: "all", specialty: "all", analystIds: [analyst.id] }) : null, [analyst, data, markets, tasks, users]);
-  const mailHtml = useMemo(() => data && analyst && stats && cycleStats ? analystMailHtml(data, analyst, stats, cycleStats, jiraHistory.history, previousJiraWeek.count) : "", [analyst, cycleStats, data, stats, jiraHistory.history, previousJiraWeek.count]);
-  const interactiveHtml = useMemo(() => data && analyst && stats ? analystInteractiveHtml(data, analyst, stats, jiraHistory.history, previousJiraWeek.count) : "", [analyst, data, stats, jiraHistory.history, previousJiraWeek.count]);
+  const mailHtml = useMemo(() => mode === "mail" && data && analyst && stats && cycleStats ? analystMailHtml(data, analyst, stats, cycleStats, jiraHistory.history, previousJiraWeek.count) : "", [mode, analyst, cycleStats, data, stats, jiraHistory.history, previousJiraWeek.count]);
+  const interactiveHtml = useMemo(() => mode === "mail" && data && analyst && stats ? analystInteractiveHtml(data, analyst, stats, jiraHistory.history, previousJiraWeek.count) : "", [mode, analyst, data, stats, jiraHistory.history, previousJiraWeek.count]);
+  const groupedActivities = useMemo(() => groupAnalystActivities(stats?.contributions ?? []), [stats]);
   if (!analyst || !data || data.analystId !== analyst.id || !stats || !cycleStats) return <main className="analyst-point-page"><div className="surface analyst-point-empty"><strong>{analysts.length ? "Chargement du point analyste…" : "Aucun analyste tarifaire dans l’annuaire"}</strong><span>{analysts.length ? "Récupération de l’historique hebdomadaire." : "Ajoute au moins une personne avec le rôle Analyste tarif et référentiel."}</span></div></main>;
 
   const period = isoWeekParts(data.meetingDate);
   const previousRecord = records.filter((record) => record.year < period.year || (record.year === period.year && record.week < period.week)).sort((left, right) => right.year - left.year || right.week - left.week)[0];
-  const groupedActivities = Array.from(new Map(stats.contributions.map((item) => [item.taskId, { taskId: item.taskId, taskName: item.taskName, purchases12m: item.purchases12m, date: item.date, activities: stats.contributions.filter((candidate) => candidate.taskId === item.taskId) }])).values()).sort((left, right) => right.date.localeCompare(left.date));
   const updateData = (patch: Partial<AnalystPointData>) => setData((current) => current ? { ...current, ...patch } : current);
   const refreshJira = () => { setJiraReload((current) => current + 1); setHistoryReload((current) => current + 1); };
   const updateDossier = (id: string, patch: Partial<AnalystDossier>) => updateData({ dossiers: data.dossiers.map((item) => item.id === id ? { ...item, ...patch } : item) });

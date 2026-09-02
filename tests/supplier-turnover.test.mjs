@@ -2,18 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { moduleUrl, sourceUrl } from "./helpers/module-url.mjs";
+import { moduleUrl } from "./helpers/module-url.mjs";
+import { supplierChartUrl } from "./helpers/ui-modules.mjs";
 
 const turnoverUrl = moduleUrl("../../lib/supplier-turnover.ts");
 const { formatSupplierTurnover, compareSupplierTurnover, supplierTurnoverHtml } = await import(turnoverUrl);
 const reactImports = { react: import.meta.resolve("react"), "react/jsx-runtime": import.meta.resolve("react/jsx-runtime") };
 const { SupplierTurnover } = await import(moduleUrl("../../components/supplier-turnover.tsx", { ...reactImports, "@/lib/supplier-turnover": turnoverUrl }));
-const { SupplierVariationChart } = await import(moduleUrl("../../features/market-pulse/supplier-variation-dashboard.tsx", {
-  ...reactImports,
-  "@/lib/supplier-turnover": turnoverUrl,
-  "@/lib/supplier-variations": moduleUrl("../../lib/supplier-variations.ts"),
-  "@/components/app-dialog": sourceUrl("export function AppDialog() { return null; }"),
-}));
+const { SupplierVariationChart } = await import(supplierChartUrl);
 const normal = (value) => value.replace(/[\u00a0\u202f]/g, " ");
 
 test("formats one imported amount with cents and distinguishes zero from missing", () => {

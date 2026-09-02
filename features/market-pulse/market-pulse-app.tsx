@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type FormEvent, type ReactNode } from "react";
 import { AppDialog } from "@/components/app-dialog";
+import { AppIcon as Icon } from "@/components/app-icon";
+import { AppearanceProvider } from "@/components/appearance-provider";
+import { AppearanceControl, AppearanceSettings } from "@/components/appearance-control";
+import { ActionMenu } from "@/components/action-menu";
+import { accentTokens } from "@/lib/color-contrast";
 import { SupplierTurnover } from "@/components/supplier-turnover";
 import { supplierTurnoverHtml } from "@/lib/supplier-turnover";
 import { ModuleLayoutEditor, type ModuleWidth } from "@/components/module-layout-editor";
@@ -15,9 +20,10 @@ import { AnalystStatsDashboard } from "./analyst-stats-dashboard";
 import { ImportCenter } from "./import-center";
 import { PlannerImportDialog } from "./planner-import-dialog";
 import { SupplierSparkline } from "./supplier-variation-dashboard";
+import { WorkspaceNavigation, workspaceTitles, type WorkspaceView } from "./workspace-navigation";
 
 type Tone = "mint" | "violet" | "aqua" | "peach" | "red";
-type View = "read" | "edit" | "analyst" | "stats" | "imports" | "mail" | "settings";
+type View = WorkspaceView;
 type Section = "general" | "dossiers" | "operations" | "jira" | "saved" | "markets" | "users" | "mail" | "personalization";
 type FontScale = "compact" | "standard" | "large";
 type Density = "compact" | "comfortable";
@@ -248,29 +254,6 @@ function mergePlannerOperations(operations: CommercialOperation[], tasks: Planne
   return [...operations.filter((operation) => !operation.id.startsWith("planner:")), ...tasks.map((task) => plannerTaskToOperation(task, allTasks))];
 }
 
-function Icon({ name, size = 18 }: { name: string; size?: number }) {
-  const paths: Record<string, ReactNode> = {
-    edit: <><path d="M4 20h4l11-11-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></>,
-    eye: <><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></>,
-    mail: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></>,
-    folder: <><path d="M3 7h6l2 2h10v10H3Z"/><path d="M3 7V5h7l2 2"/></>,
-    trend: <><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/><path d="m3 8 6-4 6 7 6-5"/></>,
-    ticket: <><path d="M20 13a2 2 0 0 0 0-4V5H4v4a2 2 0 0 1 0 4v4h16Z"/><path d="M9 8.5h6M9 12h6M9 15.5h3"/></>,
-    alert: <><path d="M12 3 2.7 20h18.6Z"/><path d="M12 9v5M12 17.5v.1"/></>,
-    plus: <path d="M12 5v14M5 12h14"/>, trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/><path d="M10 11v5M14 11v5"/></>,
-    copy: <><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></>,
-    more: <><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></>,
-    download: <><path d="M12 3v12m0 0 5-5m-5 5-5-5"/><path d="M4 20h16"/></>, upload: <><path d="M12 16V4m0 0 5 5m-5-5L7 9"/><path d="M4 20h16"/></>,
-    spark: <><path d="m12 2 1.4 5.1L18 9l-4.6 1.9L12 16l-1.4-5.1L6 9l4.6-1.9Z"/><path d="m19 15 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7Z"/></>,
-    calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></>,
-    user: <><circle cx="12" cy="8" r="3"/><path d="M5 21c.7-4 3-6 7-6s6.3 2 7 6"/></>,
-    filter: <><path d="M4 6h16M7 12h10M10 18h4"/></>,
-    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></>,
-    lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
-    chevron: <path d="m9 6 6 6-6 6"/>, check: <path d="m5 12 4 4L19 6"/>,
-  };
-  return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
-}
 
 function isoWeek(dateString: string) {
   const date = new Date(`${safeIsoDate(dateString)}T12:00:00`); const target = new Date(date.valueOf()); const day = (date.getDay() + 6) % 7;
@@ -647,6 +630,10 @@ function buildInteractiveHtml(data: PointData, market: Market, archive: PointRec
 }
 
 export function MarketPulseApp() {
+  return <AppearanceProvider><MarketPulseWorkspace/></AppearanceProvider>;
+}
+
+function MarketPulseWorkspace() {
   const [marketOptions, setMarketOptions] = useState<Market[]>(defaultMarkets);
   const [marketId, setMarketId] = useState("revetements-menuiserie");
   const [data, setData] = useState<PointData>(() => initialData());
@@ -682,7 +669,7 @@ export function MarketPulseApp() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [carryoverOpen, setCarryoverOpen] = useState(false);
   const [carryoverSelection, setCarryoverSelection] = useState<Record<string, boolean>>({});
-  const [calendarExpanded, setCalendarExpanded] = useState(true);
+  const [calendarExpanded, setCalendarExpanded] = useState(false);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
   const [directorySort, setDirectorySort] = useState<{ key: "name" | "role" | "market"; direction: "asc" | "desc" }>({ key: "name", direction: "asc" });
   const fileInput = useRef<HTMLInputElement>(null);
@@ -692,10 +679,10 @@ export function MarketPulseApp() {
   const marketPlannerTagsKey = market.plannerTags.join("|");
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
   const accent = normalizeHex(data.customColor) || theme.accent;
-  const themeStyle = { "--accent": accent, "--accent-soft": normalizeHex(data.customColor) ? hexSoft(data.customColor) : theme.soft } as CSSProperties;
+  const themeStyle = useMemo(() => accentTokens(accent) as CSSProperties, [accent]);
   const alerts = useMemo(() => buildAlerts(data, market), [data, market]);
-  const mailHtml = useMemo(() => buildMailHtml(data, market, archive), [archive, data, market]);
-  const interactiveHtml = useMemo(() => buildInteractiveHtml(data, market, archive), [archive, data, market]);
+  const mailHtml = useMemo(() => view === "mail" ? buildMailHtml(data, market, archive) : "", [archive, data, market, view]);
+  const interactiveHtml = useMemo(() => view === "mail" ? buildInteractiveHtml(data, market, archive) : "", [archive, data, market, view]);
   const htmlAttachmentName = interactiveAttachmentName(data, market);
   const isDirty = pointSignature(marketId, data) !== lastSavedSignature;
   const currentWeek = isoWeek(data.meetingDate);
@@ -835,6 +822,7 @@ export function MarketPulseApp() {
     return () => window.clearTimeout(timer);
   }, [data.meetingDate, market, marketPlannerTagsKey, plannerReady, plannerTasks, ready, session.user]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(timer); }, [toast]);
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [view]);
   useEffect(() => {
     if (!isDirty || (view !== "edit" && view !== "settings")) return;
     const protectDraft = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
@@ -1197,12 +1185,12 @@ export function MarketPulseApp() {
     <div className="period-head">
       <div className="period-title"><span><Icon name={view === "edit" ? "edit" : "eye"} size={15}/> {view === "edit" ? "Point en préparation" : "Point en lecture"}</span><strong>Marché et semaine</strong></div>
       <label className="period-market"><span>Marché</span><select value={marketId} onChange={(event) => { void chooseMarket(event.target.value); }}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <div className="period-state"><span>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</span><strong>{isDirty ? "Brouillon modifié" : activeRecordId ? "Point enregistré" : "Nouvelle semaine"}</strong><small>{currentWeekPoint ? `Sauvegardé le ${dateLabel(currentWeekPoint.meetingDate)}` : "Aucun point enregistré"}</small></div>
+      <div className="period-state"><span>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</span><strong>{isDirty ? "Brouillon modifié" : activeRecordId ? "Point enregistré" : "Nouvelle semaine"}</strong><small>{currentWeekPoint ? `Point du ${dateLabel(currentWeekPoint.meetingDate)}` : "Aucun point enregistré"}</small></div>
       <button type="button" className={`period-calendar-toggle ${calendarExpanded ? "is-open" : ""}`} aria-expanded={calendarExpanded} onClick={() => setCalendarExpanded((current) => !current)}><Icon name="calendar" size={16}/><span>{calendarExpanded ? "Masquer le calendrier" : "Choisir une semaine"}</span><Icon name="chevron" size={15}/></button>
     </div>
     {calendarExpanded && <div className="visual-week-picker">
       <div className="week-picker-toolbar">
-        <div className="month-navigation"><button type="button" aria-label="Mois précédent" onClick={() => setCalendarMonth((current) => shiftMonth(current, -1))}><Icon name="chevron" size={16}/></button><strong>{calendarMonthLabel(calendarMonth)}</strong><button type="button" aria-label="Mois suivant" onClick={() => setCalendarMonth((current) => shiftMonth(current, 1))}><Icon name="chevron" size={16}/></button></div>
+        <div className="month-navigation"><button type="button" aria-label="Mois précédent" onClick={() => setCalendarMonth((current) => shiftMonth(current, -1))}><Icon name="chevron" size={16}/></button><label className="sr-only" htmlFor="market-calendar-month">Mois du calendrier</label><select id="market-calendar-month" value={calendarMonth.slice(5, 7)} onChange={(event) => setCalendarMonth(`${calendarMonth.slice(0, 4)}-${event.target.value}-01`)}>{Array.from({ length: 12 }, (_, index) => <option key={index} value={String(index + 1).padStart(2, "0")}>{new Intl.DateTimeFormat("fr-FR", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2026, index, 1)))}</option>)}</select><label className="sr-only" htmlFor="market-calendar-year">Année du calendrier</label><select id="market-calendar-year" value={calendarMonth.slice(0, 4)} onChange={(event) => setCalendarMonth(`${event.target.value}-${calendarMonth.slice(5, 7)}-01`)}>{Array.from({ length: 181 }, (_, index) => <option key={2020 + index} value={2020 + index}>{2020 + index}</option>)}</select><button type="button" aria-label="Mois suivant" onClick={() => setCalendarMonth((current) => shiftMonth(current, 1))}><Icon name="chevron" size={16}/></button></div>
         <div className="week-quick-actions"><button type="button" onClick={() => { void chooseCurrentWeek(); }}><Icon name="calendar" size={14}/> Cette semaine</button><button type="button" disabled={!archive.length} onClick={() => { void chooseLatestPublished(); }}><Icon name="check" size={14}/> Dernière publiée</button>{view === "edit" && <button type="button" disabled={!previousPoint} onClick={openCarryover}><Icon name="copy" size={14}/> Reprendre le précédent</button>}</div>
       </div>
       <div className="week-card-strip">{calendarWeeks.map((weekChoice) => { const savedPoint = archive.find((record) => record.year === weekChoice.year && record.week === weekChoice.week); const selected = weekChoice.year === currentWeekYear && weekChoice.week === currentWeek; const today = weekChoice.value === weekInputValue(isoToday()); return <button type="button" className={`week-choice ${selected ? "selected" : ""} ${savedPoint ? "published" : "empty"} ${selected && isDirty ? "draft" : ""}`} aria-pressed={selected} key={weekChoice.value} onClick={() => { void chooseWeek(weekChoice.value); }}><span><i/>{today ? "Cette semaine" : `${weekChoice.year}`}</span><strong>S{String(weekChoice.week).padStart(2, "0")}</strong><small>{weekChoice.range}</small><b>{savedPoint ? "Point enregistré" : "À renseigner"}</b></button>; })}</div>
@@ -1221,6 +1209,7 @@ export function MarketPulseApp() {
     </section>}
 
     {section === "personalization" && <section className="editor-section">
+      <AppearanceSettings/>
       <SectionTitle eyebrow="Paramètres du point actif" title="Personnaliser l’affichage" detail="Ces choix sont enregistrés avec le point : lecture, mail et pièce jointe HTML peuvent conserver des contenus différents."/>
       <div className="surface personalization-card">
         <div className="personalization-choice"><div><strong>Taille du texte</strong><span>Ajuste toute l’interface de lecture sans changer le contenu.</span></div><div className="segmented-control">{(["compact", "standard", "large"] as FontScale[]).map((value) => <button type="button" key={value} className={data.preferences.fontScale === value ? "active" : ""} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, fontScale: value } }))}>{value === "compact" ? "Petite" : value === "large" ? "Grande" : "Standard"}</button>)}</div></div>
@@ -1301,18 +1290,27 @@ export function MarketPulseApp() {
     </section>}
   </main></div>;
 
-  return <div className={`app-shell market-${market.tone} font-${data.preferences.fontScale} density-${data.preferences.density}`} style={themeStyle}><div className="ambient ambient-a"/><div className="ambient ambient-b"/>
+  return <div className={`app-shell font-${data.preferences.fontScale} density-${data.preferences.density}`} style={themeStyle}>
+    <a className="skip-link" href="#workspace-content">Aller au contenu</a>
+    <WorkspaceNavigation view={view} userName={session.user?.displayName ?? null} onSelect={chooseView} onLogin={() => { setLoginDestination("edit"); openLogin(); }} onLogout={logout}/>
     <header className="app-header">
-      <a className="brand" href="#top"><span className="brand-mark"><Icon name="spark" size={19}/></span><div><strong>Market Pulse</strong><small>Générateur de point marché</small></div></a>
-      <nav className="view-tabs" aria-label="Mode d’affichage"><button className={view === "read" ? "active" : ""} onClick={() => chooseView("read")}><Icon name="eye"/> Lecture marché</button><button className={view === "edit" ? "active" : ""} onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> Préparation</button><button className={view === "analyst" ? "active" : ""} onClick={() => chooseView("analyst")}><Icon name={session.user ? "user" : "lock"}/> Point analyste</button><button className={view === "stats" ? "active" : ""} onClick={() => chooseView("stats")}><Icon name={session.user ? "trend" : "lock"}/> Statistiques</button><button className={view === "imports" ? "active" : ""} onClick={() => chooseView("imports")}><Icon name={session.user ? "upload" : "lock"}/> Imports</button><button className={view === "mail" ? "active" : ""} onClick={() => chooseView("mail")}><Icon name="mail"/> Mail marché</button><button className={view === "settings" ? "active" : ""} onClick={() => chooseView("settings")}><Icon name={session.user ? "settings" : "lock"}/> Paramètres</button></nav>
+      <div className="workspace-location"><span>Espace de travail</span><strong>{workspaceTitles[view]}</strong></div>
       <div className="header-actions">
+        <AppearanceControl/>
         <input ref={fileInput} className="sr-only" type="file" accept="application/json" onChange={importJson}/>
-        {session.user && (view === "edit" || view === "settings") && <><details className="header-more"><summary className="icon-button" aria-label="Autres actions" title="Autres actions"><Icon name="more"/></summary><div><button type="button" onClick={() => { fileInput.current?.click(); }}><Icon name="upload"/> Importer un JSON</button><button type="button" onClick={() => exportJson()}><Icon name="download"/> Exporter le brouillon</button><button type="button" className="danger" onClick={() => { void resetPoint(); }}><Icon name="plus"/> Réinitialiser la semaine</button></div></details><button className={`primary-button save-point ${isDirty ? "has-changes" : ""}`} disabled={saving || !ready || (!isDirty && Boolean(activeRecordId))} onClick={savePoint}><Icon name="check"/> {saving ? "Enregistrement…" : isDirty ? "Sauvegarder" : activeRecordId ? "Enregistré" : "Créer le point"}</button></>}
-        {!session.user && <button className="login-button" disabled={!sessionReady} onClick={() => { setLoginDestination("edit"); openLogin(); }}><Icon name="lock"/> {sessionReady ? "Connexion interne" : "Vérification…"}</button>}
-        {session.user && <div className="editor-profile"><span><Icon name="user" size={15}/></span><div><strong>{session.user.displayName}</strong><small>{session.user.username}</small></div><button onClick={logout}>Déconnexion</button></div>}
+        {session.user && (view === "edit" || view === "settings") && <>
+          <ActionMenu><button type="button" onClick={() => fileInput.current?.click()}><Icon name="upload"/> Importer un JSON</button><button type="button" onClick={() => exportJson()}><Icon name="download"/> Exporter le brouillon</button><button type="button" className="danger" onClick={() => { void resetPoint(); }}><Icon name="plus"/> Réinitialiser la semaine</button></ActionMenu>
+          <button className={`primary-button save-point ${isDirty ? "has-changes" : ""}`} disabled={saving || !ready || (!isDirty && Boolean(activeRecordId))} onClick={savePoint}><Icon name="check"/><span>{saving ? "Enregistrement…" : isDirty ? "Sauvegarder" : activeRecordId ? "Enregistré" : "Créer le point"}</span></button>
+        </>}
+        {!session.user && <button className="login-button" disabled={!sessionReady} onClick={() => { setLoginDestination("edit"); openLogin(); }}><Icon name="lock"/><span>{sessionReady ? "Connexion GLOBAL" : "Vérification…"}</span></button>}
       </div>
     </header>
-    <div id="top" className="top-strip"><span className="live-dot"/><strong>{view === "stats" ? "ANALYSE TARIF" : view === "analyst" ? "POINT ANALYSTE" : view === "imports" ? "CENTRE D’IMPORT" : view === "settings" ? "PARAMÈTRES" : market.short}</strong><i/>{view === "stats" ? "Source Planner" : view === "analyst" ? "Semaine et analyste" : view === "imports" ? "Jira · Planner" : view === "settings" ? market.name : `${isoWeekYear(data.meetingDate)} · S${String(isoWeek(data.meetingDate)).padStart(2, "0")}`}<i/>{view === "stats" || view === "analyst" || view === "imports" ? `${plannerTasks.length} simulations enregistrées` : view === "settings" ? "Marchés · annuaire · affichage" : dateLabel(data.meetingDate)}<i/>{view === "stats" || view === "analyst" ? "Lecture descriptive" : view === "imports" ? "Registres centralisés" : isDirty ? "Brouillon" : activeRecordId ? "Enregistré" : "Non enregistré"}<b>{view === "stats" ? "Filtres multi-analystes" : view === "analyst" ? "Tickets ouverts uniquement" : view === "imports" ? "CSV volumineux accepté" : view === "settings" ? "Réglages internes" : alerts.length ? "Vigilances détectées" : "Aucune vigilance"}</b></div>
+    <div id="workspace-content" className="workspace-content" tabIndex={-1}>
+    <div id="top" className="workspace-context">
+      <span>{view === "read" || view === "edit" || view === "mail" ? market.name : view === "analyst" ? "Jira · Simulations · Dossiers" : view === "stats" ? "Activité analystes et variations fournisseurs" : view === "imports" ? "Registres Jira et Planner" : "Application et points"}</span>
+      {(view === "read" || view === "edit" || view === "mail") && <span className="workspace-week">S{String(currentWeek).padStart(2, "0")} · {currentWeekYear}</span>}
+      {(view === "edit" || view === "mail") && <span className={`workspace-draft ${isDirty ? "is-dirty" : ""}`}>{isDirty ? "Modifications non enregistrées" : activeRecordId ? "Point enregistré" : "Nouveau point"}</span>}
+    </div>
     {(view === "read" || view === "edit") && periodNavigator}
     {(view === "edit" || view === "settings") && session.user && renderEditor()}
     {view === "read" && <main className="preview-page"><div className="preview-toolbar"><div><span>Lecture générale</span><strong>Choisis le marché et la semaine dans le calendrier ci-dessus.</strong></div><button className="secondary-button" onClick={() => chooseView("edit")}><Icon name={session.user ? "edit" : "lock"}/> {session.user ? "Modifier ce point" : "Connexion GLOBAL pour modifier"}</button></div>{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Tu peux préparer puis sauvegarder le point de cette semaine." : "Aucun brouillon n’est affiché publiquement. Connecte-toi pour préparer cette semaine."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard data={data} market={market} archive={archive}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou connecte-toi pour la préparer.</p></div>}</main>}
@@ -1345,5 +1343,5 @@ export function MarketPulseApp() {
     <AppDialog open={loginOpen} onClose={() => { if (!loginLoading) setLoginOpen(false); }} busy={loginLoading} labelledBy="login-title" className="login-dialog"><span className="login-emblem"><Icon name="lock" size={22}/></span><div className="login-heading"><span>Accès interne</span><h2 id="login-title">Connexion GLOBAL</h2><p>La lecture des points reste accessible. La préparation, les imports et les statistiques analystes utilisent le compte interne partagé.</p></div><form onSubmit={submitLogin}><label><span>Compte</span><input data-autofocus autoComplete="username" value={loginUsername} onChange={(event) => setLoginUsername(event.target.value)} /></label><label><span>Mot de passe</span><input type="password" autoComplete="current-password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} /></label>{loginError && <div className="login-error"><Icon name="alert" size={15}/>{loginError}</div>}<button className="primary-button login-submit" type="submit" disabled={loginLoading || !loginUsername || !loginPassword}><Icon name="lock"/> {loginLoading ? "Connexion…" : "Se connecter"}</button></form><small className="login-session-note">La session interne reste active pendant 12 heures sur cet appareil.</small></AppDialog>
     {confirmRequest && <AppDialog open onClose={() => settleConfirmation(false)} labelledBy="confirm-dialog-title" className="confirm-dialog"><span className={`confirm-emblem ${confirmRequest.destructive ? "danger" : ""}`}><Icon name={confirmRequest.destructive ? "alert" : "check"} size={22}/></span><div className="login-heading"><span>Confirmation</span><h2 id="confirm-dialog-title">{confirmRequest.title}</h2><p>{confirmRequest.detail}</p></div><div className="confirm-actions"><button className="secondary-button" type="button" onClick={() => settleConfirmation(false)}>Annuler</button><button className={`primary-button ${confirmRequest.destructive ? "danger-button-solid" : ""}`} type="button" onClick={() => settleConfirmation(true)}>{confirmRequest.confirmLabel}</button></div></AppDialog>}
     {toast && <div className="toast"><Icon name="check"/>{toast}</div>}
-  </div>;
+  </div></div>;
 }
