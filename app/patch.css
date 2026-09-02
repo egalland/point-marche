@@ -266,6 +266,16 @@
 .analyst-mail-page { display: grid; gap: 15px; }
 .analyst-mail-page .html-attachment-card { width: 100%; }
 
+.supplier-turnover { display: inline-grid; gap: 4px; margin: 8px 0; }
+.supplier-turnover > .supplier-turnover-label { display: block; color: var(--muted); font-size: 9px; font-weight: 500; line-height: 1.4; }
+.supplier-turnover > .supplier-turnover-value { display: block; color: var(--text); font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.4; white-space: nowrap; }
+.report-simulation > .supplier-turnover { --text: #142e25; --muted: #425c53; --line: #173f2b26; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #ffffff66; }
+.planner-record-metrics > .supplier-turnover { margin: 0; }
+.planner-record-metrics .supplier-turnover-value { overflow: visible; text-overflow: clip; font-size: 12px; }
+.analyst-activity-list .supplier-turnover, .planner-preview-list .supplier-turnover { margin-bottom: 0; }
+.data-table-wrap .supplier-turnover-cell { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.supplier-chart-tooltip .supplier-chart-turnover { grid-template-columns: 1fr auto; gap: 12px; }
+
 .supplier-source-note { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 19px; border-color: color-mix(in srgb,var(--accent) 24%,var(--line)); background: linear-gradient(135deg,var(--accent-soft),#ffffff02); }
 .supplier-source-note > div:first-child { display: grid; gap: 4px; max-width: 650px; }
 .supplier-source-note > div:first-child > span { color: var(--accent); font: 730 8px/1 var(--font-mono); text-transform: uppercase; }

@@ -5,6 +5,7 @@ import { buildAnalystStats, type AnalystStatsMarket, type PlannerDelaySummary } 
 import type { GlobalDirectoryUser } from "@/lib/global-directory";
 import type { PlannerSpecialty, PlannerTask } from "@/lib/planner-import";
 import type { PlannerRegistrySummary } from "@/lib/planner-registry";
+import { compareSupplierTurnover, formatSupplierTurnover, supplierTurnoverLabel, supplierTurnoverSource } from "@/lib/supplier-turnover";
 import { PlannerImportDialog } from "./planner-import-dialog";
 import { SupplierVariationDashboard } from "./supplier-variation-dashboard";
 
@@ -17,7 +18,7 @@ type Props = {
   onImport: (rawText: string) => Promise<{ imported: number; message: string }>;
 };
 
-type DetailSort = "date" | "analyst" | "specialty" | "task" | "market" | "step";
+type DetailSort = "date" | "analyst" | "specialty" | "task" | "ca" | "market" | "step";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -123,6 +124,7 @@ export function AnalystStatsDashboard({ tasks, users, markets, registry, updated
   const toggleDetailSort = (key: DetailSort) => setDetailSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
   const sortMark = (key: DetailSort) => detailSort.key === key ? detailSort.direction === "asc" ? " ↑" : " ↓" : "";
   const sortedContributions = useMemo(() => stats.contributions.slice().sort((left, right) => {
+    if (detailSort.key === "ca") return compareSupplierTurnover(left.purchases12m, right.purchases12m, detailSort.direction);
     const marketsFor = (ids: string[], tags: string[]) => ids.map((id) => markets.find((market) => market.id === id)?.name).filter(Boolean).join(" · ") || tags.join(" · ") || "Non rattaché";
     const leftValue = detailSort.key === "date" ? left.date : detailSort.key === "analyst" ? left.analystName : detailSort.key === "specialty" ? left.specialty : detailSort.key === "task" ? left.taskName : detailSort.key === "market" ? marketsFor(left.marketIds, left.marketTags) : left.stepLabel;
     const rightValue = detailSort.key === "date" ? right.date : detailSort.key === "analyst" ? right.analystName : detailSort.key === "specialty" ? right.specialty : detailSort.key === "task" ? right.taskName : detailSort.key === "market" ? marketsFor(right.marketIds, right.marketTags) : right.stepLabel;
@@ -175,7 +177,7 @@ export function AnalystStatsDashboard({ tasks, users, markets, registry, updated
 
     {stats.unmatchedNames.length > 0 && <section className="stats-quality-note"><strong>Noms non rapprochés de l’annuaire</strong><span>{stats.unmatchedNames.join(" · ")}. Les anciennes simulations restent comptées dans le total, sans provoquer d’erreur.</span></section>}
 
-    <section className="surface stats-detail"><header><div><span>Détail vérifiable</span><strong>{stats.contributions.length} activité{stats.contributions.length > 1 ? "s" : ""} dans la sélection</strong></div><small>Clique sur un en-tête pour trier.</small></header><div className="data-table-wrap"><table><thead><tr><th><button type="button" onClick={() => toggleDetailSort("date")}>Date{sortMark("date")}</button></th><th><button type="button" onClick={() => toggleDetailSort("analyst")}>Analyste{sortMark("analyst")}</button></th><th><button type="button" onClick={() => toggleDetailSort("specialty")}>Spécialité{sortMark("specialty")}</button></th><th><button type="button" onClick={() => toggleDetailSort("task")}>Simulation{sortMark("task")}</button></th><th><button type="button" onClick={() => toggleDetailSort("market")}>Marché{sortMark("market")}</button></th><th><button type="button" onClick={() => toggleDetailSort("step")}>Étape{sortMark("step")}</button></th></tr></thead><tbody>{sortedContributions.map((item, index) => <tr key={`${item.taskId}:${item.specialty}:${item.date}:${index}`}><td>{new Date(`${item.date}T12:00:00`).toLocaleDateString("fr-FR")}</td><td>{item.analystName}</td><td><span className={`stats-kind ${item.specialty}`}>{item.specialty === "simulation" ? "Simulation" : "Contrôle"}</span></td><td><strong>{item.taskName}</strong></td><td>{item.marketIds.map((id) => markets.find((market) => market.id === id)?.name).filter(Boolean).join(" · ") || item.marketTags.join(" · ") || "Non rattaché"}</td><td>{item.stepLabel || "Étape non renseignée"}</td></tr>)}</tbody></table>{!stats.contributions.length && <div className="table-empty">Aucune activité ne correspond à ces filtres.</div>}</div></section>
+    <section className="surface stats-detail"><header><div><span>Détail vérifiable</span><strong>{stats.contributions.length} activité{stats.contributions.length > 1 ? "s" : ""} dans la sélection</strong></div><small>Clique sur un en-tête pour trier.</small></header><div className="data-table-wrap"><table><thead><tr><th><button type="button" onClick={() => toggleDetailSort("date")}>Date{sortMark("date")}</button></th><th><button type="button" onClick={() => toggleDetailSort("analyst")}>Analyste{sortMark("analyst")}</button></th><th><button type="button" onClick={() => toggleDetailSort("specialty")}>Spécialité{sortMark("specialty")}</button></th><th><button type="button" onClick={() => toggleDetailSort("task")}>Simulation{sortMark("task")}</button></th><th className="supplier-turnover-cell" title={supplierTurnoverSource} aria-sort={detailSort.key === "ca" ? detailSort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleDetailSort("ca")}>{supplierTurnoverLabel}{sortMark("ca")}</button></th><th><button type="button" onClick={() => toggleDetailSort("market")}>Marché{sortMark("market")}</button></th><th><button type="button" onClick={() => toggleDetailSort("step")}>Étape{sortMark("step")}</button></th></tr></thead><tbody>{sortedContributions.map((item, index) => <tr key={`${item.taskId}:${item.specialty}:${item.date}:${index}`}><td>{new Date(`${item.date}T12:00:00`).toLocaleDateString("fr-FR")}</td><td>{item.analystName}</td><td><span className={`stats-kind ${item.specialty}`}>{item.specialty === "simulation" ? "Simulation" : "Contrôle"}</span></td><td><strong>{item.taskName}</strong></td><td className="supplier-turnover-cell" title={supplierTurnoverSource}>{formatSupplierTurnover(item.purchases12m)}</td><td>{item.marketIds.map((id) => markets.find((market) => market.id === id)?.name).filter(Boolean).join(" · ") || item.marketTags.join(" · ") || "Non rattaché"}</td><td>{item.stepLabel || "Étape non renseignée"}</td></tr>)}</tbody></table>{!stats.contributions.length && <div className="table-empty">Aucune activité ne correspond à ces filtres.</div>}</div></section>
     </>}
   </main>;
 }

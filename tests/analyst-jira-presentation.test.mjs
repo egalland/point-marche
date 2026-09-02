@@ -10,7 +10,8 @@ const reactImports = { react: import.meta.resolve("react"), "react/jsx-runtime":
 const dateInputUrl = moduleUrl("../../components/safe-date-input.tsx", { ...reactImports, "@/lib/iso-week": isoUrl });
 const panelUrl = moduleUrl("../../features/market-pulse/analyst-jira-panel.tsx", { ...reactImports, "@/lib/iso-week": isoUrl, "@/components/safe-date-input": dateInputUrl, "@/lib/analyst-jira-history": historyUrl });
 const chartHtmlUrl = moduleUrl("../../lib/analyst-jira-history-html.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl });
-const exportUrl = moduleUrl("../../lib/analyst-point-export.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl, "./analyst-jira-history-html": chartHtmlUrl });
+const turnoverUrl = moduleUrl("../../lib/supplier-turnover.ts");
+const exportUrl = moduleUrl("../../lib/analyst-point-export.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl, "./analyst-jira-history-html": chartHtmlUrl, "./supplier-turnover": turnoverUrl });
 const pointUrl = moduleUrl("../../lib/analyst-point.ts", { "./iso-week": isoUrl, "./jira-import": moduleUrl("../../lib/jira-import.ts") });
 const { CompletedWeekChart, CompletedTicketDisclosure, AnalystJiraPanel } = await import(panelUrl);
 const { analystMailHtml, analystInteractiveHtml } = await import(exportUrl);
@@ -65,4 +66,26 @@ test("keeps the white mail and interactive HTML aligned without exposing open st
   assert.match(mail, /background:#FFFFFF/);
   assert.match(html, /<details><summary>Voir les 1 tickets terminés/);
   assert.doesNotMatch(html, /<details open/);
+});
+
+test("exports the supplier amount of each simulation without cumulating it", () => {
+  const analyst = { id: "analyst", name: "Jane DOE", role: "analyste-tarif-referentiel", marketIds: [] };
+  const point = initialAnalystPoint(analyst);
+  const amounts = [473398.58, 89613.02, 0, null];
+  const stats = {
+    contributions: amounts.map((purchases12m, index) => ({
+      taskId: `simulation-${index}`, taskName: `Fournisseur exemple · simulation ${index}`,
+      date: "2026-08-25", specialty: "simulation", purchases12m,
+    })),
+    simulations: 4, controls: 0, totalActivities: 4, distinctTasks: 4,
+  };
+  for (const output of [analystMailHtml(point, analyst, stats, stats, null), analystInteractiveHtml(point, analyst, stats, null)]) {
+    const normalized = output.replace(/[\u00a0\u202f]/g, " ");
+    assert.equal(output.split("CA fournisseur · 12 mG").length - 1, 4);
+    assert.match(normalized, /473 398,58 €/);
+    assert.match(normalized, /89 613,02 €/);
+    assert.match(normalized, />0,00 €</);
+    assert.match(normalized, />—</);
+    assert.doesNotMatch(normalized, /563 011,60/);
+  }
 });
