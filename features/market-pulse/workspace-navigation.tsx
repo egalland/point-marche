@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { isLocalWorkspace } from "@/lib/app-transport";
+import { isLocalWorkspace, openLocalFiles } from "@/lib/app-transport";
 import { AppDialog } from "@/components/app-dialog";
 import { AppIcon } from "@/components/app-icon";
 
@@ -44,7 +44,7 @@ export function WorkspaceNavigation({ view, userName, onSelect, onLogin, onLogou
     </nav>
     <footer className="workspace-account">
       <div><span className="workspace-avatar"><AppIcon name={userName ? "user" : "eye"}/></span><span><strong>{userName || "Mode lecture"}</strong><small>{userName ? "Session interne GLOBAL" : "Points enregistrés"}</small></span></div>
-      {isLocalWorkspace() ? <small>Accès local · fichier non chiffré</small> : <button type="button" onClick={() => { setOpen(false); if (userName) onLogout(); else onLogin(); }}><AppIcon name={userName ? "logout" : "lock"} size={16}/>{userName ? "Se déconnecter" : "Connexion GLOBAL"}</button>}
+      {isLocalWorkspace() ? <button type="button" onClick={() => { setOpen(false); openLocalFiles(); }}><AppIcon name="download" size={16}/>Fichier local</button> : <button type="button" onClick={() => { setOpen(false); if (userName) onLogout(); else onLogin(); }}><AppIcon name={userName ? "logout" : "lock"} size={16}/>{userName ? "Se déconnecter" : "Connexion GLOBAL"}</button>}
     </footer>
   </>;
   return <>

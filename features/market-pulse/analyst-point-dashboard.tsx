@@ -1,6 +1,6 @@
 "use client";
 
-import { appFetch as fetch, readLocalDraft, writeLocalDraft, isLocalWorkspace, readLocalPreference, writeLocalPreference } from "@/lib/app-transport";
+import { appFetch as fetch, readLocalDraft, writeLocalDraft, isLocalWorkspace, readLocalPreference, writeLocalPreference, saveLocalFile } from "@/lib/app-transport";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { SafeDateInput } from "@/components/safe-date-input";
 import { SupplierTurnover } from "@/components/supplier-turnover";
@@ -184,7 +184,12 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
       if (!response.ok || !payload.point) throw new Error(payload.error || "Sauvegarde impossible.");
       const saved = { ...payload.point, data: normalizeAnalystPoint(payload.point.data, analyst, manager) };
       setRecords((current) => [saved, ...current.filter((record) => !(record.year === saved.year && record.week === saved.week))].sort((left, right) => right.year - left.year || right.week - left.week));
-      setActiveRecordId(saved.id); setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} enregistrée.`);
+      setActiveRecordId(saved.id);
+      if (isLocalWorkspace()) {
+        writeLocalDraft({ scope: "analyst", ownerId: analyst.id, data: saved.data as unknown as Record<string, unknown> });
+        const onDisk = await saveLocalFile();
+        setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} ${onDisk ? "enregistrée dans le fichier." : "conservée dans la session. Le fichier reste à enregistrer."}`);
+      } else setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} enregistrée.`);
     } catch (error) { setToast(error instanceof Error ? error.message : "Sauvegarde impossible."); }
     finally { setSaving(false); }
   };

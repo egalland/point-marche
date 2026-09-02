@@ -6,7 +6,7 @@ async function load(file) {
   const result = await build({ entryPoints: [new URL(file, import.meta.url).pathname], bundle: true, platform: "node", format: "esm", write: false, logLevel: "silent" });
   return import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString("base64")}`);
 }
-const { decodeMigrationCheckpoint, encodeMigrationCheckpoint, completeMigrationWithCsv, completeMigrationFromNative } = await load("../offline/migration-data.ts");
+const { decodeMigrationCheckpoint, encodeMigrationCheckpoint, completeMigrationWithCsv, completeMigrationFromNative, openMigrationWorkspace, completeMigrationInWorkspace } = await load("../offline/migration-data.ts");
 const { newWorkspace, encodeWorkspace, decodeWorkspace } = await load("../offline/workspace-data.ts");
 const { parseJiraCsv } = await load("../lib/jira-csv.ts");
 
@@ -101,4 +101,35 @@ test("refuses inconsistent checkpoint counts and duplicate participant identitie
   checkpoint.recoveredParticipants.pop();
   checkpoint.expected.tickets = 1;
   await assert.rejects(encodeMigrationCheckpoint(checkpoint), /incohérents/);
+});
+
+test("opens the saved site data immediately while keeping partial Jira out of live calculations", async () => {
+  const { checkpoint } = fixture();
+  const data = openMigrationWorkspace(checkpoint);
+  for (const key of ["points", "users", "markets", "analystPoints", "plannerTasks", "drafts", "preferences", "jiraImports"]) assert.deepEqual(data[key], checkpoint.base[key]);
+  assert.deepEqual(data.jiraTickets, []);
+  assert.equal(data.source.pendingJira.expectedTickets, 4);
+  const restored = await decodeWorkspace(await encodeWorkspace(data));
+  assert.deepEqual(restored.source.pendingJira, data.source.pendingJira);
+  const full = fixture(4, 4);
+  assert.deepEqual(openMigrationWorkspace(full.checkpoint).jiraTickets, full.tickets);
+  assert.equal(openMigrationWorkspace(full.checkpoint).source.pendingJira, undefined);
+});
+
+test("finishing Jira retains local market, point, draft and preference edits made after opening", () => {
+  const { checkpoint, csv, tickets } = fixture();
+  const current = openMigrationWorkspace(checkpoint);
+  current.markets[0].name = "Marché corrigé localement";
+  current.points[0].data.note = "Dossier modifié après l’export";
+  current.drafts[0].data.note = "Brouillon récent";
+  current.preferences.theme = "light";
+  const before = structuredClone(current);
+  const completed = completeMigrationInWorkspace(checkpoint, current, csv).data;
+  for (const key of ["points", "markets", "drafts", "preferences", "jiraImports"]) assert.deepEqual(completed[key], current[key]);
+  assert.deepEqual(completed.jiraTickets, tickets);
+  assert.equal(completed.source.pendingJira, undefined);
+  assert.deepEqual(current, before);
+  assert.throws(() => completeMigrationInWorkspace(checkpoint, { ...current, id: "other-file" }, csv), /correspond pas/);
+  assert.throws(() => completeMigrationInWorkspace(checkpoint, current, csv.replace("Échéance 1", "Altéré")), /diffère/);
+  assert.deepEqual(current, before);
 });

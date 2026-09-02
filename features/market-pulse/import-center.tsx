@@ -1,6 +1,6 @@
 "use client";
 
-import { appFetch as fetch } from "@/lib/app-transport";
+import { appFetch as fetch, completeLocalMigration, localMigrationRequired } from "@/lib/app-transport";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { buildGlobalJiraImportJql, type GlobalDirectoryUser } from "@/lib/global-directory";
 import { decodeJiraCsv, parseJiraCsv, type JiraCsvParseResult } from "@/lib/jira-csv";
@@ -59,6 +59,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("");
+  const [registryWarning, setRegistryWarning] = useState("");
   const [queryCopied, setQueryCopied] = useState(false);
   const [queryError, setQueryError] = useState("");
   const [batches, setBatches] = useState<ImportBatch[]>([]);
@@ -74,10 +75,11 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
 
   const loadHistory = useCallback(async () => {
     const response = await fetch("/api/jira-imports", { cache: "no-store" });
-    const payload = await response.json() as { batches?: ImportBatch[]; registry?: { ticketCount: number; participantCount: number }; error?: string };
+    const payload = await response.json() as { batches?: ImportBatch[]; registry?: { ticketCount: number | null; participantCount: number | null }; warning?: string; error?: string };
     if (!response.ok) throw new Error(payload.error || "Chargement des imports impossible.");
     setBatches(payload.batches ?? []);
     setRegistry(payload.registry ?? { ticketCount: 0, participantCount: 0 });
+    setRegistryWarning(payload.warning ?? "");
   }, []);
 
   useEffect(() => {
@@ -118,6 +120,14 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
     setMessage("Création de l’import…");
     let importId = "";
     try {
+      if (localMigrationRequired()) {
+        const decoded = decodeJiraCsv(await file.arrayBuffer());
+        completeLocalMigration(decoded.text);
+        await Promise.all([loadHistory(), onJiraImported()]);
+        setMessage(`${preview.tickets.length} tickets repris et vérifiés. L’historique Jira est complet. Enregistre le fichier pour le conserver sur ton PC.`);
+        setProgress(100);
+        return;
+      }
       const startedResponse = await fetch("/api/jira-imports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "start", filename: file.name, rowCount: preview.rows }) });
       const started = await startedResponse.json() as { batch?: ImportBatch; maxChunkSize?: number; error?: string };
       if (!startedResponse.ok || !started.batch) throw new Error(started.error || "Impossible de démarrer l’import.");
@@ -170,6 +180,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
     <section className="import-center-hero">
       <div><span>Sources centralisées</span><h1>Centre d’import</h1><p>Un seul registre alimente les points marché, les points analystes et les statistiques.</p></div>
       <div className="import-registry-kpis"><article><span>Tickets en registre</span><strong>{historyLoading ? "…" : registry.ticketCount ?? "—"}</strong></article><article><span>Liens participants</span><strong>{historyLoading ? "…" : registry.participantCount ?? "—"}</strong></article><article><span>Simulations Planner</span><strong>{plannerTasks.length}</strong></article></div>
+      {registryWarning && <div className="import-quality-alert warning" role="status"><strong>Reprise Jira à terminer</strong><span>{registryWarning}</span></div>}
     </section>
 
     <div className="import-source-grid">
