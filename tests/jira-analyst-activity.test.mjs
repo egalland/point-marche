@@ -54,3 +54,17 @@ test("treats Fini as completed for assigned and participant tickets without conf
   assert.deepEqual(result.open.map((item) => item.key), ["GLOBAL-12"]);
   assert.deepEqual(result.resolved.map((item) => item.key), ["GLOBAL-11", "GLOBAL-10"]);
 });
+
+test("excludes abandoned assignments and participations from both open and completed activity", () => {
+  const result = activity.jiraActivityForAnalyst([
+    ticket("GLOBAL-10858", "Abandonnée", "A1234567", "2026-02-19T09:00:00"),
+    ticket("GLOBAL-10895", "Abandonnée", "A1234567", "2026-02-24T09:00:00"),
+    ticket("GLOBAL-10935", "Abandonnée", "A1234567", "2026-02-26T09:00:00"),
+    ticket("GLOBAL-20", "Abandonné", "A1234567", "2026-08-25T09:00:00"),
+    ticket("GLOBAL-21", "ABANDONNEE", "B1234567", "2026-08-26T09:00:00", [{ usercode: "A1234567", jiraUserId: "" }]),
+    ticket("GLOBAL-22", "En attente", "A1234567", "2026-08-27T09:00:00"),
+    ticket("GLOBAL-23", "Fini", "A1234567", "2026-08-28T09:00:00"),
+  ], "A1234567", 2026, 35);
+  assert.deepEqual(result.open.map((item) => item.key), ["GLOBAL-22"]);
+  assert.deepEqual(result.resolved.map((item) => item.key), ["GLOBAL-23"]);
+});

@@ -9,6 +9,16 @@ const output = ts.transpileModule(source, {
 }).outputText;
 const parser = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
 
+test("recognizes abandoned Jira statuses with accents, casing and plural variants", () => {
+  for (const status of ["Abandonné", "Abandonnée", "Abandonnés", "Abandonnées", "ABANDONNEE", " abandonnes ", "AbandonnÃ©e", "Abandonne\u0301e"]) {
+    assert.equal(parser.isAbandonedJiraStatus(status), true, status);
+    assert.equal(parser.isClosedJiraStatus(status), true, status);
+  }
+  for (const status of ["En cours", "En attente", "Réouvert", "Abandon à confirmer", "Non abandonné", "Fini", "Terminé"]) {
+    assert.equal(parser.isAbandonedJiraStatus(status), false, status);
+  }
+});
+
 test("parses a Jira tab-separated assignee summary with links", () => {
   const table = [
     "Personne assignée\tÀ faire\tRéouvert\tEn cours\tEn attente du client\tEn attente d'un tiers\tEn attente de changement\tT :",

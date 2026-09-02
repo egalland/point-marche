@@ -61,6 +61,22 @@ test("flags an open-only Jira export without a resolution column", () => {
   assert.equal(result.closedTicketCount, 0);
 });
 
+test("preserves abandoned import rows without counting them as open or completed", () => {
+  const value = [
+    "Clé de ticket;État;Résumé;Création;Personne assignée;Mise à jour",
+    "GLOBAL-1;Abandonnée;Ticket abandonné;01/08/2026 08:00;A1234567;25/08/2026 09:00",
+    "GLOBAL-2;En cours;Ticket ouvert;01/08/2026 08:00;A1234567;25/08/2026 09:00",
+    "GLOBAL-3;Fini;Ticket terminé;01/08/2026 08:00;A1234567;25/08/2026 09:00",
+  ].join("\n");
+  const result = csv.parseJiraCsv(value);
+  assert.equal(result.tickets.length, 3);
+  assert.equal(result.rejectedRows, 0);
+  assert.equal(result.openTicketCount, 1);
+  assert.equal(result.closedTicketCount, 1);
+  assert.equal(result.abandonedTicketCount, 1);
+  assert.equal(result.closedWithoutResolutionDate, 1);
+});
+
 test("recognizes the full Jira custom-field participant header", () => {
   const value = [
     "Clé de ticket;ID de ticket;État;Résumé;Création;Personne assignée;Mise à jour;Champs personnalisés (Participants à la requête)",

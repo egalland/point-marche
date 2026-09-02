@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import { AppDialog } from "@/components/app-dialog";
 import { ModuleLayoutEditor, type ModuleWidth } from "@/components/module-layout-editor";
 import { GLOBAL_ROLE_OPTIONS, roleLabel, roleMailMode, roleUsesAutomaticJira, type GlobalDirectoryUser, type GlobalRole } from "@/lib/global-directory";
-import { JIRA_SUMMARY_STATUSES, type JiraSummaryImport } from "@/lib/jira-import";
+import { isAbandonedJiraStatus, isClosedJiraStatus, JIRA_SUMMARY_STATUSES, type JiraSummaryImport } from "@/lib/jira-import";
 import { plannerTaskMonthLabel, type PlannerTask } from "@/lib/planner-import";
 import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 import { supplierSeriesForTask, type SupplierVariationPoint } from "@/lib/supplier-variations";
@@ -148,7 +148,7 @@ function normalizePointData(value: unknown, marketId: string, marketOverride?: M
     dossiers: Array.isArray(source.dossiers) ? source.dossiers.map((item) => ({ ...item, showProgress: Boolean(item.showProgress) })) : [],
     operations: Array.isArray(source.operations) ? source.operations : Array.isArray(source.simulations) ? source.simulations : [],
     tariffs: Array.isArray(source.tariffs) ? source.tariffs : [],
-    jira: Array.isArray(source.jira) ? source.jira : [],
+    jira: Array.isArray(source.jira) ? source.jira.filter((ticket) => !isAbandonedJiraStatus(ticket.status)) : [],
     mail: { ...fallback.mail, ...(source.mail && typeof source.mail === "object" ? source.mail : {}) },
   };
 }
@@ -363,8 +363,8 @@ function jiraTrend(data: PointData, archive: PointRecord[]) {
     .sort((a, b) => a.year - b.year || a.week - b.week)
     .filter((record, index, rows) => rows.findIndex((candidate) => candidate.year === record.year && candidate.week === record.week) === index)
     .slice(-3)
-    .map((record) => ({ label: `S${String(record.week).padStart(2, "0")}`, value: record.data.jira.filter((item) => !isClosed(item.status)).reduce((sum, item) => sum + jiraItemCount(item), 0) }));
-  const currentVolume = data.jira.filter((item) => !isClosed(item.status)).reduce((sum, item) => sum + jiraItemCount(item), 0);
+    .map((record) => ({ label: `S${String(record.week).padStart(2, "0")}`, value: record.data.jira.filter((item) => !isClosedJiraStatus(item.status)).reduce((sum, item) => sum + jiraItemCount(item), 0) }));
+  const currentVolume = data.jira.filter((item) => !isClosedJiraStatus(item.status)).reduce((sum, item) => sum + jiraItemCount(item), 0);
   const previousVolume = history.at(-1)?.value;
   return {
     points: [...history, { label: `S${String(pointWeek).padStart(2, "0")}`, value: currentVolume }],
@@ -372,7 +372,7 @@ function jiraTrend(data: PointData, archive: PointRecord[]) {
   };
 }
 function jiraDashboardStats(data: PointData, market: Market, archive: PointRecord[]) {
-  const activeTickets = data.jira.filter((item) => !isClosed(item.status));
+  const activeTickets = data.jira.filter((item) => !isClosedJiraStatus(item.status));
   const currentVolume = activeTickets.reduce((sum, item) => sum + jiraItemCount(item), 0);
   const rows = activeTickets.map((item) => ({ item, ...jiraAttention(item, data.meetingDate, market) }));
   const warningCount = rows.filter((row) => row.level === "warning").reduce((sum, row) => sum + jiraItemCount(row.item), 0);
@@ -396,14 +396,14 @@ function jiraTicketsFromSummary(summaryInput: JiraSummaryImport, selectedPeople:
   const summary = normalizeJiraSummary(summaryInput);
   const selectedUserCodes = new Set(selectedPeople.map((person) => person.toUpperCase()));
   if (summary.detailedTickets.length) {
-    return summary.detailedTickets.filter((ticket) => ticket.marketId === marketId && (!selectedUserCodes.size || selectedUserCodes.has(ticket.assigneeUserCode.toUpperCase()))).map((ticket) => ({
+    return summary.detailedTickets.filter((ticket) => !isAbandonedJiraStatus(ticket.status) && ticket.marketId === marketId && (!selectedUserCodes.size || selectedUserCodes.has(ticket.assigneeUserCode.toUpperCase()))).map((ticket) => ({
       id: uid(), key: ticket.key, internalId: ticket.internalId, summary: ticket.summary, status: ticket.status, priority: "",
       assignee: ticket.assigneeName || ticket.assigneeUserCode, assigneeUserCode: ticket.assigneeUserCode, createdAt: ticket.createdAt,
       lastActivity: ticket.updatedAt, link: ticket.link, comment: "Import Jira détaillé", count: 1,
     }));
   }
   const selected = new Set(selectedPeople);
-  return summary.items.filter((item) => selected.has(item.assignee)).map((item) => ({
+  return summary.items.filter((item) => !isAbandonedJiraStatus(item.status) && selected.has(item.assignee)).map((item) => ({
     id: uid(), key: "", summary: "Synthèse de la file Jira", status: item.status, priority: "", assignee: item.assignee,
     lastActivity: "", link: item.link, comment: "Tableau Jira hebdomadaire", count: item.count,
   }));
@@ -442,7 +442,7 @@ function buildAlerts(data: PointData, market: Market): AlertItem[] {
   data.dossiers.forEach((item) => { if (isClosed(item.status)) return; const common = { title: item.title || "Dossier", targetId: `dossier-${item.id}`, category: "Dossier" as const }; if (/bloqu/i.test(item.status)) alerts.push({ ...common, detail: item.comment || "Dossier bloquant", severity: "danger" }); else if (item.deadline && daysBetween(item.deadline, pointDate) > 0) alerts.push({ ...common, detail: `Échéance dépassée depuis ${daysBetween(item.deadline, pointDate)} jour(s)`, severity: "danger" }); else if (/(surveill|action)/i.test(item.status)) alerts.push({ ...common, detail: item.comment || item.action || item.status, severity: "warning" }); });
   const warningDays = Math.max(1, market.jiraWarningDays || 10);
   const criticalDays = Math.max(warningDays + 1, market.jiraCriticalDays || 20);
-  const jiraAlerts = data.jira.filter((item) => !isClosed(item.status) && item.lastActivity)
+  const jiraAlerts = data.jira.filter((item) => !isClosedJiraStatus(item.status) && item.lastActivity)
     .map((item) => ({ item, inactivity: daysBetween(item.lastActivity, pointDate) }))
     .filter(({ inactivity }) => inactivity >= warningDays)
     .sort((a, b) => b.inactivity - a.inactivity)
@@ -460,14 +460,14 @@ function buildAlerts(data: PointData, market: Market): AlertItem[] {
 function JiraVolumePulse({ data, archive, market }: { data: PointData; archive: PointRecord[]; market: Market }) {
   const pointYear = isoWeekYear(data.meetingDate);
   const pointWeek = isoWeek(data.meetingDate);
-  const activeTickets = data.jira.filter((item) => !isClosed(item.status));
+  const activeTickets = data.jira.filter((item) => !isClosedJiraStatus(item.status));
   const currentVolume = activeTickets.reduce((sum, item) => sum + jiraItemCount(item), 0);
   const history = archive
     .filter((record) => record.year < pointYear || (record.year === pointYear && record.week < pointWeek))
     .sort((a, b) => a.year - b.year || a.week - b.week)
     .filter((record, index, rows) => rows.findIndex((candidate) => candidate.year === record.year && candidate.week === record.week) === index)
     .slice(-3)
-    .map((record) => ({ label: `S${String(record.week).padStart(2, "0")}`, value: record.data.jira.filter((item) => !isClosed(item.status)).reduce((sum, item) => sum + jiraItemCount(item), 0) }));
+    .map((record) => ({ label: `S${String(record.week).padStart(2, "0")}`, value: record.data.jira.filter((item) => !isClosedJiraStatus(item.status)).reduce((sum, item) => sum + jiraItemCount(item), 0) }));
   const points = [...history, { label: `S${String(pointWeek).padStart(2, "0")}`, value: currentVolume }];
   const maxVolume = Math.max(1, ...points.map((point) => point.value));
   const previousVolume = history.at(-1)?.value;
