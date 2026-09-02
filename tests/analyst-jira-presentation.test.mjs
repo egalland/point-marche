@@ -6,14 +6,15 @@ import { moduleUrl } from "./helpers/module-url.mjs";
 
 const isoUrl = moduleUrl("../../lib/iso-week.ts");
 const historyUrl = moduleUrl("../../lib/analyst-jira-history.ts", { "./iso-week": isoUrl });
+const metricsUrl = moduleUrl("../../lib/analyst-jira-metrics.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl });
 const reactImports = { react: import.meta.resolve("react"), "react/jsx-runtime": import.meta.resolve("react/jsx-runtime") };
 const dateInputUrl = moduleUrl("../../components/safe-date-input.tsx", { ...reactImports, "@/lib/iso-week": isoUrl });
-const panelUrl = moduleUrl("../../features/market-pulse/analyst-jira-panel.tsx", { ...reactImports, "@/lib/iso-week": isoUrl, "@/components/safe-date-input": dateInputUrl, "@/lib/analyst-jira-history": historyUrl });
-const chartHtmlUrl = moduleUrl("../../lib/analyst-jira-history-html.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl });
+const panelUrl = moduleUrl("../../features/market-pulse/analyst-jira-panel.tsx", { ...reactImports, "@/lib/iso-week": isoUrl, "@/components/safe-date-input": dateInputUrl, "@/lib/analyst-jira-history": historyUrl, "@/lib/analyst-jira-metrics": metricsUrl });
+const chartHtmlUrl = moduleUrl("../../lib/analyst-jira-history-html.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl, "./analyst-jira-metrics": metricsUrl });
 const turnoverUrl = moduleUrl("../../lib/supplier-turnover.ts");
 const exportUrl = moduleUrl("../../lib/analyst-point-export.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl, "./analyst-jira-history-html": chartHtmlUrl, "./supplier-turnover": turnoverUrl });
 const pointUrl = moduleUrl("../../lib/analyst-point.ts", { "./iso-week": isoUrl, "./jira-import": moduleUrl("../../lib/jira-import.ts") });
-const { CompletedWeekChart, CompletedTicketDisclosure, AnalystJiraPanel } = await import(panelUrl);
+const { CompletedWeekChart, CompletedTicketDisclosure, AnalystJiraPanel, AnalystJiraMetrics } = await import(panelUrl);
 const { analystMailHtml, analystInteractiveHtml } = await import(exportUrl);
 const { initialAnalystPoint } = await import(pointUrl);
 const weeks = [
@@ -21,6 +22,55 @@ const weeks = [
   { year: 2026, week: 35, from: "2026-08-24", to: "2026-08-30", count: 13 },
 ];
 const ticket = { key: "GLOBAL-1", id: "one", status: "Terminé", summary: "Titre <à vérifier>", link: "https://example.test/browse/GLOBAL-1", updatedAt: "2026-08-25T10:00:00" };
+
+test("keeps graph totals, weekly average and selected week change aligned in the point and exports", () => {
+  const history = { analystId: "analyst", from: "2026-08-17", to: "2026-08-30", weeks: weeks.map((week, index) => ({ ...week, count: index ? 5 : 4 })), updatedAt: "2026-09-01" };
+  const analyst = { id: "analyst", name: "Jane DOE", role: "analyste-tarif-referentiel", marketIds: [] };
+  const point = { ...initialAnalystPoint(analyst), meetingDate: "2026-08-30", jiraResolved: Array.from({ length: 5 }, (_, index) => ({ ...ticket, key: `GLOBAL-${index + 1}` })) };
+  const stats = { contributions: [], simulations: 0, controls: 0, totalActivities: 0, distinctTasks: 0 };
+  const outputs = [
+    renderToStaticMarkup(createElement(AnalystJiraMetrics, { history, pointDate: point.meetingDate, currentCount: 5 })),
+    analystMailHtml(point, analyst, stats, stats, history),
+    analystInteractiveHtml(point, analyst, stats, history),
+  ];
+  for (const output of outputs) {
+    const html = output.replace(/[\u00a0\u202f]/g, " ");
+    assert.match(html, /Total sur la période/);
+    assert.match(html, /Moyenne par semaine/);
+    assert.match(html, /Semaines à zéro incluses/);
+    assert.match(html, />9<\/strong>/);
+    assert.match(html, />4,5<\/strong>/);
+    assert.match(html, />\+25 %<\/strong>/);
+    assert.match(html, /Évolution de S35 · 2026/);
+    assert.match(html, /vs S34 · 2026 : 4 → 5 tickets/);
+  }
+});
+
+test("exports the previous week comparison without including that week in graph totals", () => {
+  const analyst = { id: "analyst", name: "Jane DOE", role: "analyste-tarif-referentiel", marketIds: [] };
+  const point = { ...initialAnalystPoint(analyst), meetingDate: "2026-08-30", jiraResolved: Array.from({ length: 5 }, (_, index) => ({ ...ticket, key: `GLOBAL-${index + 1}` })) };
+  const history = { analystId: "analyst", from: "2026-08-24", to: "2026-08-30", weeks: [{ ...weeks[1], count: 5 }], updatedAt: "2026-09-01" };
+  const stats = { contributions: [], simulations: 0, controls: 0, totalActivities: 0, distinctTasks: 0 };
+  for (const output of [analystMailHtml(point, analyst, stats, stats, history, 4), analystInteractiveHtml(point, analyst, stats, history, 4)]) {
+    assert.match(output, /1 semaine affichée/);
+    assert.match(output, /\+25\s%/);
+    assert.doesNotMatch(output, />9<\/strong>/);
+  }
+});
+
+test("does not turn a loading or unavailable comparison into a zero percent change", () => {
+  const history = { analystId: "analyst", from: "2026-08-24", to: "2026-08-30", weeks: [{ ...weeks[1], count: 5 }], updatedAt: "2026-09-01" };
+  const props = {
+    analystName: "Jane DOE", pointDate: "2026-08-30", tickets: Array(5).fill(ticket), unavailable: false,
+    history: { history, loading: false, error: "" }, settings: { horizon: "custom", from: history.from, to: history.to },
+    onSettingsChange() {}, onSelectWeek() {}, onRetry() {},
+  };
+  for (const previousWeek of [{ count: null, loading: true, error: "" }, { count: null, loading: false, error: "Registre indisponible" }]) {
+    const html = renderToStaticMarkup(createElement(AnalystJiraPanel, { ...props, previousWeek }));
+    assert.match(html, /Comparaison indisponible/);
+    assert.doesNotMatch(html, />0\s%<|Infinity|NaN/);
+  }
+});
 
 test("renders chronological clickable weeks and a true zero-height bar", () => {
   const html = renderToStaticMarkup(createElement(CompletedWeekChart, { weeks, selectedDate: "2026-08-30", onSelectWeek() {} }));
