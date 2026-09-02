@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { moduleUrl } from "./helpers/module-url.mjs";
+import { moduleUrl, sourceUrl } from "./helpers/module-url.mjs";
 
 const isoUrl = moduleUrl("../../lib/iso-week.ts");
 const historyUrl = moduleUrl("../../lib/analyst-jira-history.ts", { "./iso-week": isoUrl });
 const metricsUrl = moduleUrl("../../lib/analyst-jira-metrics.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl });
 const reactImports = { react: import.meta.resolve("react"), "react/jsx-runtime": import.meta.resolve("react/jsx-runtime") };
 const dateInputUrl = moduleUrl("../../components/safe-date-input.tsx", { ...reactImports, "@/lib/iso-week": isoUrl });
-const panelUrl = moduleUrl("../../features/market-pulse/analyst-jira-panel.tsx", { ...reactImports, "@/lib/iso-week": isoUrl, "@/components/safe-date-input": dateInputUrl, "@/lib/analyst-jira-history": historyUrl, "@/lib/analyst-jira-metrics": metricsUrl });
+const panelImports = { ...reactImports, "@/lib/iso-week": isoUrl, "@/components/safe-date-input": dateInputUrl, "@/lib/analyst-jira-history": historyUrl, "@/lib/analyst-jira-metrics": metricsUrl };
+const panelUrl = moduleUrl("../../features/market-pulse/analyst-jira-panel.tsx", panelImports);
 const chartHtmlUrl = moduleUrl("../../lib/analyst-jira-history-html.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl, "./analyst-jira-metrics": metricsUrl });
 const turnoverUrl = moduleUrl("../../lib/supplier-turnover.ts");
 const exportUrl = moduleUrl("../../lib/analyst-point-export.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl, "./analyst-jira-history-html": chartHtmlUrl, "./supplier-turnover": turnoverUrl });
@@ -88,6 +89,15 @@ test("keeps the completed ticket list closed and avoids rendering thousands of l
   assert.doesNotMatch(html, / open|href=/);
 });
 
+test("shows only the last-modified date on expanded completed tickets", async () => {
+  const expandedReact = sourceUrl(`export * from "${reactImports.react}"; export const useState = value => [value === false ? true : value, () => {}];`);
+  const { CompletedTicketDisclosure: ExpandedTickets } = await import(moduleUrl("../../features/market-pulse/analyst-jira-panel.tsx", { ...panelImports, react: expandedReact }));
+  const html = renderToStaticMarkup(createElement(ExpandedTickets, { tickets: [{ ...ticket, createdAt: "2026-08-01", resolvedAt: "2026-08-20" }] }));
+  assert.match(html, /<b>25 août 2026<\/b>/);
+  assert.match(html, /href="https:\/\/example\.test\/browse\/GLOBAL-1"/);
+  assert.doesNotMatch(html, /Modifié le|Terminé le/);
+});
+
 test("shows completion only, with independent error states for history", () => {
   const html = renderToStaticMarkup(createElement(AnalystJiraPanel, {
     analystName: "Jane DOE", pointDate: "2026-08-30", tickets: [ticket], unavailable: false,
@@ -111,6 +121,8 @@ test("keeps the white mail and interactive HTML aligned without exposing open st
     assert.match(output, /S35 · 2026/);
     assert.match(output, /GLOBAL-1/);
     assert.match(output, /Titre &lt;à vérifier&gt;/);
+    assert.match(output, />25 août 2026<\//);
+    assert.doesNotMatch(output, /Modifié le|Terminé le/);
     assert.doesNotMatch(output, /OPEN-1|Non terminés attribués|tickets non terminés/);
   }
   assert.match(mail, /background:#FFFFFF/);

@@ -72,7 +72,7 @@ export function CompletedTicketDisclosure({ tickets }: { tickets: AnalystJiraTic
   return <details className="analyst-completed-disclosure" onToggle={(event) => setExpanded(event.currentTarget.open)}>
     <summary><span>{tickets.length === 1 ? "Voir le ticket terminé" : `Voir les ${countLabel(tickets.length)}`}</span><span className="analyst-disclosure-chevron" aria-hidden="true">⌄</span></summary>
     {expanded && <div className="analyst-jira-list analyst-jira-resolved-list">
-      {tickets.length ? tickets.slice(0, limit).map((ticket) => <a key={ticket.key} className="resolved" href={ticket.link} target="_blank" rel="noreferrer"><span>{ticket.key}</span><div><strong>{ticket.summary}</strong><small>{ticket.status}</small></div><b>Modifié le {shortDate(ticket.updatedAt)}</b></a>) : <p>Aucun ticket terminé pendant cette semaine dans l’import Jira.</p>}
+      {tickets.length ? tickets.slice(0, limit).map((ticket) => <a key={ticket.key} className="resolved" href={ticket.link} target="_blank" rel="noreferrer"><span>{ticket.key}</span><div><strong>{ticket.summary}</strong><small>{ticket.status}</small></div><b>{shortDate(ticket.updatedAt)}</b></a>) : <p>Aucun ticket terminé pendant cette semaine dans l’import Jira.</p>}
       {tickets.length > limit && <button type="button" className="secondary-button" onClick={() => setLimit((current) => current + 100)}>Afficher les suivants · {limit} sur {tickets.length}</button>}
     </div>}
   </details>;
