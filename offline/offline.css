@@ -30,6 +30,11 @@
 .offline-welcome-actions { margin-bottom: 28px; }
 .offline-recovery { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 28px 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-subtle); }
 .offline-recovery p { margin-top: 8px; color: var(--muted); font-size: .9375rem; line-height: 1.5; }
+.offline-migration { display: grid; justify-items: start; gap: 14px; margin: 0 0 28px; padding: 24px; background: var(--surface-subtle); border: 1px solid var(--mint); border-radius: 12px; }
+.offline-migration h2 { font-size: 1.1875rem; line-height: 1.4; }
+.offline-migration p { font-size: 1rem; line-height: 1.6; color: var(--text); }
+.offline-csv-filename { max-width: 100%; overflow-wrap: anywhere; font-size: .9375rem; line-height: 1.5; }
+.offline-migration p.offline-migration-detail { font-size: .875rem; color: var(--muted); }
 .offline-welcome footer { padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: .9375rem; line-height: 1.7; }
 .offline-welcome footer button { margin-top: 14px; }
 .offline-shell button:focus-visible { outline: 3px solid var(--aqua); outline-offset: 3px; }

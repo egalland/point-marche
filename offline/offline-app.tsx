@@ -7,6 +7,8 @@ import { encodeWorkspace, newWorkspace, type WorkspaceData } from "./workspace-d
 import { downloadWorkspace, fingerprint, readWorkspaceFile, workspaceFilename, writeWorkspaceFile, type FileFingerprint, type LocalFileHandle } from "./file-session";
 import { readRecovery, writeRecovery, type RecoveryEntry } from "./recovery-cache";
 import { WorkspaceErrorBoundary } from "./workspace-error-boundary";
+import { decodeJiraCsv } from "../lib/jira-csv";
+import { completeMigrationWithCsv, decodeMigrationCheckpoint, type MigrationCheckpoint } from "./migration-data";
 
 type PickerWindow = Window & {
   showOpenFilePicker?: (options: unknown) => Promise<LocalFileHandle[]>;
@@ -30,7 +32,9 @@ export function OfflineApp() {
   const [tick, setTick] = useState(0);
   const [downloadRevision, setDownloadRevision] = useState<number | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [migration, setMigration] = useState<MigrationCheckpoint | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const csvInput = useRef<HTMLInputElement>(null);
   const handle = useRef<LocalFileHandle | null>(null);
   const expectedFile = useRef<FileFingerprint | undefined>(undefined);
   const recoveryQueue = useRef<Promise<void>>(Promise.resolve());
@@ -39,7 +43,10 @@ export function OfflineApp() {
   useEffect(() => store.subscribe(() => setTick((value) => value + 1)), [store]);
   useEffect(() => {
     let mounted = true;
-    readRecovery().then((entry) => { if (mounted) setRecovery(entry); }).catch((error) => { if (mounted) setRecoveryWarning(error.message); }).finally(() => { if (mounted) setReady(true); });
+    const recoveryTask = readRecovery().then((entry) => { if (mounted) setRecovery(entry); }).catch((error) => { if (mounted) setRecoveryWarning(error.message); });
+    const embedded = document.getElementById("market-pulse-migration")?.textContent;
+    const migrationTask = embedded ? decodeMigrationCheckpoint(embedded).then((data) => { if (mounted) setMigration(data); }).catch((error) => { if (mounted) setError(error.message); }) : Promise.resolve();
+    Promise.all([recoveryTask, migrationTask]).finally(() => { if (mounted) setReady(true); });
     return () => { mounted = false; };
   }, []);
   useEffect(() => {
@@ -95,6 +102,21 @@ export function OfflineApp() {
     event.target.value = "";
     if (file) void loadFile(file);
   };
+  const chooseMigrationCsv = () => { if (!fileBusy.current && canReplace()) csvInput.current?.click(); };
+  const migrateFromCsv = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !migration || fileBusy.current) return;
+    setBusy(true); fileBusy.current = true; setError(""); setMessage("");
+    try {
+      if (file.size > 200_000_000) throw new Error("Le CSV dépasse 200 Mo.");
+      const csv = decodeJiraCsv(await file.arrayBuffer());
+      const { data, report } = completeMigrationWithCsv(migration, csv.text);
+      activate(data, workspaceFilename(data.name), true);
+      setMessage(`Reprise vérifiée : ${report.tickets.toLocaleString("fr-FR")} tickets et ${report.participants.toLocaleString("fr-FR")} participations. Clique sur « Enregistrer » pour conserver ton classeur complet sur ton PC.`);
+    } catch (error) { setError(error instanceof Error ? error.message : "La reprise a échoué. Choisis le CSV d’origine."); }
+    finally { setBusy(false); fileBusy.current = false; }
+  };
   const save = async (saveAs = false, forceDownload = false) => {
     if (!active || fileBusy.current) return;
     setError(""); setMessage("");
@@ -136,12 +158,13 @@ export function OfflineApp() {
   const startNew = () => { if (!busy && canReplace()) { activate(newWorkspace(), "", true); setMessage("Nouveau classeur local. Ajoute tes marchés et personnes dans Paramètres."); } };
   return <div className="offline-shell">
     <input ref={input} className="sr-only" type="file" accept=".json,application/json" onChange={inputChanged} aria-label="Ouvrir un classeur Market Pulse"/>
+    <input ref={csvInput} className="sr-only" type="file" accept=".csv,text/csv,text/plain" onChange={(event) => void migrateFromCsv(event)} aria-label="Choisir le CSV Jira pour finaliser la reprise"/>
     {active ? <>
       <header className="offline-filebar" aria-label="Fichier local">
         <div className="offline-file-identity"><span className="offline-tag">LOCAL</span><div><strong title={filename || "Classeur sans nom"}>{filename || "Classeur sans nom"}</strong><span className={store.isDirty() ? "offline-unsaved" : "offline-saved"}>{busy ? "Traitement du fichier…" : store.isDirty() ? "Modifications à enregistrer sur disque" : "Fichier à jour"}</span></div></div>
         <div className="offline-file-actions"><button type="button" onClick={open} disabled={busy}>Ouvrir</button><button type="button" className="offline-save" onClick={() => void save()} disabled={busy}>Enregistrer</button><button type="button" onClick={() => void save(true)} disabled={busy}>Enregistrer sous</button><button type="button" onClick={() => setHelpOpen((value) => !value)} aria-expanded={helpOpen}>Aide / options</button></div>
       </header>
-      {helpOpen && <section className="offline-help"><h2>Un classeur sur ton PC</h2><p>« Sauvegarder la semaine » ajoute le point à l’historique du classeur. « Enregistrer » conserve tout le classeur et ses brouillons dans ton fichier. Ctrl+S enregistre le fichier ; Ctrl+Maj+S crée une autre copie.</p><p>Les imports et calculs restent locaux. Les liens Jira / Planner et l’envoi des mails nécessitent une connexion. Le fichier n’est pas chiffré : conserve-le dans un emplacement autorisé par GLOBAL. Évite de modifier la même copie sur plusieurs postes.</p><div><button type="button" onClick={() => { if (canReplace()) input.current?.click(); }} disabled={busy}>Choisir un fichier</button><button type="button" onClick={() => void save(false, true)} disabled={busy}>Télécharger une copie</button><button type="button" onClick={startNew} disabled={busy}>Nouveau classeur</button></div><small>La copie de récupération du navigateur est une sécurité supplémentaire, pas un remplacement du fichier sauvegardé.</small></section>}
+      {helpOpen && <section className="offline-help"><h2>Un classeur sur ton PC</h2><p>« Sauvegarder la semaine » ajoute le point à l’historique du classeur. « Enregistrer » conserve tout le classeur et ses brouillons dans ton fichier. Ctrl+S enregistre le fichier ; Ctrl+Maj+S crée une autre copie.</p><p>Les imports et calculs restent locaux. Les liens Jira / Planner et l’envoi des mails nécessitent une connexion. Le fichier n’est pas chiffré : conserve-le dans un emplacement autorisé par GLOBAL. Évite de modifier la même copie sur plusieurs postes.</p><div><button type="button" onClick={() => { if (canReplace()) input.current?.click(); }} disabled={busy}>Choisir un fichier</button><button type="button" onClick={() => void save(false, true)} disabled={busy}>Télécharger une copie</button><button type="button" onClick={startNew} disabled={busy}>Nouveau classeur</button>{migration && <button type="button" onClick={chooseMigrationCsv} disabled={busy}>Reprendre les données du site avec le CSV Jira</button>}</div><small>La copie de récupération du navigateur est une sécurité supplémentaire, pas un remplacement du fichier sauvegardé.</small></section>}
       {(message || error || recoveryWarning || downloadRevision !== null) && <aside className={`offline-notice${error ? " error" : ""}`} role={error ? "alert" : "status"}>{error || message}{recoveryWarning && <small>{recoveryWarning}</small>}{downloadRevision !== null && <button type="button" onClick={() => { store.markSaved(downloadRevision); setDownloadRevision(null); setMessage("Sauvegarde de la copie confirmée."); }}>J’ai bien enregistré la copie</button>}</aside>}
       <div className="offline-app-content" inert={busy || undefined}>
         <WorkspaceErrorBoundary key={generation} onRetry={() => setGeneration((value) => value + 1)}>
@@ -152,6 +175,14 @@ export function OfflineApp() {
       <span className="offline-tag">VERSION LOCALE</span>
       <h1>Market Pulse</h1>
       <p>Ouvre ton fichier de données pour retrouver tes marchés, tes points et tes statistiques. L’outil fonctionne sans serveur.</p>
+      {migration && <section className="offline-migration" aria-labelledby="migration-title">
+        <h2 id="migration-title">Retrouver mes données du site</h2>
+        <p>{migration.base.markets.length} marchés, {migration.base.users.length} personnes, {migration.base.points.length} points marché, {migration.base.analystPoints.length} points analystes et {migration.base.plannerTasks.length.toLocaleString("fr-FR")} tâches Planner sont prêts à reprendre.</p>
+        <p>Pour compléter l’historique Jira, sélectionne le fichier déjà importé dans le site :</p>
+        <strong className="offline-csv-filename">{migration.csvFilename}</strong>
+        <button type="button" className="offline-save" onClick={chooseMigrationCsv} disabled={!ready || busy}>{busy ? "Vérification du CSV…" : "Choisir le CSV Jira de reprise"}</button>
+        <p className="offline-migration-detail">Le contrôle attend {migration.expected.tickets.toLocaleString("fr-FR")} tickets et {migration.expected.participants.toLocaleString("fr-FR")} participations. Les données récupérées sont comparées au CSV avant l’ouverture du classeur complet.</p>
+      </section>}
       <div className="offline-welcome-actions">
         <button type="button" className="offline-save" onClick={open} disabled={!ready || busy}>{busy ? "Ouverture…" : "Ouvrir mon fichier de données"}</button>
         <button type="button" onClick={startNew} disabled={!ready || busy}>Créer un classeur vide</button>

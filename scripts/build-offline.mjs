@@ -6,6 +6,14 @@ import tailwindcss from "@tailwindcss/postcss";
 
 const root = process.cwd();
 const outputPath = resolve(process.argv[2] || "MARKET_PULSE_PORTABLE.html");
+let embeddedMigration = "";
+if (process.argv[3]) {
+  const recovery = await readFile(resolve(process.argv[3]), "utf8");
+  const validationBundle = await build({ entryPoints: [resolve(root, "offline/migration-data.ts")], bundle: true, format: "esm", platform: "node", write: false });
+  const { decodeMigrationCheckpoint } = await import(`data:text/javascript;base64,${Buffer.from(validationBundle.outputFiles[0].text).toString("base64")}`);
+  await decodeMigrationCheckpoint(recovery);
+  embeddedMigration = `<script type="application/json" id="market-pulse-migration">${recovery.replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026")}</script>`;
+}
 const bundle = await build({
   entryPoints: [resolve(root, "offline/entry.tsx")],
   bundle: true,
@@ -29,6 +37,6 @@ const html = `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'self' blob: data:; worker-src blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="color-scheme" content="light dark"><title>Market Pulse — Outil portable</title>
-<script>${appearanceBootstrapScript}</script><style>${stylesheet}</style></head><body><div id="root"></div><script>${safeJavascript}</script></body></html>`;
+<script>${appearanceBootstrapScript}</script><style>${stylesheet}</style></head><body>${embeddedMigration}<div id="root"></div><script>${safeJavascript}</script></body></html>`;
 await writeFile(outputPath, html, "utf8");
 console.log(outputPath);
