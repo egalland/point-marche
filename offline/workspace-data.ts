@@ -49,6 +49,15 @@ export function isEmptyStarterWorkspace(data: WorkspaceData) {
   return data.name === "Mes points marché" && data.markets.length === 1 && market?.id === "market-local" && market.name === "Mon marché" && market.shortCode === "MARCHÉ" && market.tone === "mint" && market.colorHex === "" && !market.plannerTags.length && market.jiraWarningDays === 10 && market.jiraCriticalDays === 20 && !data.users.length && !data.points.length && !data.analystPoints.length && !data.plannerTasks.length && !data.jiraTickets.length && !data.jiraImports.length && !data.drafts.length && !data.source;
 }
 
+/** Retire the old CSV requirement when opening an earlier portable workbook. */
+export function removeLegacyJiraRequirement(data: WorkspaceData): WorkspaceData {
+  if (!data.source?.pendingJira) return data;
+  const source = { ...data.source };
+  delete source.pendingJira;
+  // These batches described the remote export, whose ticket registry was never loaded.
+  return { ...data, source, jiraImports: [], jiraUpdatedAt: "" };
+}
+
 function object(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }

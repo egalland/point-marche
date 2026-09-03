@@ -45,6 +45,9 @@ const localEntry = await readFile(resolve(root, 'offline/offline-app.tsx'), 'utf
 assert.match(localEntry, /import \{ MarketPulseApp \} from "\.\.\/features\/market-pulse\/market-pulse-app"/);
 assert.match(localEntry, /<MarketPulseApp\s*\/>/);
 assert.doesNotMatch(localEntry, /className="offline-(?:welcome|filebar|shell)/);
+assert.doesNotMatch(localEntry, /completeMigration|market-pulse-migration|csvInput/);
+const importCenter = await readFile(resolve(root, 'features/market-pulse/import-center.tsx'), 'utf8');
+assert.doesNotMatch(importCenter, /localMigrationRequired|completeLocalMigration|registryWarning/);
 
 const presentationPaths = [
   'app/globals.css', 'app/styles/theme.css', 'app/styles/components.css', 'app/styles/workspace.css', 'app/styles/analyst.css', 'app/styles/simulations.css',
@@ -61,23 +64,24 @@ for (const path of presentationPaths) {
   assert.equal(sha(original), sha(current), `Site V38 presentation changed: ${path}`);
   unchanged.push({ path, sha256: sha(current) });
 }
-const jsonBlock = scripts.find((match) => /id="market-pulse-(migration|workspace)"/.test(match[1]));
+const jsonBlock = scripts.find((match) => /id="market-pulse-workspace"/.test(match[1]));
 assert.ok(jsonBlock, 'Embedded data missing');
 const envelope = JSON.parse(jsonBlock[2]);
 assert.equal(envelope.checksum, sha(JSON.stringify(envelope.data)));
-const isMigration = envelope.format === 'market-pulse-migration';
-const data = isMigration ? envelope.data.base : envelope.data;
+assert.equal(envelope.format, 'market-pulse-local');
+const data = envelope.data;
+assert.equal(data.source?.pendingJira, undefined);
+assert.equal(importCenter.replace('import { appFetch as fetch } from "@/lib/app-transport";\n', ''), execFileSync('git', ['show', `${baseline}:features/market-pulse/import-center.tsx`], { cwd: root, encoding: 'utf8' }), 'Import center differs from the site');
 const report = {
   checkedAt: new Date().toISOString(), sourceVersion: 38, baseline,
   htmlSha256: sha(html), htmlBytes: Buffer.byteLength(html), parsedScripts: executableScripts,
   externalPresentationResources: 0, embeddedFonts: embeddedFonts.length,
   bodyFontClasses: layout.bodyClass, unchangedPresentationFiles: unchanged,
   opensSharedApplication: true, separateWelcomeOrTopBar: false,
-  data: { markets: data.markets.length, people: data.users.length, marketPoints: data.points.length, analystPoints: data.analystPoints.length, plannerTasks: data.plannerTasks.length,
-    jiraComplete: !isMigration || (envelope.data.recoveredTickets.length === envelope.data.expected.tickets && envelope.data.recoveredParticipants.length === envelope.data.expected.participants),
-    ...(isMigration ? { jiraExpected: envelope.data.expected, jiraRecovered: { tickets: envelope.data.recoveredTickets.length, participants: envelope.data.recoveredParticipants.length }, missingCsv: envelope.data.csvFilename } : {}) },
-  adaptations: ['File commands replace the server session action', 'Saving uses a local data file', 'Incomplete Jira is signalled; derived analyst calculations wait for the complete source'],
+  data: { markets: data.markets.length, people: data.users.length, marketPoints: data.points.length, analystPoints: data.analystPoints.length, plannerTasks: data.plannerTasks.length, jiraTickets: data.jiraTickets.length, jiraImports: data.jiraImports.length },
+  regularImportCenterMatchesSite: true, originalCsvRequired: false,
+  adaptations: ['File commands replace the server session action', 'Saving uses a local data file'],
   interactiveBrowserComparison: false, productionChanged: false,
 };
 await writeFile(resolve(reportPath), JSON.stringify(report, null, 2)+'\n');
-console.log(JSON.stringify({ checked: true, htmlBytes: report.htmlBytes, fonts: embeddedFonts.length, unchangedPresentationFiles: unchanged.length, jiraComplete: report.data.jiraComplete }));
+console.log(JSON.stringify({ checked: true, htmlBytes: report.htmlBytes, fonts: embeddedFonts.length, unchangedPresentationFiles: unchanged.length, regularImportCenterMatchesSite: true, originalCsvRequired: false }));

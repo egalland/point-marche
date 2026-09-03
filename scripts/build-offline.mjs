@@ -8,12 +8,12 @@ const root = process.cwd();
 const outputPath = resolve(process.argv[2] || "MARKET_PULSE_PORTABLE.html");
 let embeddedData = "";
 if (process.argv[3]) {
-  const recovery = await readFile(resolve(process.argv[3]), "utf8");
-  const isWorkspace = JSON.parse(recovery).format === "market-pulse-local";
-  const validationBundle = await build({ entryPoints: [resolve(root, isWorkspace ? "offline/workspace-data.ts" : "offline/migration-data.ts")], bundle: true, format: "esm", platform: "node", write: false });
+  const workspace = await readFile(resolve(process.argv[3]), "utf8");
+  const validationBundle = await build({ entryPoints: [resolve(root, "offline/workspace-data.ts")], bundle: true, format: "esm", platform: "node", write: false });
   const validation = await import(`data:text/javascript;base64,${Buffer.from(validationBundle.outputFiles[0].text).toString("base64")}`);
-  await (isWorkspace ? validation.decodeWorkspace : validation.decodeMigrationCheckpoint)(recovery);
-  embeddedData = `<script type="application/json" id="${isWorkspace ? "market-pulse-workspace" : "market-pulse-migration"}">${recovery.replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026")}</script>`;
+  const data = validation.removeLegacyJiraRequirement(await validation.decodeWorkspace(workspace));
+  const encoded = await validation.encodeWorkspace(data);
+  embeddedData = `<script type="application/json" id="market-pulse-workspace">${encoded.replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026")}</script>`;
 }
 const bundle = await build({
   entryPoints: [resolve(root, "offline/entry.tsx")],

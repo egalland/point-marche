@@ -1,6 +1,6 @@
 import type { LocalDraft } from "../lib/app-transport";
 import type { JiraCsvTicket } from "../lib/jira-csv";
-import { newWorkspace, validateWorkspace, type WorkspaceData } from "./workspace-data";
+import { newWorkspace, removeLegacyJiraRequirement, validateWorkspace, type WorkspaceData } from "./workspace-data";
 import { isIsoDate, isoWeekParts } from "../lib/iso-week";
 
 function draftPeriod(meetingDate: unknown) {
@@ -19,7 +19,9 @@ export class WorkspaceStore {
 
   constructor(data = newWorkspace()) {
     validateWorkspace(data);
-    this.data = structuredClone(data);
+    const ready = removeLegacyJiraRequirement(data);
+    this.data = structuredClone(ready);
+    if (ready !== data) this.savedRevision = -1;
     this.rebuildIndex();
   }
 
@@ -42,9 +44,10 @@ export class WorkspaceStore {
 
   replace(data: WorkspaceData) {
     validateWorkspace(data);
-    this.data = structuredClone(data);
+    const ready = removeLegacyJiraRequirement(data);
+    this.data = structuredClone(ready);
     this.revision += 1;
-    this.savedRevision = this.revision;
+    this.savedRevision = ready === data ? this.revision : -1;
     this.pendingForms.clear();
     this.rebuildIndex();
     this.notify();

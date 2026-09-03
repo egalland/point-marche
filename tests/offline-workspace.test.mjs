@@ -269,21 +269,54 @@ test("write errors abort the file transaction without changing the previous file
   assert.equal(handle.wasAborted(), true);
 });
 
-test("an incomplete migration preserves saved market Jira and refuses partial analyst statistics", async () => {
+test("an earlier recovery file accepts ordinary imports without its original CSV", async () => {
   const data = fixture();
   data.source = { exportedAt: "2026-09-02T10:00:00Z", pendingJira: { csvFilename: "origine.csv", expectedTickets: 12491, expectedParticipants: 11214, recoveredTickets: 10025, recoveredParticipants: 10025 } };
-  const api = createLocalApi(new WorkspaceStore(data));
+  data.jiraImports = [{ id: "remote-import", sourceProfile: "jira-participants", filename: "origine.csv", status: "completed", rowCount: 12491, ticketCount: 12491, participantCount: 11214, rejectedCount: 0, repairedTextCount: 0, unknownUserCodeCount: 0, createdAt: "2026-09-01T10:00:00Z", completedAt: "2026-09-01T10:01:00Z" }];
+  data.points = [{ id: "saved", marketId: "market-local", year: 2026, week: 35, meetingDate: "2026-08-28", pointName: "Mon marché", themeColor: "mint", data: { jira: { total: 42 }, note: "Point conservé" }, createdAt: "2026-08-28T10:00:00Z" }];
+  data.drafts = [{ scope: "market", ownerId: "market-local", data: { meetingDate: "2026-09-03", note: "Mes changements locaux" } }];
+  data.preferences = { "market-pulse:appearance:v1": "dark" };
+  const store = new WorkspaceStore(data);
+  const api = createLocalApi(store);
+  assert.equal(store.read().source.pendingJira, undefined);
+  assert.equal(store.isDirty(), true);
+  assert.deepEqual(store.read().points, data.points);
+  assert.deepEqual(store.read().drafts, data.drafts);
+  assert.deepEqual(store.read().preferences, data.preferences);
+  assert.ok(data.source.pendingJira, "Opening leaves the original file untouched");
   const market = await call(api, "/api/jira-week?marketId=market-local&year=2026&week=35");
   assert.equal(market.snapshot, null);
   const stats = await call(api, "/api/analyst-jira?analystId=analyst&view=history&from=2026-08-03&to=2026-08-30");
-  assert.equal(stats.status, 409);
-  assert.match(stats.error, /origine.csv/);
+  assert.equal(stats.status, 200);
+  assert.equal(stats.history, null);
   const imports = await call(api, "/api/jira-imports");
-  assert.deepEqual(imports.registry, { ticketCount: null, participantCount: null });
-  assert.match(imports.warning, /compléter/);
-  const unchecked = await call(api, "/api/jira-imports", { action: "start", filename: "other.csv", rowCount: 5 });
-  assert.equal(unchecked.status, 409);
-  assert.throws(() => validateWorkspace({ ...data, jiraTickets: [ticket("GLOBAL-1")] }), /incohérent/);
+  assert.deepEqual(imports.registry, { ticketCount: 0, participantCount: 0 });
+  assert.deepEqual(imports.batches, []);
+  assert.equal(imports.warning, undefined);
+  const finished = await importTickets(api, [ticket("GLOBAL-1"), ticket("GLOBAL-2")]);
+  assert.equal(finished.status, 200);
+  assert.equal(finished.batch.filename, "export.csv");
+  assert.equal(finished.batch.ticketCount, 2);
+  const history = await call(api, "/api/analyst-jira?analystId=analyst&view=history&from=2026-08-03&to=2026-08-30");
+  assert.equal(history.history.weeks.reduce((sum, week) => sum + week.count, 0), 2);
+  const reopened = new WorkspaceStore(await decodeWorkspace(await encodeWorkspace(store.snapshot())));
+  assert.deepEqual(reopened.snapshot(), store.snapshot());
+  assert.equal(reopened.isDirty(), false);
+  reopened.replace(data);
+  assert.equal(reopened.read().source.pendingJira, undefined);
+  assert.equal(reopened.isDirty(), true);
+});
+
+test("ordinary workbooks retain their existing Jira imports on open and replacement", () => {
+  const data = fixture();
+  data.jiraTickets = [ticket("GLOBAL-1")];
+  data.source = { exportedAt: "2026-09-03T10:00:00Z", version: 38 };
+  const store = new WorkspaceStore(data);
+  assert.deepEqual(store.snapshot(), data);
+  assert.equal(store.isDirty(), false);
+  store.replace(data);
+  assert.deepEqual(store.snapshot(), data);
+  assert.equal(store.isDirty(), false);
 });
 
 test("only a pristine empty starter yields to the embedded site at startup", () => {
