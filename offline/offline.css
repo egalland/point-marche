@@ -5,10 +5,6 @@
 .local-file-status > span, .local-file-options p { color: var(--muted); font-size: .875rem; line-height: 1.6; }
 .local-file-actions, .local-file-options > div { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
 .local-file-actions kbd { font: .75rem var(--font-mono); opacity: .8; }
-.local-file-migration { display: grid; justify-items: start; gap: 12px; padding: 20px 0; border-top: 1px solid var(--line); }
-.local-file-migration h3 { font-size: 1rem; }
-.local-file-migration p { color: var(--muted); font-size: .9375rem; line-height: 1.6; }
-.local-file-migration strong { overflow-wrap: anywhere; font-size: .875rem; }
 .local-file-options { border-top: 1px solid var(--line); padding-top: 16px; }
 .local-file-options summary { margin-bottom: 16px; cursor: pointer; font-size: .9375rem; font-weight: 600; }
 .local-file-warning { margin-top: 14px; font-size: .875rem; line-height: 1.6; color: var(--peach); }

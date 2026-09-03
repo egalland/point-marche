@@ -191,9 +191,8 @@ export function createLocalApi(store: WorkspaceStore): AppTransport {
       }
 
       if (path === "/api/jira-imports") {
-        if (method === "GET") return json({ batches: [...data.jiraImports].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 12), registry: data.source?.pendingJira ? { ticketCount: null, participantCount: null } : { ticketCount: data.jiraTickets.length, participantCount: data.jiraTickets.reduce((sum, ticket) => sum + ticket.participants.length, 0) }, warning: data.source?.pendingJira ? `Historique Jira à compléter avec « ${data.source.pendingJira.csvFilename} ». Les points sauvegardés sont conservés ; les recalculs attendent le registre complet.` : "" });
+        if (method === "GET") return json({ batches: [...data.jiraImports].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 12), registry: { ticketCount: data.jiraTickets.length, participantCount: data.jiraTickets.reduce((sum, ticket) => sum + ticket.participants.length, 0) } });
         if (method === "POST") {
-          if (data.source?.pendingJira) throw new LocalApiError(`Sélectionne le CSV d’origine « ${data.source.pendingJira.csvFilename} » pour terminer la reprise contrôlée.`, 409);
           if (body.action === "start") {
             const batch: LocalJiraBatch = { id: id(), filename: clean(body.filename, 240), sourceProfile: "jira-participants", status: "uploading", rowCount: Math.max(0, Number(body.rowCount) || 0), ticketCount: 0, participantCount: 0, rejectedCount: 0, repairedTextCount: 0, unknownUserCodeCount: 0, createdAt: now(), completedAt: null };
             staging.set(batch.id, new Map());
@@ -234,7 +233,6 @@ export function createLocalApi(store: WorkspaceStore): AppTransport {
         const people = data.users.filter((person) => roleUsesAutomaticJira(person.role));
         const assignments: Record<string, string[]> = {};
         people.forEach((person) => person.marketIds.forEach((market) => { (assignments[market] ??= []).push(person.usercode); }));
-        if (data.source?.pendingJira) return json({ snapshot: null, assignments });
         if (!data.jiraUpdatedAt && !data.jiraTickets.length) return json({ snapshot: null, assignments });
         const names = new Map(people.filter((person) => person.marketIds.includes(marketId)).map((person) => [person.usercode.toUpperCase(), person.name]));
         const tickets = data.jiraTickets.filter((ticket) => names.has(ticket.assigneeUserCode.toUpperCase()) && !isClosedJiraStatus(ticket.status)).map((ticket) => ({ ...ticket, assigneeName: names.get(ticket.assigneeUserCode.toUpperCase()), marketId }));
@@ -242,7 +240,6 @@ export function createLocalApi(store: WorkspaceStore): AppTransport {
       }
 
       if (path === "/api/analyst-jira" && method === "GET") {
-        if (data.source?.pendingJira) throw new LocalApiError(`Historique Jira incomplet. Importe « ${data.source.pendingJira.csvFilename} » dans le Centre d’import pour retrouver les mêmes chiffres que le site.`, 409);
         const analystId = url.searchParams.get("analystId") ?? "";
         const person = data.users.find((user) => user.id === analystId && user.role === "analyste-tarif-referentiel");
         if (!person) throw new LocalApiError("Analyste introuvable.", 404);

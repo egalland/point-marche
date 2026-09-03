@@ -9,8 +9,6 @@ import { decodeWorkspace, encodeWorkspace, isEmptyStarterWorkspace, newWorkspace
 import { downloadWorkspace, fingerprint, readWorkspaceFile, workspaceFilename, writeWorkspaceFile, type FileFingerprint, type LocalFileHandle } from "./file-session";
 import { readRecovery, writeRecovery } from "./recovery-cache";
 import { WorkspaceErrorBoundary } from "./workspace-error-boundary";
-import { decodeJiraCsv } from "../lib/jira-csv";
-import { completeMigrationInWorkspace, decodeMigrationCheckpoint, openMigrationWorkspace, type MigrationCheckpoint } from "./migration-data";
 
 type PickerWindow = Window & {
   showOpenFilePicker?: (options: unknown) => Promise<LocalFileHandle[]>;
@@ -31,24 +29,15 @@ export function OfflineApp() {
   const [generation, setGeneration] = useState(0);
   const [tick, setTick] = useState(0);
   const [downloadRevision, setDownloadRevision] = useState<number | null>(null);
-  const [migration, setMigration] = useState<MigrationCheckpoint | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const csvInput = useRef<HTMLInputElement>(null);
   const handle = useRef<LocalFileHandle | null>(null);
   const expectedFile = useRef<FileFingerprint | undefined>(undefined);
   const recoveryQueue = useRef<Promise<void>>(Promise.resolve());
   const fileBusy = useRef(false);
   const recoveryWritable = useRef(true);
-  const migrationRef = useRef<MigrationCheckpoint | null>(null);
   const seed = useRef<WorkspaceData | null>(null);
   const saveCurrent = useRef<(saveAs?: boolean) => Promise<boolean>>(async () => false);
 
-  const finishMigration = (csv: string) => {
-    const checkpoint = migrationRef.current;
-    if (!checkpoint) throw new Error("La copie de reprise Jira est absente de cette application.");
-    const { data } = completeMigrationInWorkspace(checkpoint, store.read(), csv);
-    store.update(() => data);
-  };
   const activate = (data: WorkspaceData, name: string, unsaved: boolean, nextHandle: LocalFileHandle | null = null, expected?: FileFingerprint) => {
     store.replace(data);
     installLocalTransport(createLocalApi(store), {
@@ -56,7 +45,6 @@ export function OfflineApp() {
       pending: (key, value) => store.setPendingForm(key, value),
       readPreference: store.readPreference, writePreference: store.writePreference,
       openFiles: () => setFilesOpen(true), saveFile: (saveAs) => saveCurrent.current(saveAs),
-      migrationRequired: () => Boolean(store.read().source?.pendingJira), completeMigration: finishMigration,
     });
     handle.current = nextHandle;
     expectedFile.current = expected;
@@ -71,13 +59,7 @@ export function OfflineApp() {
     const loadInitial = async () => {
       const recoveryTask = readRecovery().catch((error) => { if (mounted) { recoveryWritable.current = false; setRecoveryWarning(error.message); } return null; });
       const seedTask = async () => {
-        const checkpointText = document.getElementById("market-pulse-migration")?.textContent;
         const workspaceText = document.getElementById("market-pulse-workspace")?.textContent;
-        if (checkpointText) {
-          const checkpoint = await decodeMigrationCheckpoint(checkpointText);
-          if (mounted) { migrationRef.current = checkpoint; setMigration(checkpoint); }
-          return openMigrationWorkspace(checkpoint);
-        }
         return workspaceText ? decodeWorkspace(workspaceText) : null;
       };
       const [recovery, embedded] = await Promise.all([recoveryTask, seedTask().catch((error) => { if (mounted) { setError(error.message); setFilesOpen(true); } return null; })]);
@@ -85,7 +67,6 @@ export function OfflineApp() {
       seed.current = embedded;
       if (recovery && (!embedded || !isEmptyStarterWorkspace(recovery.data))) activate(recovery.data, recovery.filename, recovery.unsaved);
       else activate(embedded ?? newWorkspace(), "", false);
-      if (store.read().source?.pendingJira) setMessage("Tes points sont ouverts. Pour compléter l’historique Jira, sélectionne le CSV d’origine dans le Centre d’import.");
     };
     void loadInitial().catch((error) => {
       if (!mounted) return;
@@ -144,18 +125,6 @@ export function OfflineApp() {
     const file = event.target.files?.[0]; event.target.value = "";
     if (file) void loadFile(file);
   };
-  const migrateFromCsv = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]; event.target.value = "";
-    if (!file || !migration || fileBusy.current) return;
-    setBusy(true); fileBusy.current = true; setError(""); setMessage("");
-    try {
-      if (file.size > 200_000_000) throw new Error("Le CSV dépasse 200 Mo.");
-      finishMigration(decodeJiraCsv(await file.arrayBuffer()).text);
-      setGeneration((value) => value + 1);
-      setMessage("Historique Jira complet et vérifié. Enregistre le fichier pour le conserver sur ton PC.");
-    } catch (error) { fail(error, "La reprise a échoué. Choisis le CSV d’origine."); }
-    finally { setBusy(false); fileBusy.current = false; }
-  };
   const save = async (saveAs = false, forceDownload = false): Promise<boolean> => {
     if (!active || fileBusy.current) return false;
     setError(""); setMessage("");
@@ -198,10 +167,8 @@ export function OfflineApp() {
     return () => window.removeEventListener("keydown", shortcut, true);
   });
 
-  const pending = store.read().source?.pendingJira;
   return <>
     <input ref={input} className="sr-only" type="file" accept=".json,application/json" onChange={inputChanged} aria-label="Ouvrir un fichier Market Pulse"/>
-    <input ref={csvInput} className="sr-only" type="file" accept=".csv,text/csv,text/plain" onChange={(event) => void migrateFromCsv(event)} aria-label="Choisir le CSV Jira de reprise"/>
     {active ? <WorkspaceErrorBoundary key={generation} onRetry={() => setGeneration((value) => value + 1)} onFiles={() => setFilesOpen(true)}><MarketPulseApp/></WorkspaceErrorBoundary> : <p className="local-startup" role="status">Ouverture de tes points…</p>}
     {message && !filesOpen && <div className="toast local-file-notice" role="status"><span>{message}</span><button type="button" onClick={() => setMessage("")} aria-label="Fermer la notification">×</button></div>}
     <AppDialog open={filesOpen} onClose={() => { if (!busy) setFilesOpen(false); }} busy={busy} labelledBy="local-file-title" className="local-file-dialog">
@@ -213,7 +180,6 @@ export function OfflineApp() {
         <button type="button" className="secondary-button" onClick={() => void open()} disabled={busy}>Ouvrir un fichier <kbd>Ctrl+O</kbd></button>
       </div>
       {(error || message || downloadRevision !== null) && <div className={`import-quality-alert ${error ? "danger" : "ok"}`} role={error ? "alert" : "status"}><span>{error || message}</span>{downloadRevision !== null && <button type="button" className="secondary-button" onClick={() => { store.markSaved(downloadRevision); setDownloadRevision(null); setMessage("Enregistrement de la copie confirmé."); }}>J’ai bien enregistré la copie</button>}</div>}
-      {pending && <section className="local-file-migration"><h3>Compléter l’historique Jira</h3><p>Les points sauvegardés, les marchés, les personnes et Planner sont repris. Le registre Jira attend encore {pending.expectedTickets - pending.recoveredTickets} tickets et {pending.expectedParticipants - pending.recoveredParticipants} participations.</p><strong>{pending.csvFilename}</strong><p>Tu peux sélectionner ce fichier dans le Centre d’import habituel ou ici. Le contrôle conserve tes modifications locales.</p><button type="button" className="secondary-button" onClick={() => csvInput.current?.click()} disabled={busy || !migration}>Choisir le CSV Jira de reprise</button></section>}
       <details className="local-file-options"><summary>Autres options</summary><div>
         <button type="button" className="secondary-button" onClick={() => { if (canReplace()) input.current?.click(); }} disabled={busy}>Choisir un fichier</button>
         <button type="button" className="secondary-button" onClick={() => void save(false, true)} disabled={busy || !active}>Télécharger une copie</button>

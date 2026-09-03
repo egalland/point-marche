@@ -8,8 +8,6 @@ export type LocalDraftBridge = {
   writePreference?: (key: string, value: string) => void;
   openFiles?: () => void;
   saveFile?: (saveAs?: boolean) => Promise<boolean>;
-  migrationRequired?: () => boolean;
-  completeMigration?: (csv: string) => void;
 };
 
 let transport: AppTransport | null = null;
@@ -50,8 +48,3 @@ export function writeLocalPreference(key: string, value: string) {
 
 export function openLocalFiles() { drafts?.openFiles?.(); }
 export function saveLocalFile(saveAs = false) { return drafts?.saveFile?.(saveAs) ?? Promise.resolve(false); }
-export function localMigrationRequired() { return drafts?.migrationRequired?.() ?? false; }
-export function completeLocalMigration(csv: string) {
-  if (!drafts?.completeMigration) throw new Error("La reprise Jira n’est pas disponible dans ce fichier.");
-  drafts.completeMigration(csv);
-}
