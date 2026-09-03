@@ -50,11 +50,11 @@ const importCenter = await readFile(resolve(root, 'features/market-pulse/import-
 assert.doesNotMatch(importCenter, /localMigrationRequired|completeLocalMigration|registryWarning/);
 
 const presentationPaths = [
-  'app/globals.css', 'app/styles/theme.css', 'app/styles/components.css', 'app/styles/workspace.css', 'app/styles/analyst.css', 'app/styles/simulations.css',
+  'app/styles/theme.css', 'app/styles/components.css', 'app/styles/workspace.css', 'app/styles/analyst.css', 'app/styles/simulations.css',
   'components/app-icon.tsx', 'components/appearance-control.tsx', 'components/action-menu.tsx', 'components/app-dialog.tsx',
   'features/market-pulse/supplier-mini-chart.tsx', 'features/market-pulse/supplier-variation-dashboard.tsx',
   'features/market-pulse/analyst-stats-dashboard.tsx', 'features/market-pulse/analyst-jira-panel.tsx',
-  'lib/analyst-point-export.ts', 'lib/supplier-mini-trend.ts', 'lib/analyst-jira-history-html.ts',
+  'lib/supplier-mini-trend.ts', 'lib/analyst-jira-history-html.ts',
 ];
 const baseline = '5b669025992454e15a02e351a00847dc974a9f6e';
 const unchanged = [];
@@ -71,7 +71,13 @@ assert.equal(envelope.checksum, sha(JSON.stringify(envelope.data)));
 assert.equal(envelope.format, 'market-pulse-local');
 const data = envelope.data;
 assert.equal(data.source?.pendingJira, undefined);
-assert.equal(importCenter.replace('import { appFetch as fetch } from "@/lib/app-transport";\n', ''), execFileSync('git', ['show', `${baseline}:features/market-pulse/import-center.tsx`], { cwd: root, encoding: 'utf8' }), 'Import center differs from the site');
+assert.match(importCenter, /import \{ appFetch as fetch \} from "@\/lib\/app-transport"/);
+assert.match(importCenter, /onManual/);
+assert.match(css, /\.meeting-edit-dialog/);
+assert.match(css, /\.market-comparison-grid/);
+const featurePaths = ['app/globals.css', 'app/styles/meeting.css', 'features/market-pulse/market-pulse-app.tsx', 'features/market-pulse/analyst-point-dashboard.tsx', 'features/market-pulse/import-center.tsx', 'features/market-pulse/source-mode-control.tsx', 'features/market-pulse/manual-analyst-jira.tsx', 'features/market-pulse/market-comparison.tsx', 'lib/analyst-point.ts', 'lib/analyst-point-export.ts', 'lib/point-source-mode.ts', 'lib/point-planner-enrichment.ts', 'lib/planner-registry.ts', 'lib/market-comparison.ts', 'lib/mail-draft.ts'];
+const featureSources = [];
+for (const path of featurePaths) featureSources.push({ path, sha256: sha(await readFile(resolve(root, path))) });
 const report = {
   checkedAt: new Date().toISOString(), sourceVersion: 38, baseline,
   htmlSha256: sha(html), htmlBytes: Buffer.byteLength(html), parsedScripts: executableScripts,
@@ -79,9 +85,11 @@ const report = {
   bodyFontClasses: layout.bodyClass, unchangedPresentationFiles: unchanged,
   opensSharedApplication: true, separateWelcomeOrTopBar: false,
   data: { markets: data.markets.length, people: data.users.length, marketPoints: data.points.length, analystPoints: data.analystPoints.length, plannerTasks: data.plannerTasks.length, jiraTickets: data.jiraTickets.length, jiraImports: data.jiraImports.length },
-  regularImportCenterMatchesSite: true, originalCsvRequired: false,
+  sharedImportCenter: true, originalCsvRequired: false,
+  requestedFeatures: ['Edit market and analyst points during meetings', 'Email draft with formatted body and HTML page attachment', 'Persistent manual source modes', 'Optional market comparison pie chart'],
+  featureSources,
   adaptations: ['File commands replace the server session action', 'Saving uses a local data file'],
   interactiveBrowserComparison: false, productionChanged: false,
 };
 await writeFile(resolve(reportPath), JSON.stringify(report, null, 2)+'\n');
-console.log(JSON.stringify({ checked: true, htmlBytes: report.htmlBytes, fonts: embeddedFonts.length, unchangedPresentationFiles: unchanged.length, regularImportCenterMatchesSite: true, originalCsvRequired: false }));
+console.log(JSON.stringify({ checked: true, htmlBytes: report.htmlBytes, fonts: embeddedFonts.length, unchangedPresentationFiles: unchanged.length, requestedFeatures: report.requestedFeatures.length, originalCsvRequired: false }));
