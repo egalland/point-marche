@@ -31,6 +31,7 @@ type Props = {
   plannerUpdatedAt: string;
   onPlannerImport: (rawText: string) => Promise<{ imported: number; message: string }>;
   onJiraImported: () => Promise<void>;
+  onManual?: (source: "jira" | "planner") => void;
 };
 
 function formatBytes(value: number) {
@@ -49,7 +50,7 @@ function statusLabel(value: string) {
   return value === "completed" ? "Terminé" : value === "failed" ? "Échec" : "Interrompu";
 }
 
-export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, plannerUpdatedAt, onPlannerImport, onJiraImported }: Props) {
+export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, plannerUpdatedAt, onPlannerImport, onJiraImported, onManual }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<JiraCsvParseResult | null>(null);
@@ -172,6 +173,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
       <div className="import-registry-kpis"><article><span>Tickets en registre</span><strong>{historyLoading ? "…" : registry.ticketCount ?? "—"}</strong></article><article><span>Liens participants</span><strong>{historyLoading ? "…" : registry.participantCount ?? "—"}</strong></article><article><span>Simulations Planner</span><strong>{plannerTasks.length}</strong></article></div>
     </section>
 
+    {onManual && <section className="manual-import-fallback"><div><strong>Continuer sans import</strong><p>Prépare le marché actif en saisie manuelle si le fichier est indisponible ou si l’import échoue.</p></div><div><button type="button" className="secondary-button" onClick={() => onManual("jira")}>Saisir Jira manuellement</button><button type="button" className="secondary-button" onClick={() => onManual("planner")}>Saisir les simulations</button></div></section>}
     <div className="import-source-grid">
       <section className="surface jira-source-card">
         <header><div><span>Source 01 · Jira</span><h2>Tickets et participants</h2><p>Dépose le CSV UTF-8 exporté depuis Jira. Les fichiers de plus de 12 000 lignes sont envoyés au registre par lots.</p></div><b>CSV</b></header>

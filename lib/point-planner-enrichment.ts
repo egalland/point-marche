@@ -1,5 +1,6 @@
 import { plannerTaskMonthLabel, type PlannerTask, type PlannerTaskMetrics } from "./planner-import";
 import { supplierLabelFromTask, supplierSeriesForTask } from "./supplier-variations";
+import { usesManualSource } from "./point-source-mode";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -39,6 +40,7 @@ function mergeMetrics(primary: PlannerTaskMetrics, fallback: PlannerTaskMetrics)
 }
 
 export function enrichPointPlannerHistory(payload: unknown, tasks: PlannerTask[]) {
+  if (usesManualSource(payload, "planner")) return payload;
   const point = record(payload);
   if (!point) return payload;
   const pointOperations = Array.isArray(point.operations) ? point.operations : [];
@@ -98,6 +100,7 @@ function plannerExternalId(value: unknown) {
 }
 
 export function enrichMarketPointFromPlanner(payload: unknown, tasks: PlannerTask[], marketTags: string[]) {
+  if (usesManualSource(payload, "planner")) return payload;
   const enriched = record(enrichPointPlannerHistory(payload, tasks));
   if (!enriched) return payload;
   const meetingDate = text(enriched.meetingDate);

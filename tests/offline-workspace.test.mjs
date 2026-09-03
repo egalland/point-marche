@@ -328,3 +328,19 @@ test("only a pristine empty starter yields to the embedded site at startup", () 
   assert.equal(isEmptyStarterWorkspace(edited), false);
   assert.equal(isEmptyStarterWorkspace(fixture()), false);
 });
+
+test("imports and file reopening preserve meeting edits and manual source choices", async () => {
+  const data = fixture();
+  const store = new WorkspaceStore(data);
+  const api = createLocalApi(store);
+  const marketPoint = { meetingDate: "2026-09-03", pointName: "Point marché", jiraMode: "manual", plannerMode: "manual", priority: "Décision prise en réunion", dossiers: [], jira: [{ status: "En cours", count: 42, summary: "Synthèse manuelle" }], operations: [{ id: "manual", name: "Suivi corrigé", steps: [["Contrôle", "Fait"]] }], preferences: { readModules: { comparison: false } } };
+  const analystPoint = { meetingDate: "2026-09-03", periodFrom: "2026-08-31", periodTo: "2026-09-06", jiraMode: "manual", manualJiraCounts: { resolved: 7, open: 0 }, jira: [], jiraResolved: [], note: "Arbitrage confirmé", dossiers: [] };
+  assert.equal((await call(api, "/api/points", { marketId: "market-local", data: marketPoint })).status, 201);
+  assert.equal((await call(api, "/api/analyst-points", { analystId: "analyst", data: analystPoint })).status, 201);
+  await importTickets(api, [ticket("GLOBAL-20")]);
+  const reopened = new WorkspaceStore(await decodeWorkspace(await encodeWorkspace(store.snapshot())));
+  const next = createLocalApi(reopened);
+  assert.deepEqual((await call(next, "/api/points?marketId=market-local")).points[0].data, marketPoint);
+  assert.deepEqual((await call(next, "/api/analyst-points?analystId=analyst")).points[0].data, analystPoint);
+  assert.equal((await call(next, "/api/jira-imports")).registry.ticketCount, 1);
+});

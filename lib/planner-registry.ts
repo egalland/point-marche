@@ -165,7 +165,7 @@ export function recoverPlannerTasksFromPoints(points: PlannerArchivePoint[], mar
 
   points.forEach((point) => {
     const payload = parsePayload(point.payload);
-    if (!payload) return;
+    if (!payload || payload.plannerMode === "manual") return;
     const operations = Array.isArray(payload.operations) ? payload.operations : Array.isArray(payload.simulations) ? payload.simulations : [];
     operations.forEach((value) => {
       const operation = record(value);

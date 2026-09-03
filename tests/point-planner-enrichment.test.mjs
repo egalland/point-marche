@@ -11,9 +11,11 @@ function transpile(path) {
 
 const variationsUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/supplier-variations.ts")).toString("base64")}`;
 const plannerUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/planner-import.ts")).toString("base64")}`;
+const sourceModeUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/point-source-mode.ts")).toString("base64")}`;
 const enrichmentSource = transpile("../lib/point-planner-enrichment.ts")
   .replace('from "./planner-import"', `from "${plannerUrl}"`)
-  .replace('from "./supplier-variations"', `from "${variationsUrl}"`);
+  .replace('from "./supplier-variations"', `from "${variationsUrl}"`)
+  .replace('from "./point-source-mode"', `from "${sourceModeUrl}"`);
 const enrichment = await import(`data:text/javascript;base64,${Buffer.from(enrichmentSource).toString("base64")}`);
 
 function task(externalId, effectiveMonth, globalVariation, weightedVariation) {

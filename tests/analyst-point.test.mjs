@@ -11,7 +11,8 @@ function transpile(path) {
 
 const jiraUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/jira-import.ts")).toString("base64")}`;
 const isoUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/iso-week.ts")).toString("base64")}`;
-const analystSource = transpile("../lib/analyst-point.ts").replace('from "./jira-import"', `from "${jiraUrl}"`).replace('from "./iso-week"', `from "${isoUrl}"`);
+const sourceModeUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/point-source-mode.ts")).toString("base64")}`;
+const analystSource = transpile("../lib/analyst-point.ts").replace('from "./jira-import"', `from "${jiraUrl}"`).replace('from "./iso-week"', `from "${isoUrl}"`).replace('from "./point-source-mode"', `from "${sourceModeUrl}"`);
 const analystPoint = await import(`data:text/javascript;base64,${Buffer.from(analystSource).toString("base64")}`);
 
 const analyst = { id: "analyst", name: "Jane DOE", email: "jane@example.test", usercode: "A1234567", plannerAlias: "Jane", role: "analyste-tarif-referentiel", marketIds: [] };

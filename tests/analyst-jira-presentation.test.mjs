@@ -13,8 +13,9 @@ const panelImports = { ...reactImports, "@/lib/iso-week": isoUrl, "@/components/
 const panelUrl = moduleUrl("../../features/market-pulse/analyst-jira-panel.tsx", panelImports);
 const chartHtmlUrl = moduleUrl("../../lib/analyst-jira-history-html.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl, "./analyst-jira-metrics": metricsUrl });
 const turnoverUrl = moduleUrl("../../lib/supplier-turnover.ts");
-const exportUrl = moduleUrl("../../lib/analyst-point-export.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl, "./analyst-jira-history-html": chartHtmlUrl, "./supplier-turnover": turnoverUrl });
-const pointUrl = moduleUrl("../../lib/analyst-point.ts", { "./iso-week": isoUrl, "./jira-import": moduleUrl("../../lib/jira-import.ts") });
+const pointUrl = moduleUrl("../../lib/analyst-point.ts", { "./iso-week": isoUrl, "./jira-import": moduleUrl("../../lib/jira-import.ts"), "./point-source-mode": moduleUrl("../../lib/point-source-mode.ts") });
+const exportUrl = moduleUrl("../../lib/analyst-point-export.ts", { "./iso-week": isoUrl, "./analyst-jira-history": historyUrl, "./analyst-jira-history-html": chartHtmlUrl, "./supplier-turnover": turnoverUrl, "./analyst-point": pointUrl });
+
 const { CompletedWeekChart, CompletedTicketDisclosure, AnalystJiraPanel, AnalystJiraMetrics } = await import(panelUrl);
 const { analystMailHtml, analystInteractiveHtml } = await import(exportUrl);
 const { initialAnalystPoint } = await import(pointUrl);

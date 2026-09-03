@@ -3,6 +3,7 @@ import type { GlobalDirectoryUser } from "./global-directory";
 import type { JiraChartSettings } from "./analyst-jira-history";
 export { isoWeekParts } from "./iso-week";
 import { isAbandonedJiraStatus, isClosedJiraStatus, parseJiraAssigneeSummary } from "./jira-import";
+import { normalizeSourceMode, type PointSourceMode } from "./point-source-mode";
 
 export type AnalystPointModule = "overview" | "jira" | "planner" | "cycle20" | "dossiers";
 export type AnalystJiraTicket = { id: string; key: string; internalId: string; summary: string; status: string; createdAt: string; updatedAt: string; link: string };
@@ -29,6 +30,8 @@ export type AnalystPointData = {
   dossiers: AnalystDossier[];
   jira: AnalystJiraTicket[];
   jiraResolved: AnalystJiraTicket[];
+  jiraMode: PointSourceMode;
+  manualJiraCounts?: { open: number; resolved: number };
   preferences: AnalystPointPreferences;
   mail: { to: string; cc: string; subject: string; intro: string; autoTo: string[] };
 };
@@ -95,6 +98,7 @@ export function initialAnalystPoint(analyst: GlobalDirectoryUser, manager?: Glob
     dossiers: [],
     jira: [],
     jiraResolved: [],
+    jiraMode: "automatic",
     preferences: {
       order: analystPointModules.map((module) => module.id),
       widths: { overview: "full", jira: "full", planner: "full", cycle20: "half", dossiers: "full" },
@@ -123,6 +127,8 @@ export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUs
     dossiers: Array.isArray(source.dossiers) ? source.dossiers : [],
     jira: Array.isArray(source.jira) ? source.jira.filter((ticket) => !isAbandonedJiraStatus(ticket.status)) : [],
     jiraResolved: Array.isArray(source.jiraResolved) ? source.jiraResolved.filter((ticket) => !isAbandonedJiraStatus(ticket.status)) : [],
+    jiraMode: normalizeSourceMode(source.jiraMode),
+    manualJiraCounts: source.manualJiraCounts && [source.manualJiraCounts.open, source.manualJiraCounts.resolved].every((count) => Number.isSafeInteger(count) && count >= 0) ? { ...source.manualJiraCounts } : undefined,
     preferences: {
       ...fallback.preferences,
       ...preferences,
@@ -141,6 +147,10 @@ export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUs
     },
     mail: { ...fallback.mail, ...(source.mail ?? {}) },
   };
+}
+
+export function analystJiraCounts(data: Pick<AnalystPointData, "jira" | "jiraResolved" | "jiraMode" | "manualJiraCounts">) {
+  return data.jiraMode === "manual" && data.manualJiraCounts ? data.manualJiraCounts : { open: data.jira.length, resolved: data.jiraResolved.length };
 }
 
 export function analystJiraTickets(rawText: string, analyst: GlobalDirectoryUser): AnalystJiraTicket[] {
