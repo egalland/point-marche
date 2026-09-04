@@ -2,7 +2,7 @@
 
 import { useState, type DragEvent } from "react";
 
-export type ModuleWidth = "half" | "full";
+export type ModuleWidth = "half" | "two-thirds" | "full";
 
 type ModuleDefinition<T extends string> = {
   id: T;
@@ -48,7 +48,7 @@ export function ModuleLayoutEditor<T extends string>({ modules, order, widths, o
       return <article key={id} draggable onDragStart={() => setDragged(id)} onDragEnd={() => setDragged(null)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => drop(event, id)} className={dragged === id ? "is-dragging" : ""}>
         <span className="module-drag-handle" aria-hidden="true">⋮⋮</span>
         <div><strong>{definition.label}</strong><small>{definition.detail}</small></div>
-        <div className="module-width-toggle" aria-label={`Largeur du bloc ${definition.label}`}><button type="button" className={widths[id] === "half" ? "active" : ""} onClick={() => onChangeWidth(id, "half")}>Demi</button><button type="button" className={widths[id] === "full" ? "active" : ""} onClick={() => onChangeWidth(id, "full")}>Pleine</button></div>
+        <div className="module-width-toggle" aria-label={`Largeur du bloc ${definition.label}`}><button type="button" className={widths[id] === "half" ? "active" : ""} onClick={() => onChangeWidth(id, "half")}>1/2</button><button type="button" className={widths[id] === "two-thirds" ? "active" : ""} onClick={() => onChangeWidth(id, "two-thirds")}>2/3</button><button type="button" className={widths[id] === "full" ? "active" : ""} onClick={() => onChangeWidth(id, "full")}>Pleine</button></div>
         <div className="module-order-buttons"><button type="button" disabled={index === 0} aria-label={`Monter ${definition.label}`} onClick={() => move(id, -1)}>↑</button><button type="button" disabled={index === normalized.length - 1} aria-label={`Descendre ${definition.label}`} onClick={() => move(id, 1)}>↓</button></div>
       </article>;
     })}</div>
