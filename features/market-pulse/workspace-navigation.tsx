@@ -7,13 +7,12 @@ import { AppIcon } from "@/components/app-icon";
 
 export type WorkspaceView = "read" | "edit" | "analyst" | "stats" | "imports" | "mail" | "settings";
 export const workspaceTitles: Record<WorkspaceView, string> = {
-  read: "Point marché", edit: "Préparation du point", analyst: "Point analyste", stats: "Statistiques", imports: "Centre d’import", mail: "Mail du marché", settings: "Paramètres",
+  read: "Point marché", edit: "Point marché", analyst: "Point analyste", stats: "Statistiques", imports: "Centre d’import", mail: "Mail du marché", settings: "Paramètres",
 };
 
 const groups = [
   { label: "Points hebdomadaires", items: [
     { id: "read", icon: "eye", label: "Point marché" },
-    { id: "edit", icon: "edit", label: "Préparer le point" },
     { id: "analyst", icon: "user", label: "Point analyste" },
   ] },
   { label: "Données et suivi", items: [

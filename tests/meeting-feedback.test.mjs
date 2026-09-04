@@ -89,8 +89,10 @@ test("comparison visibility is independent in the point, mail and standalone pag
   assert.doesNotMatch(app.buildInteractiveHtml(data, market, []), /Marché A/);
   data.preferences.htmlModules.comparison = true;
   assert.match(app.buildInteractiveHtml(data, market, []), /Marché A/);
-  const read = renderToStaticMarkup(createElement(app.PreviewDashboard, { data, market, archive: [], onEdit: () => {} }));
-  assert.match(read, /Modifier pendant le point/);
+  const actions = { updatePriority() {}, updateDossier() {}, addDossier() {}, removeDossier() {}, updateOperation() {}, resetOperation() {}, addOperation() {}, removeOperation() {}, updateJira() {}, resetJira() {}, addJira() {}, setSourceMode() {}, insertModule() {}, hideModule() {} };
+  const read = renderToStaticMarkup(createElement(app.PreviewDashboard, { data, market, archive: [], editing: true, actions }));
+  assert.match(read, /Modification|Ajouter un dossier|Sources du point/);
+  assert.doesNotMatch(read, /Modifier pendant le point/);
   assert.doesNotMatch(read, /Marché A/);
   data.preferences.readModules.comparison = true;
   assert.match(renderToStaticMarkup(createElement(app.PreviewDashboard, { data, market, archive: [] })), /Marché A/);

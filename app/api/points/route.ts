@@ -1,9 +1,6 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { weeklyPoints } from "../../../db/schema";
-import type { PlannerTask } from "../../../lib/planner-import";
-import { loadPlannerRegistry } from "../../../lib/planner-registry-server";
-import { enrichMarketPointFromPlanner, enrichPointPlannerHistory } from "../../../lib/point-planner-enrichment";
 import { getEditorUser } from "../../simple-auth";
 
 type SavePointRequest = {
@@ -29,7 +26,7 @@ function isoWeekParts(dateString: string) {
   return { year, week: 1 + Math.round((target.valueOf() - firstThursday.valueOf()) / 604800000) };
 }
 
-function serializePoint(row: typeof weeklyPoints.$inferSelect, tasks: PlannerTask[] = [], marketTags: string[] = []) {
+function serializePoint(row: typeof weeklyPoints.$inferSelect) {
   return {
     id: row.id,
     marketId: row.marketId,
@@ -38,7 +35,7 @@ function serializePoint(row: typeof weeklyPoints.$inferSelect, tasks: PlannerTas
     meetingDate: row.meetingDate,
     pointName: row.pointName,
     themeColor: row.themeColor,
-    data: marketTags.length ? enrichMarketPointFromPlanner(JSON.parse(row.payload), tasks, marketTags) : enrichPointPlannerHistory(JSON.parse(row.payload), tasks),
+    data: JSON.parse(row.payload),
     createdAt: row.createdAt,
   };
 }
@@ -57,20 +54,17 @@ export async function GET(request: Request) {
     if (!marketId) return Response.json({ error: "marketId est requis" }, { status: 400 });
 
     const db = getDb();
-    const [rows, registry] = await Promise.all([
-      db.select().from(weeklyPoints)
-        .where(eq(weeklyPoints.marketId, marketId))
-        .orderBy(desc(weeklyPoints.year), desc(weeklyPoints.week), desc(weeklyPoints.version))
-        .limit(200),
-      loadPlannerRegistry(),
-    ]);
+    const rows = await db.select().from(weeklyPoints)
+      .where(eq(weeklyPoints.marketId, marketId))
+      .orderBy(desc(weeklyPoints.year), desc(weeklyPoints.week), desc(weeklyPoints.version))
+      .limit(200);
 
     const latestByWeek = new Map<string, typeof weeklyPoints.$inferSelect>();
     rows.forEach((row) => {
       const key = `${row.year}-${row.week}`;
       if (!latestByWeek.has(key)) latestByWeek.set(key, row);
     });
-    return Response.json({ points: Array.from(latestByWeek.values(), (row) => serializePoint(row, registry.tasks, registry.tagsByMarket[marketId] ?? [])) });
+    return Response.json({ points: Array.from(latestByWeek.values(), (row) => serializePoint(row)) });
   } catch (error) {
     return Response.json({ error: routeError(error) }, { status: 500 });
   }

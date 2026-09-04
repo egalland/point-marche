@@ -1,6 +1,7 @@
-import { plannerTaskMonthLabel, type PlannerTask, type PlannerTaskMetrics } from "./planner-import";
+import { type PlannerTask, type PlannerTaskMetrics } from "./planner-import";
 import { supplierLabelFromTask, supplierSeriesForTask } from "./supplier-variations";
 import { usesManualSource } from "./point-source-mode";
+import { marketSimulationFields } from "./market-simulation";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -67,18 +68,12 @@ export function enrichPointPlannerHistory(payload: unknown, tasks: PlannerTask[]
 }
 
 function pointOperation(task: PlannerTask, tasks: PlannerTask[]) {
-  const applicable = task.checklist.filter((item) => !item.nonApplicable);
-  const completed = applicable.filter((item) => item.date).length;
-  const nonApplicable = task.checklist.filter((item) => item.nonApplicable).length;
-  const analystNames = Array.from(new Set(task.checklist.filter((item) => item.analystName).map((item) => item.analystName)));
-  const state = task.workflowState === "completed" ? "Clôturée" : task.workflowState === "stopped" ? "Arrêtée avant finalisation" : task.workflowState === "needs-closure" ? "À clôturer dans Planner" : task.category || task.plannerStatus || "En cours";
+  const plannerBase = marketSimulationFields(task);
   return {
     id: `planner:${task.externalId}`,
-    name: task.taskName,
-    month: plannerTaskMonthLabel(task),
-    state,
-    summary: `${completed}/${applicable.length || task.checklistTotal || 0} étape${applicable.length > 1 ? "s" : ""} applicable${applicable.length > 1 ? "s" : ""}${nonApplicable ? ` · ${nonApplicable} non nécessaire` : ""}${analystNames.length ? ` · ${analystNames.join(" / ")}` : ""}`,
+    ...plannerBase,
     steps: task.checklist.map((item) => [item.label, item.nonApplicable ? "Non applicable" : item.date ? "Fait" : "À faire"]),
+    plannerBase,
     plannerSource: {
       externalId: task.externalId,
       metrics: task.metrics,
