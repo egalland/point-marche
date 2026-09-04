@@ -8946,7 +8946,7 @@ button {
 
 .report-module-grid {
   display: grid;
-  grid-template-columns: repeat(2,minmax(0,1fr));
+  grid-template-columns: repeat(6,minmax(0,1fr));
   gap: 16px;
   margin-top: 16px;
 }
@@ -8956,11 +8956,15 @@ button {
 }
 
 .report-module-item.width-full {
-  grid-column: 1/-1;
+  grid-column: span 6;
 }
 
 .report-module-item.width-half {
-  grid-column: span 1;
+  grid-column: span 3;
+}
+
+.report-module-item.width-two-thirds {
+  grid-column: span 4;
 }
 
 .report-module-item>.jira-command-center {

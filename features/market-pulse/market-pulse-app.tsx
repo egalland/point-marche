@@ -8,7 +8,6 @@ import { AppearanceProvider } from "@/components/appearance-provider";
 import { AppearanceControl, AppearanceSettings } from "@/components/appearance-control";
 import { ActionMenu } from "@/components/action-menu";
 import { accentTokens } from "@/lib/color-contrast";
-import { SupplierTurnover } from "@/components/supplier-turnover";
 import { ModuleLayoutEditor, type ModuleWidth } from "@/components/module-layout-editor";
 import { GLOBAL_ROLE_OPTIONS, roleLabel, roleMailMode, roleUsesAutomaticJira, type GlobalDirectoryUser, type GlobalRole } from "@/lib/global-directory";
 import { isAbandonedJiraStatus, isClosedJiraStatus, JIRA_SUMMARY_STATUSES, type JiraSummaryImport } from "@/lib/jira-import";
@@ -19,7 +18,6 @@ import { AnalystPointDashboard } from "./analyst-point-dashboard";
 import { AnalystStatsDashboard } from "./analyst-stats-dashboard";
 import { ImportCenter } from "./import-center";
 import { PlannerImportDialog } from "./planner-import-dialog";
-import { SupplierSparkline } from "./supplier-variation-dashboard";
 import { WorkspaceNavigation, workspaceTitles, type WorkspaceView } from "./workspace-navigation";
 import { SourceModeControl } from "./source-mode-control";
 import { MarketComparisonChart } from "./market-comparison";
@@ -30,21 +28,22 @@ import { MARKET_SIMULATION_STATES, hasMarketSimulationOverride, marketSimulation
 
 type Tone = "mint" | "violet" | "aqua" | "peach" | "red";
 type View = WorkspaceView;
-type Section = "general" | "dossiers" | "operations" | "jira" | "saved" | "markets" | "users" | "mail" | "personalization";
+type Section = "general" | "dossiers" | "operations" | "promotions" | "jira" | "saved" | "markets" | "users" | "mail" | "personalization";
 type FontScale = "compact" | "standard" | "large";
-type Density = "compact" | "comfortable";
-type PointModule = "jira" | "dossiers" | "operations" | "alerts" | "comparison";
+type Density = "compact" | "comfortable" | "airy";
+type PointModule = "jira" | "dossiers" | "operations" | "promotions" | "alerts" | "comparison";
 type ModuleVisibility = Record<PointModule, boolean>;
-type PointPreferences = { fontScale: FontScale; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
+type PointPreferences = { fontScale: FontScale; fontScalePercent: number; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
 type CarryoverFields = { sourceId?: string; carriedFromYear?: number; carriedFromWeek?: number };
 type Dossier = { id: string; title: string; universe: string; reference: string; status: string; owner: string; action: string; deadline: string; progress: number; showProgress?: boolean; comment: string } & CarryoverFields;
 type PlannerPointSource = { externalId: string; metrics: PlannerTask["metrics"]; supplierLabel?: string; variationHistory?: SupplierVariationPoint[] };
-type CommercialOperation = { id: string; name: string; month: string; state: string; summary: string; steps: [string, string][]; plannerSource?: PlannerPointSource; plannerBase?: MarketSimulationFields; plannerOverride?: MarketSimulationOverride } & CarryoverFields;
+type CommercialOperation = { id: string; kind?: "simulation"; name: string; month: string; state: string; summary: string; steps: [string, string][]; plannerSource?: PlannerPointSource; plannerBase?: MarketSimulationFields; plannerOverride?: MarketSimulationOverride } & CarryoverFields;
+type Promotion = { id: string; name: string; period: string; purchaseNote: string; salesState: string; action: string; comment: string } & CarryoverFields;
 type Tariff = { id: string; code: string; supplier: string; month: string; state: string; receptionDate: string; dueDate: string; owner: string; comment: string };
 type JiraPointFields = { summary: string; status: string; priority: string; assignee: string; lastActivity: string; comment: string; count?: number };
 type JiraPointOverride = Partial<JiraPointFields> & { updatedAt?: string };
 type JiraTicket = { id: string; key: string; internalId?: string; summary: string; status: string; priority: string; assignee: string; assigneeUserCode?: string; createdAt?: string; lastActivity: string; link: string; comment: string; count?: number; importedBase?: JiraPointFields; pointOverride?: JiraPointOverride };
-type PointData = { pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; tariffs: Tariff[]; jira: JiraTicket[]; jiraMode: PointSourceMode; plannerMode: PointSourceMode; marketComparison: MarketComparison | null; preferences: PointPreferences; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
+type PointData = { pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; promotions: Promotion[]; tariffs: Tariff[]; jira: JiraTicket[]; jiraMode: PointSourceMode; plannerMode: PointSourceMode; marketComparison: MarketComparison | null; preferences: PointPreferences; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
 type AlertItem = { title: string; detail: string; severity: "warning" | "danger"; targetId?: string; link?: string; category: "Jira" | "Dossier" };
 type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
 type Market = { id: string; name: string; short: string; tone: ThemeKey; colorHex: string; plannerTags: string[]; position: number; jiraWarningDays: number; jiraCriticalDays: number };
@@ -74,18 +73,19 @@ const themes: { id: ThemeKey; label: string; accent: string; soft: string }[] = 
 ];
 
 const statusOptions = ["Dans les délais", "En cours", "En attente", "À surveiller", "Action requise", "Bloquant", "Terminé"];
-const stepOptions = ["À faire", "En attente", "En cours", "Fait", "Non applicable"];
 const pointModules: { id: PointModule; label: string; detail: string }[] = [
   { id: "jira", label: "Tickets Jira", detail: "Radar, évolution et tickets cliquables" },
   { id: "dossiers", label: "Dossiers", detail: "Dossiers et avancement visible" },
-  { id: "operations", label: "Simulations & opérations", detail: "Source Planner et saisies manuelles" },
+  { id: "operations", label: "Simulations", detail: "État métier final, importé ou corrigé pendant le point" },
+  { id: "promotions", label: "Promotions", detail: "Promotions achat et actions commerciales" },
   { id: "alerts", label: "Vigilances", detail: "Alertes dossiers et Jira" },
   { id: "comparison", label: "Comparaison des marchés", detail: "Camembert des tickets Jira ouverts par marché" },
 ];
-const allModulesVisible = (): ModuleVisibility => ({ jira: true, dossiers: true, operations: true, alerts: true, comparison: false });
-const defaultModuleOrder: PointModule[] = ["jira", "dossiers", "operations", "alerts", "comparison"];
-const defaultModuleWidths: Record<PointModule, ModuleWidth> = { jira: "full", dossiers: "full", operations: "full", alerts: "half", comparison: "full" };
-const defaultPreferences = (): PointPreferences => ({ fontScale: "standard", density: "comfortable", readModules: allModulesVisible(), mailModules: allModulesVisible(), htmlModules: allModulesVisible(), moduleOrder: [...defaultModuleOrder], moduleWidths: { ...defaultModuleWidths } });
+const allModulesVisible = (): ModuleVisibility => ({ jira: true, dossiers: true, operations: true, promotions: true, alerts: true, comparison: false });
+const defaultModuleOrder: PointModule[] = ["jira", "dossiers", "operations", "promotions", "alerts", "comparison"];
+const defaultModuleWidths: Record<PointModule, ModuleWidth> = { jira: "full", dossiers: "full", operations: "full", promotions: "full", alerts: "half", comparison: "full" };
+const defaultPreferences = (): PointPreferences => ({ fontScale: "standard", fontScalePercent: 100, density: "comfortable", readModules: allModulesVisible(), mailModules: allModulesVisible(), htmlModules: allModulesVisible(), moduleOrder: [...defaultModuleOrder], moduleWidths: { ...defaultModuleWidths } });
+const copyPreferences = (preferences: PointPreferences): PointPreferences => ({ ...preferences, readModules: { ...preferences.readModules }, mailModules: { ...preferences.mailModules }, htmlModules: { ...preferences.htmlModules }, moduleOrder: [...preferences.moduleOrder], moduleWidths: { ...preferences.moduleWidths } });
 const emptyPlannerRegistry = (): PlannerRegistrySummary => ({ imported: 0, archiveCandidates: 0, recovered: 0, enriched: 0, usableVariations: 0, withoutVariation: 0, withoutMonth: 0 });
 const emptyDirectoryDraft = (): DirectoryDraft => ({ name: "", email: "", usercode: "", plannerAlias: "", role: "chef-produit", marketIds: [] });
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -98,12 +98,6 @@ const isIsoDate = (value: string) => {
 const safeIsoDate = (value: string, fallback = isoToday()) => isIsoDate(value) ? value : fallback;
 const validHex = (value: string) => /^#[0-9A-F]{6}$/i.test(value.trim());
 const normalizeHex = (value: unknown) => typeof value === "string" && validHex(value) ? value.trim().toUpperCase() : "";
-function hexSoft(value: string) {
-  const hex = normalizeHex(value);
-  if (!hex) return "rgba(114,245,197,.12)";
-  const number = Number.parseInt(hex.slice(1), 16);
-  return `rgba(${number >> 16},${(number >> 8) & 255},${number & 255},.12)`;
-}
 
 function initialData(marketId = "revetements-menuiserie", marketOverride?: Market): PointData {
   const market = marketOverride ?? defaultMarkets.find((item) => item.id === marketId) ?? defaultMarkets[0];
@@ -117,7 +111,7 @@ function initialData(marketId = "revetements-menuiserie", marketOverride?: Marke
     preferences: defaultPreferences(),
     mail: { to: "", cc: "", subject: `Point marché — ${market.name}`, intro: "Bonjour à tous, voici le point d’avancement de la semaine.", autoTo: [], autoCc: [] },
   };
-  if (marketId !== "revetements-menuiserie") return { ...common, dossiers: [], operations: [], tariffs: [], jira: [] };
+  if (marketId !== "revetements-menuiserie") return { ...common, dossiers: [], operations: [], promotions: [], tariffs: [], jira: [] };
   return {
     ...common,
     dossiers: [
@@ -125,9 +119,10 @@ function initialData(marketId = "revetements-menuiserie", marketOverride?: Marke
       { id: uid(), title: "JELDWEN ALLEMAGNE", universe: "Menuiserie", reference: "D2381", status: "Action requise", owner: "", action: "Vérifier la trame transmise avant poursuite.", deadline: "", progress: 55, comment: "Trame à contrôler." },
       { id: uid(), title: "CIB", universe: "Dossier marché", reference: "", status: "En attente", owner: "Équipe vente", action: "Relancer l’équipe vente.", deadline: "", progress: 25, comment: "En attente du retour de l’équipe vente." },
     ],
-    operations: [
-      { id: uid(), name: "Incontournables de la rentrée", month: "Septembre 2026", state: "En attente de contrôle", summary: "", steps: [] },
-      { id: uid(), name: "Champagne Flooring", month: "Octobre 2026", state: "En cours", summary: "", steps: [] },
+    operations: [],
+    promotions: [
+      { id: uid(), name: "Incontournables de la rentrée", period: "Septembre 2026", purchaseNote: "", salesState: "En attente de contrôle", action: "", comment: "" },
+      { id: uid(), name: "Champagne Flooring", period: "Octobre 2026", purchaseNote: "", salesState: "En cours", action: "", comment: "" },
     ],
     tariffs: [],
     jira: [
@@ -141,6 +136,7 @@ function initialData(marketId = "revetements-menuiserie", marketOverride?: Marke
 function normalizeCommercialOperation(item: CommercialOperation): CommercialOperation {
   const current: CommercialOperation = {
     ...item,
+    kind: "simulation",
     name: typeof item.name === "string" ? item.name : "",
     month: typeof item.month === "string" ? item.month : "",
     state: typeof item.state === "string" ? item.state : "À faire",
@@ -151,6 +147,21 @@ function normalizeCommercialOperation(item: CommercialOperation): CommercialOper
   const plannerBase = current.plannerBase && typeof current.plannerBase === "object" ? current.plannerBase : { name: current.name, month: current.month, state: normalizeMarketSimulationState(current.state), summary: "" };
   const plannerOverride = normalizeMarketSimulationOverride(current.plannerOverride);
   return { ...current, plannerBase, ...resolveMarketSimulationFields(plannerBase, plannerOverride), ...(hasMarketSimulationOverride(plannerOverride) ? { plannerOverride } : { plannerOverride: undefined }) };
+}
+
+function normalizePromotion(item: Partial<Promotion> & Partial<CommercialOperation>): Promotion {
+  return {
+    id: typeof item.id === "string" && item.id ? item.id : uid(),
+    name: typeof item.name === "string" ? item.name : "",
+    period: typeof item.period === "string" ? item.period : typeof item.month === "string" ? item.month : "",
+    purchaseNote: typeof item.purchaseNote === "string" ? item.purchaseNote : typeof item.summary === "string" ? item.summary : "",
+    salesState: typeof item.salesState === "string" ? item.salesState : typeof item.state === "string" ? item.state : "À préparer",
+    action: typeof item.action === "string" ? item.action : "",
+    comment: typeof item.comment === "string" ? item.comment : "",
+    ...(item.sourceId ? { sourceId: item.sourceId } : {}),
+    ...(item.carriedFromYear ? { carriedFromYear: item.carriedFromYear } : {}),
+    ...(item.carriedFromWeek ? { carriedFromWeek: item.carriedFromWeek } : {}),
+  };
 }
 
 function normalizeJiraTicket(item: JiraTicket): JiraTicket {
@@ -171,6 +182,15 @@ function normalizePointData(value: unknown, marketId: string, marketOverride?: M
     const sourceModules = value && typeof value === "object" ? value as Record<string, unknown> : {};
     return Object.fromEntries(pointModules.map((module) => [module.id, module.id === "comparison" ? sourceModules[module.id] === true : sourceModules[module.id] !== false])) as ModuleVisibility;
   };
+  const legacyOperations = Array.isArray(source.operations) ? source.operations : Array.isArray(source.simulations) ? source.simulations : [];
+  const hasSeparatedPromotions = Array.isArray(source.promotions);
+  const usesSimulationAlias = !Array.isArray(source.operations) && Array.isArray(source.simulations);
+  const legacySimulation = (item: CommercialOperation) => Boolean(item.plannerSource || item.kind === "simulation" || /^nouvelle simulation/i.test(item.name || "") || (Array.isArray(item.steps) && item.steps.length));
+  const simulations = hasSeparatedPromotions || usesSimulationAlias ? legacyOperations : legacyOperations.filter(legacySimulation);
+  const promotions = hasSeparatedPromotions ? source.promotions! : usesSimulationAlias ? [] : legacyOperations.filter((item) => !legacySimulation(item)).map((item) => normalizePromotion(item));
+  const legacyFontPercent = sourcePreferences.fontScale === "compact" ? 90 : sourcePreferences.fontScale === "large" ? 115 : 100;
+  const fontScalePercent = Math.max(85, Math.min(130, Math.round(Number(sourcePreferences.fontScalePercent) || legacyFontPercent)));
+  const fontScale: FontScale = fontScalePercent < 98 ? "compact" : fontScalePercent > 107 ? "large" : "standard";
   return {
     pointName: "Point marché",
     themeColor,
@@ -179,16 +199,21 @@ function normalizePointData(value: unknown, marketId: string, marketOverride?: M
     priority: typeof source.priority === "string" ? source.priority : fallback.priority,
     jiraMode: normalizeSourceMode(source.jiraMode), plannerMode: normalizeSourceMode(source.plannerMode), marketComparison: normalizeMarketComparison(source.marketComparison),
     preferences: {
-      fontScale: sourcePreferences.fontScale === "compact" || sourcePreferences.fontScale === "large" ? sourcePreferences.fontScale : "standard",
-      density: sourcePreferences.density === "compact" ? "compact" : "comfortable",
+      fontScale,
+      fontScalePercent,
+      density: sourcePreferences.density === "compact" || sourcePreferences.density === "airy" ? sourcePreferences.density : "comfortable",
       readModules: mergeModules(sourcePreferences.readModules),
       mailModules: mergeModules(sourcePreferences.mailModules),
       htmlModules: mergeModules(sourcePreferences.htmlModules),
       moduleOrder: Array.isArray(sourcePreferences.moduleOrder) ? [...sourcePreferences.moduleOrder.filter((id) => pointModules.some((module) => module.id === id)), ...defaultModuleOrder.filter((id) => !sourcePreferences.moduleOrder.includes(id))] : [...defaultModuleOrder],
-      moduleWidths: { ...defaultModuleWidths, ...(sourcePreferences.moduleWidths && typeof sourcePreferences.moduleWidths === "object" ? sourcePreferences.moduleWidths : {}) },
+      moduleWidths: Object.fromEntries(pointModules.map((module) => {
+        const candidate = sourcePreferences.moduleWidths && typeof sourcePreferences.moduleWidths === "object" ? sourcePreferences.moduleWidths[module.id] : undefined;
+        return [module.id, candidate === "half" || candidate === "two-thirds" || candidate === "full" ? candidate : defaultModuleWidths[module.id]];
+      })) as Record<PointModule, ModuleWidth>,
     },
     dossiers: Array.isArray(source.dossiers) ? source.dossiers.map((item) => ({ ...item, showProgress: Boolean(item.showProgress) })) : [],
-    operations: (Array.isArray(source.operations) ? source.operations : Array.isArray(source.simulations) ? source.simulations : []).map(normalizeCommercialOperation),
+    operations: simulations.map(normalizeCommercialOperation),
+    promotions: promotions.map((item) => normalizePromotion(item)),
     tariffs: Array.isArray(source.tariffs) ? source.tariffs : [],
     jira: Array.isArray(source.jira) ? source.jira.filter((ticket) => !isAbandonedJiraStatus(ticket.status)).map(normalizeJiraTicket) : [],
     mail: { ...fallback.mail, ...(source.mail && typeof source.mail === "object" ? source.mail : {}) },
@@ -267,6 +292,7 @@ function plannerTaskToOperation(task: PlannerTask, allTasks: PlannerTask[], prev
   const resolved = resolveMarketSimulationFields(plannerBase, plannerOverride);
   return {
     id: `planner:${task.externalId}`,
+    kind: "simulation",
     ...resolved,
     steps: task.checklist.map((item) => [item.label, item.nonApplicable ? "Non applicable" : item.date ? "Fait" : "À faire"] as [string, string]),
     plannerBase,
@@ -341,9 +367,9 @@ function dateValue(value: string) { const date = new Date(value.includes("T") ? 
 function daysBetween(from: string, to: string) { if (!from || !to) return 0; const difference = dateValue(to) - dateValue(from); return Number.isFinite(difference) ? Math.max(0, Math.floor(difference / 86400000)) : 0; }
 function isClosed(status: string) { return /(termin|cl[oô]tur|r[eé]solu|annul)/i.test(status); }
 function isOperationClosed(operation: CommercialOperation) {
-  if (isClosed(operation.state)) return true;
-  return Boolean(operation.steps.length) && operation.steps.every(([, state]) => /(fait|termin|non applicable|annul)/i.test(state));
+  return /(faite|fait|termin|non finalis|annul)/i.test(operation.state);
 }
+function isPromotionClosed(promotion: Promotion) { return /(termin|cl[oô]tur|annul|fait)/i.test(promotion.salesState); }
 function carriedFromLabel(item: CarryoverFields) {
   return item.carriedFromYear && item.carriedFromWeek ? `Reporté de ${item.carriedFromYear} · S${String(item.carriedFromWeek).padStart(2, "0")}` : "";
 }
@@ -588,12 +614,18 @@ type PointCanvasActions = {
   resetOperation: (id: string) => void;
   addOperation: (month: string) => void;
   removeOperation: (id: string) => void;
+  updatePromotion: (id: string, patch: Partial<Promotion>) => void;
+  addPromotion: () => void;
+  removePromotion: (id: string) => void;
   updateJira: (id: string, patch: Partial<JiraPointFields>) => void;
   resetJira: (id: string) => void;
   addJira: () => void;
   setSourceMode: (source: "jira" | "planner", mode: PointSourceMode) => void;
   insertModule: (module: PointModule, before: PointModule | null) => void;
   hideModule: (module: PointModule) => void;
+  moveModule: (module: PointModule, amount: number) => void;
+  updateModuleWidth: (module: PointModule, width: ModuleWidth) => void;
+  resetLayout: () => void;
 };
 
 function ModuleInsertion({ hidden, before, onInsert }: { hidden: PointModule[]; before: PointModule | null; onInsert: (module: PointModule, before: PointModule | null) => void }) {
@@ -606,6 +638,10 @@ function PreviewDashboard({ data, market, archive, editing = false, actions }: {
   const modules = data.preferences.readModules;
   const alerts = useMemo(() => buildAlerts(data, market).filter((item) => item.category !== "Jira"), [data, market]);
   const [alertFilter, setAlertFilter] = useState<"all" | "danger">("all");
+  const [selectedModule, setSelectedModule] = useState<PointModule | null>(null);
+  const [draggedModule, setDraggedModule] = useState<PointModule | null>(null);
+  const [dropModule, setDropModule] = useState<PointModule | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ module: PointModule; x: number; y: number } | null>(null);
   const visibleAlerts = alerts.filter((item) => alertFilter === "all" || item.severity === "danger");
   const currentMonth = calendarMonthLabel(monthStart(data.meetingDate));
   const followingMonth = calendarMonthLabel(shiftMonth(monthStart(data.meetingDate), 1));
@@ -614,16 +650,60 @@ function PreviewDashboard({ data, market, archive, editing = false, actions }: {
     comparison: <MarketComparisonChart snapshot={data.marketComparison}/>,
     jira: <JiraCommandCenter key={`${market.id}-${data.meetingDate}`} data={data} archive={archive} market={market} editing={editing} onUpdate={actions?.updateJira} onReset={actions?.resetJira} onAdd={actions?.addJira}/>,
     dossiers: <article className="report-focus report-standalone"><div className="report-heading"><div><small>Dossiers</small><h2>En cours</h2></div></div>{data.dossiers.length ? <div className="report-dossiers">{data.dossiers.map((item) => <div id={`dossier-${item.id}`} className={`report-dossier ${editing ? "is-inline-editing" : ""}`} key={item.id}><span className={`status-dot tone-${toneForStatus(item.status)}`}/><div>{editing && actions ? <><input className="canvas-title-input" aria-label="Nom du dossier" value={item.title} placeholder="Nom du dossier" onChange={(event) => actions.updateDossier(item.id, { title: event.target.value })}/><div className="canvas-meta-fields"><input aria-label="Univers" value={item.universe} placeholder="Univers" onChange={(event) => actions.updateDossier(item.id, { universe: event.target.value })}/><input aria-label="Référence" value={item.reference} placeholder="Référence" onChange={(event) => actions.updateDossier(item.id, { reference: event.target.value })}/><input aria-label="Responsable" value={item.owner} placeholder="Responsable" onChange={(event) => actions.updateDossier(item.id, { owner: event.target.value })}/></div></> : <><strong>{item.title || "Dossier sans titre"}</strong><small>{[item.universe, item.reference, item.owner].filter(Boolean).join(" · ") || "Contexte à compléter"}</small></>}{item.showProgress && <div className="report-dossier-progress"><span><i style={{ width: `${Math.max(0, Math.min(100, Number(item.progress) || 0))}%` }}/></span><b>{Math.max(0, Math.min(100, Number(item.progress) || 0))}%</b></div>}</div>{editing && actions ? <textarea className="canvas-action-input" aria-label={`Prochaine action ${item.title}`} value={item.action} placeholder="Prochaine action" onChange={(event) => actions.updateDossier(item.id, { action: event.target.value })}/> : <p>{item.action || item.comment || "Prochaine action à compléter."}</p>}{editing && actions ? <div className="canvas-status-cell"><select aria-label={`Statut ${item.title}`} value={item.status} onChange={(event) => actions.updateDossier(item.id, { status: event.target.value })}>{[...new Set([item.status, ...statusOptions])].map((status) => <option key={status}>{status}</option>)}</select><button type="button" className="canvas-remove" aria-label={`Retirer ${item.title || "ce dossier"}`} onClick={() => actions.removeDossier(item.id)}><Icon name="trash" size={14}/></button></div> : <span className={`report-pill tone-${toneForStatus(item.status)}`}>{item.status}</span>}</div>)}</div> : <div className="report-empty">Aucun dossier renseigné</div>}{editing && actions && <button type="button" className="canvas-inline-add" onClick={actions.addDossier}><Icon name="plus" size={15}/> Ajouter un dossier</button>}</article>,
-    operations: <article className="report-focus report-standalone canvas-simulations"><div className="report-heading"><div><small>État au moment du point</small><h2>Simulations</h2></div></div><div className="simulation-month-grid">{operationGroups.map((group) => <section className="simulation-month" key={group.month}><header><span>{group.month}</span><b>{group.items.length}</b></header><div>{group.items.map((item) => <article className={`simulation-state-card ${item.plannerSource ? "is-imported" : "is-manual"}`} key={item.id}>{editing && actions ? <><input className="canvas-title-input" aria-label="Nom de la simulation" value={item.name} placeholder="Nom de la simulation" onChange={(event) => actions.updateOperation(item.id, { name: event.target.value })}/><select className={`simulation-state-select tone-${toneForStatus(item.state)}`} aria-label={`État ${item.name}`} value={item.state} onChange={(event) => actions.updateOperation(item.id, { state: event.target.value })}>{[...new Set([item.state, ...MARKET_SIMULATION_STATES])].map((state) => <option key={state}>{state}</option>)}</select><select className="simulation-month-select" aria-label={`Mois ${item.name}`} value={item.month === followingMonth ? followingMonth : currentMonth} onChange={(event) => actions.updateOperation(item.id, { month: event.target.value })}><option>{currentMonth}</option><option>{followingMonth}</option></select><div className="point-override-actions">{item.plannerSource && <span>Planner</span>}{hasMarketSimulationOverride(item.plannerOverride) && <><span>Modifiée dans le point</span><button type="button" onClick={() => actions.resetOperation(item.id)}>Valeur importée</button></>}{!item.plannerSource && <button type="button" onClick={() => actions.removeOperation(item.id)}>Retirer</button>}</div></> : <><div><span className={`report-pill tone-${toneForStatus(item.state)}`}>{item.state}</span>{item.plannerSource && <span className="planner-source-pill">Planner</span>}{hasMarketSimulationOverride(item.plannerOverride) && <span className="point-override-badge">Modifiée dans le point</span>}</div><h3>{item.name || "Simulation sans titre"}</h3></>}</article>)}</div>{editing && actions && <button type="button" className="canvas-inline-add month-add" onClick={() => actions.addOperation(group.month)}><Icon name="plus" size={15}/> Ajouter une simulation</button>}</section>)}</div>{!data.operations.length && !editing && <div className="report-empty">Aucune simulation renseignée</div>}</article>,
+    operations: <article className="report-focus report-standalone canvas-simulations"><div className="report-heading"><div><small>État au moment du point</small><h2>Simulations</h2></div></div><div className="simulation-month-grid">{operationGroups.map((group) => <section className="simulation-month" key={group.month}><header><span>{group.month}</span><b>{group.items.length}</b></header><div>{group.items.map((item) => <article className={`simulation-state-card ${item.plannerSource ? "is-imported" : "is-manual"}`} key={item.id}>{editing && actions ? <><input className="canvas-title-input" aria-label="Nom de la simulation" value={item.name} placeholder="Nom de la simulation" onChange={(event) => actions.updateOperation(item.id, { name: event.target.value })}/><select className={`simulation-state-select tone-${toneForStatus(item.state)}`} aria-label={`État ${item.name}`} value={item.state} onChange={(event) => actions.updateOperation(item.id, { state: event.target.value })}>{[...new Set([item.state, ...MARKET_SIMULATION_STATES])].map((state) => <option key={state}>{state}</option>)}</select><select className="simulation-month-select" aria-label={`Mois ${item.name}`} value={item.month === followingMonth ? followingMonth : currentMonth} onChange={(event) => actions.updateOperation(item.id, { month: event.target.value })}><option>{currentMonth}</option><option>{followingMonth}</option></select><div className="point-override-actions">{hasMarketSimulationOverride(item.plannerOverride) && <><span>Modifiée dans le point</span><button type="button" onClick={() => actions.resetOperation(item.id)}>Valeur importée</button></>}{!item.plannerSource && <button type="button" onClick={() => actions.removeOperation(item.id)}>Retirer</button>}</div></> : <><div><span className={`report-pill tone-${toneForStatus(item.state)}`}>{item.state}</span>{hasMarketSimulationOverride(item.plannerOverride) && <span className="point-override-badge">Modifiée dans le point</span>}</div><h3>{item.name || "Simulation sans titre"}</h3></>}</article>)}</div>{editing && actions && <button type="button" className="canvas-inline-add month-add" onClick={() => actions.addOperation(group.month)}><Icon name="plus" size={15}/> Ajouter une simulation</button>}</section>)}</div>{!data.operations.length && !editing && <div className="report-empty">Aucune simulation renseignée</div>}</article>,
+    promotions: <article className="report-focus report-standalone canvas-promotions"><div className="report-heading"><div><small>Suivi commercial</small><h2>Promotions</h2></div></div>{data.promotions.length ? <div className="promotion-card-grid">{data.promotions.map((item) => <article className={`promotion-card ${editing ? "is-inline-editing" : ""}`} key={item.id}>{editing && actions ? <><input className="canvas-title-input" aria-label="Nom de la promotion" value={item.name} placeholder="Nom de la promotion" onChange={(event) => actions.updatePromotion(item.id, { name: event.target.value })}/><div className="promotion-edit-grid"><input aria-label={`Période ${item.name}`} value={item.period} placeholder="Période" onChange={(event) => actions.updatePromotion(item.id, { period: event.target.value })}/><input aria-label={`État vente ${item.name}`} value={item.salesState} placeholder="État vente" onChange={(event) => actions.updatePromotion(item.id, { salesState: event.target.value })}/></div><textarea aria-label={`Promotion achat ${item.name}`} value={item.purchaseNote} placeholder="Promotion achat" onChange={(event) => actions.updatePromotion(item.id, { purchaseNote: event.target.value })}/><textarea aria-label={`Action ${item.name}`} value={item.action} placeholder="Action / prochaine étape" onChange={(event) => actions.updatePromotion(item.id, { action: event.target.value })}/><textarea aria-label={`Commentaire ${item.name}`} value={item.comment} placeholder="Commentaire" onChange={(event) => actions.updatePromotion(item.id, { comment: event.target.value })}/><button type="button" className="canvas-remove promotion-remove" aria-label={`Retirer ${item.name}`} onClick={() => actions.removePromotion(item.id)}><Icon name="trash" size={14}/></button></> : <><header><div><strong>{item.name || "Promotion sans titre"}</strong><small>{item.period || "Période à définir"}</small></div><span className={`report-pill tone-${toneForStatus(item.salesState)}`}>{item.salesState || "À préparer"}</span></header>{item.purchaseNote && <p><b>Promotion achat</b>{item.purchaseNote}</p>}{item.action && <p><b>Action</b>{item.action}</p>}{item.comment && <small className="promotion-comment">{item.comment}</small>}</>}</article>)}</div> : !editing && <div className="report-empty">Aucune promotion renseignée</div>}{editing && actions && <button type="button" className="canvas-inline-add" onClick={actions.addPromotion}><Icon name="plus" size={15}/> Ajouter une promotion</button>}</article>,
     alerts: <article className="report-alert-card"><div className="alert-heading"><h2>Vigilances du point</h2></div>{alerts.length > 0 && <div className="alert-filters"><button type="button" className={alertFilter === "all" ? "active" : ""} onClick={() => setAlertFilter("all")}>Toutes</button><button type="button" className={alertFilter === "danger" ? "active" : ""} onClick={() => setAlertFilter("danger")}>Critiques</button></div>}{visibleAlerts.length ? visibleAlerts.map((item, index) => <a className="alert-line alert-line-clean" key={`${item.title}-${index}`} href={item.targetId ? `#${item.targetId}` : "#top"}><div><strong>{item.title}</strong><small><b>{item.category}</b> · {item.detail}</small></div><Icon name="chevron" size={14}/></a>) : <div className="report-empty light-empty">{alerts.length ? "Aucune vigilance dans ce filtre" : "Aucune vigilance détectée"}</div>}</article>,
   };
   const visibleModules = data.preferences.moduleOrder.filter((module) => modules[module]);
   const hiddenModules = data.preferences.moduleOrder.filter((module) => !modules[module]);
-  return <div className="report-canvas"><div className="report-ambient report-ambient-one"/><div className="report-ambient report-ambient-two"/>
-    <header className="report-hero"><div><div className="market-badge"><i/> MARKET PULSE <b>/</b> {market.short}</div><h1>Point marché</h1><p><strong>{market.name}</strong><span>Dossiers · simulations tarifaires · Jira</span></p></div><div className="week-card"><strong><small>{isoWeekYear(data.meetingDate)} ·</small>S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong><i/><div><b>{dateLabel(data.meetingDate)}</b><span>Année et semaine ISO</span></div></div></header>
+  useEffect(() => {
+    if (editing) return;
+    const timer = window.setTimeout(() => { setSelectedModule(null); setContextMenu(null); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [editing]);
+  useEffect(() => {
+    if (!editing || !actions) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true'], [role='dialog']")) return;
+      if (event.key === "Escape") { setSelectedModule(null); setContextMenu(null); return; }
+      if (!selectedModule) return;
+      if ((event.key === "Delete" || event.key === "Backspace") && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault(); actions.hideModule(selectedModule); setSelectedModule(null); return;
+      }
+      if (!event.altKey) return;
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault(); actions.moveModule(selectedModule, event.key === "ArrowUp" ? -1 : 1); return;
+      }
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        const widths: ModuleWidth[] = ["half", "two-thirds", "full"];
+        const current = widths.indexOf(data.preferences.moduleWidths[selectedModule]);
+        const next = Math.max(0, Math.min(widths.length - 1, current + (event.key === "ArrowLeft" ? -1 : 1)));
+        actions.updateModuleWidth(selectedModule, widths[next]);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [actions, data.preferences.moduleWidths, editing, selectedModule]);
+  const moduleLabel = (module: PointModule) => pointModules.find((item) => item.id === module)?.label ?? module;
+  const moduleToolbar = (module: PointModule, index: number) => editing && actions ? <div className="canvas-module-toolbar" aria-label={`Mise en page du bloc ${moduleLabel(module)}`}>
+    <button type="button" className="canvas-drag-handle" draggable title="Faire glisser le bloc" aria-label={`Déplacer ${moduleLabel(module)}`} onDragStart={(event) => { setDraggedModule(module); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", module); }} onDragEnd={() => { setDraggedModule(null); setDropModule(null); }}>⋮⋮</button>
+    <span>{moduleLabel(module)}</span>
+    {(["half", "two-thirds", "full"] as ModuleWidth[]).map((width) => <button type="button" key={width} className={data.preferences.moduleWidths[module] === width ? "active" : ""} aria-label={`Largeur ${width === "half" ? "moitié" : width === "two-thirds" ? "deux tiers" : "pleine"}`} onClick={() => actions.updateModuleWidth(module, width)}>{width === "half" ? "1/2" : width === "two-thirds" ? "2/3" : "1/1"}</button>)}
+    <button type="button" disabled={index === 0} title="Monter" aria-label={`Monter ${moduleLabel(module)}`} onClick={() => actions.moveModule(module, -1)}>↑</button>
+    <button type="button" disabled={index === visibleModules.length - 1} title="Descendre" aria-label={`Descendre ${moduleLabel(module)}`} onClick={() => actions.moveModule(module, 1)}>↓</button>
+    <button type="button" className="danger" title="Masquer" aria-label={`Masquer ${moduleLabel(module)}`} onClick={() => { actions.hideModule(module); setSelectedModule(null); }}><Icon name="trash" size={13}/></button>
+  </div> : null;
+  return <div className="report-canvas" onClick={() => setContextMenu(null)}><div className="report-ambient report-ambient-one"/><div className="report-ambient report-ambient-two"/>
+    <header className="report-hero"><div><div className="market-badge"><i/> MARKET PULSE <b>/</b> {market.short}</div><h1>Point marché</h1><p><strong>{market.name}</strong><span>Dossiers · simulations · promotions · Jira</span></p></div><div className="week-card"><strong><small>{isoWeekYear(data.meetingDate)} ·</small>S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong><i/><div><b>{dateLabel(data.meetingDate)}</b><span>Année et semaine ISO</span></div></div></header>
     <section className={`report-priority ${editing ? "is-inline-editing" : ""}`}><span>Priorité de la semaine</span>{editing && actions ? <textarea aria-label="Priorité de la semaine" value={data.priority} placeholder="Message clé de la semaine" onChange={(event) => actions.updatePriority(event.target.value)}/> : <strong>{data.priority || "Aucune priorité renseignée."}</strong>}</section>
     {editing && actions ? <div className="canvas-source-controls"><span>Sources du point</span><div><b>Jira</b><button type="button" className={data.jiraMode === "automatic" ? "active" : ""} onClick={() => actions.setSourceMode("jira", "automatic")}>Import</button><button type="button" className={data.jiraMode === "manual" ? "active" : ""} onClick={() => actions.setSourceMode("jira", "manual")}>Manuel</button></div><div><b>Simulations</b><button type="button" className={data.plannerMode === "automatic" ? "active" : ""} onClick={() => actions.setSourceMode("planner", "automatic")}>Import</button><button type="button" className={data.plannerMode === "manual" ? "active" : ""} onClick={() => actions.setSourceMode("planner", "manual")}>Manuel</button></div></div> : (data.jiraMode === "manual" || data.plannerMode === "manual") && <p className="point-source-caption">{[data.jiraMode === "manual" ? "Jira : saisie manuelle" : "", data.plannerMode === "manual" ? "Simulations : saisie manuelle" : ""].filter(Boolean).join(" · ")}</p>}
-    <div className={`report-module-grid ${editing ? "is-inline-editing" : ""}`}>{editing && actions && <ModuleInsertion key="insert:first" hidden={hiddenModules} before={visibleModules[0] ?? null} onInsert={actions.insertModule}/>} {visibleModules.flatMap((module, index) => [<div key={module} className={`report-module-item width-${data.preferences.moduleWidths[module]}`}><div className="canvas-module-shell">{editing && actions && <button type="button" className="canvas-hide-module" onClick={() => actions.hideModule(module)}><Icon name="trash" size={13}/> Masquer le bloc</button>}{content[module]}</div></div>, editing && actions ? <ModuleInsertion key={`insert:${module}`} hidden={hiddenModules} before={visibleModules[index + 1] ?? null} onInsert={actions.insertModule}/> : null])}</div>
+    <div className={`report-module-grid ${editing ? "is-inline-editing" : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { if (!actions || !draggedModule || dropModule) return; event.preventDefault(); actions.insertModule(draggedModule, null); setDraggedModule(null); }}>
+      {editing && actions && <ModuleInsertion key="insert:first" hidden={hiddenModules} before={visibleModules[0] ?? null} onInsert={actions.insertModule}/>}
+      {visibleModules.flatMap((module, index) => [<div key={module} className={`report-module-item width-${data.preferences.moduleWidths[module]} ${selectedModule === module ? "is-selected" : ""} ${dropModule === module ? "is-drop-target" : ""}`} onClick={(event) => { if (editing) { event.stopPropagation(); setSelectedModule(module); setContextMenu(null); } }} onContextMenu={(event) => { if (!editing || !actions) return; event.preventDefault(); event.stopPropagation(); setSelectedModule(module); setContextMenu({ module, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 245)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 420)) }); }} onDragEnter={(event) => { if (!editing || !draggedModule || draggedModule === module) return; event.preventDefault(); setDropModule(module); }} onDragOver={(event) => { if (editing && draggedModule) event.preventDefault(); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDropModule((current) => current === module ? null : current); }} onDrop={(event) => { if (!actions || !draggedModule || draggedModule === module) return; event.preventDefault(); event.stopPropagation(); actions.insertModule(draggedModule, module); setDraggedModule(null); setDropModule(null); }}><div className="canvas-module-shell">{moduleToolbar(module, index)}{content[module]}</div></div>, editing && actions ? <ModuleInsertion key={`insert:${module}`} hidden={hiddenModules} before={visibleModules[index + 1] ?? null} onInsert={actions.insertModule}/> : null])}
+    </div>
+    {contextMenu && editing && actions && <div className="canvas-context-menu" role="menu" aria-label={`Actions pour ${moduleLabel(contextMenu.module)}`} style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}><strong>{moduleLabel(contextMenu.module)}</strong><button type="button" onClick={() => { actions.moveModule(contextMenu.module, -1); setContextMenu(null); }}>↑ Monter</button><button type="button" onClick={() => { actions.moveModule(contextMenu.module, 1); setContextMenu(null); }}>↓ Descendre</button><div className="canvas-context-width"><span>Largeur</span>{(["half", "two-thirds", "full"] as ModuleWidth[]).map((width) => <button key={width} type="button" className={data.preferences.moduleWidths[contextMenu.module] === width ? "active" : ""} onClick={() => actions.updateModuleWidth(contextMenu.module, width)}>{width === "half" ? "1/2" : width === "two-thirds" ? "2/3" : "1/1"}</button>)}</div>{hiddenModules.length > 0 && <><label>Ajouter avant<select defaultValue="" onChange={(event) => { const moduleId = event.target.value as PointModule; if (moduleId) actions.insertModule(moduleId, contextMenu.module); setContextMenu(null); }}><option value="">Choisir…</option>{hiddenModules.map((module) => <option key={module} value={module}>{moduleLabel(module)}</option>)}</select></label><label>Ajouter après<select defaultValue="" onChange={(event) => { const moduleId = event.target.value as PointModule; if (moduleId) { const index = data.preferences.moduleOrder.indexOf(contextMenu.module); actions.insertModule(moduleId, data.preferences.moduleOrder[index + 1] ?? null); } setContextMenu(null); }}><option value="">Choisir…</option>{hiddenModules.map((module) => <option key={module} value={module}>{moduleLabel(module)}</option>)}</select></label></>}<button type="button" className="danger" onClick={() => { actions.hideModule(contextMenu.module); setSelectedModule(null); setContextMenu(null); }}>Masquer le bloc</button><button type="button" onClick={() => { actions.resetLayout(); setContextMenu(null); }}>Réinitialiser la structure</button></div>}
     <footer className="report-footer"><span>Market Pulse · {market.name}</span><span>Point marché · {isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</span></footer>
   </div>;
 }
@@ -641,7 +721,8 @@ function buildMailHtml(data: PointData, market: Market, archive: PointRecord[]) 
     const progressHtml = item.showProgress ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:8px"><tr><td style="height:6px;border-radius:99px;background:#DDE7E3;overflow:hidden"><div style="width:${progress}%;height:6px;background:${accent}"></div></td><td width="38" style="padding-left:8px;color:#41534E;font-size:10px;font-weight:700;text-align:right">${progress}%</td></tr></table>` : "";
     return `<tr><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA"><b style="color:#10201D">${escapeHtml(item.title || "Dossier")}</b><br><span style="color:#667873;font-size:11px">${escapeHtml([item.universe, item.reference, item.owner].filter(Boolean).join(" · "))}</span>${progressHtml}</td><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA;color:#41534E;font-size:12px">${escapeHtml(item.action || item.comment || "—")}</td><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA;text-align:right"><span style="display:inline-block;padding:6px 9px;border-radius:99px;background:#EEF3F1;color:#253E36;font-size:10px;font-weight:700">${escapeHtml(item.status)}</span></td></tr>`;
   }).join("");
-  const operationRows = data.operations.map((item) => `<tr><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA"><b style="display:block;color:#10201D;font-size:11px">${escapeHtml(item.name || "Simulation")}</b><span style="display:block;margin-top:3px;color:#70807C;font-size:9px">${escapeHtml(item.month || "Mois à définir")}${item.plannerSource ? " · Planner" : ""}${hasMarketSimulationOverride(item.plannerOverride) ? " · modifiée dans le point" : ""}</span></td><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA;color:#274C40;font-size:10px;font-weight:700;text-align:right">${escapeHtml(item.state || "À faire")}</td></tr>`).join("");
+  const operationRows = data.operations.map((item) => `<tr><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA"><b style="display:block;color:#10201D;font-size:11px">${escapeHtml(item.name || "Simulation")}</b><span style="display:block;margin-top:3px;color:#70807C;font-size:9px">${escapeHtml(item.month || "Mois à définir")}${hasMarketSimulationOverride(item.plannerOverride) ? " · modifiée dans le point" : ""}</span></td><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA;color:#274C40;font-size:10px;font-weight:700;text-align:right">${escapeHtml(item.state || "À faire")}</td></tr>`).join("");
+  const promotionRows = data.promotions.map((item) => `<tr><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA"><b style="display:block;color:#10201D;font-size:11px">${escapeHtml(item.name || "Promotion")}</b><span style="display:block;margin-top:3px;color:#70807C;font-size:9px">${escapeHtml(item.period || "Période à définir")}</span>${item.purchaseNote ? `<span style="display:block;margin-top:5px;color:#41534E;font-size:10px"><b>Promotion achat :</b> ${escapeHtml(item.purchaseNote)}</span>` : ""}${item.action ? `<span style="display:block;margin-top:4px;color:#41534E;font-size:10px"><b>Action :</b> ${escapeHtml(item.action)}</span>` : ""}${item.comment ? `<span style="display:block;margin-top:4px;color:#70807C;font-size:9px">${escapeHtml(item.comment)}</span>` : ""}</td><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA;color:#274C40;font-size:10px;font-weight:700;text-align:right">${escapeHtml(item.salesState || "À préparer")}</td></tr>`).join("");
   const sortedJiraRows = stats.rows.slice().sort((left, right) => attentionRank[left.level] - attentionRank[right.level] || (right.inactivity ?? -1) - (left.inactivity ?? -1));
   const jiraRows = groupJiraPeople(sortedJiraRows.map((row) => row.item)).map((person) => `<tr><td colspan="4" style="padding:13px 10px 7px;border-bottom:1px solid #DCE5E2;color:#10201D;font-size:12px;font-weight:700">${escapeHtml(person.assignee)} <span style="color:#72827E;font-weight:400">· ${person.total} ticket${person.total > 1 ? "s" : ""}</span></td></tr>${person.items.map((item) => { const signal = jiraAttention(item, data.meetingDate, market); const key = item.link ? `<a href="${escapeHtml(item.link)}" target="_blank" style="color:#126887;font-weight:700;text-decoration:underline">${escapeHtml(item.key || "Ouvrir")}</a>` : `<span style="color:#566A64;font-weight:700">${escapeHtml(item.key || "Synthèse")}</span>`; const alertColor = signal.level === "critical" ? "#B42318" : signal.level === "warning" ? "#9A5B13" : "#47615A"; const alertBackground = signal.level === "critical" ? "#FEECEB" : signal.level === "warning" ? "#FFF3E4" : "#EEF3F1"; return `<tr><td width="105" style="padding:10px;border-bottom:1px solid #EDF1EF;font-size:10px">${key}</td><td style="padding:10px;border-bottom:1px solid #EDF1EF;color:#263C36;font-size:11px"><b>${escapeHtml(item.summary || "Synthèse de la file Jira")}</b><br><span style="color:#71817D;font-size:9px">${escapeHtml(item.status)}</span></td><td width="115" style="padding:10px;border-bottom:1px solid #EDF1EF;color:#71817D;font-size:9px">${signal.inactivity === null ? "Activité non datée" : `Modifié il y a ${signal.inactivity} j`}</td><td width="95" style="padding:10px;border-bottom:1px solid #EDF1EF;text-align:right"><span style="display:inline-block;padding:5px 7px;border-radius:7px;background:${alertBackground};color:${alertColor};font-size:9px;font-weight:700">${signal.level === "critical" ? "Critique" : signal.level === "warning" ? "À surveiller" : "À jour"}</span></td></tr>`; }).join("")}`).join("");
   const alertRows = alerts.map((item) => `<tr><td style="padding:10px;border-bottom:1px solid #F0D9D3"><b style="display:block;color:${item.severity === "danger" ? "#9B241C" : "#784615"};font-size:11px">${escapeHtml(item.title)}</b><span style="color:#6C5751;font-size:10px">${escapeHtml(item.category)} · ${escapeHtml(item.detail)}</span></td></tr>`).join("");
@@ -653,6 +734,7 @@ function buildMailHtml(data: PointData, market: Market, archive: PointRecord[]) 
     jira: section(data.jiraMode === "manual" ? "Tickets Jira · saisie manuelle" : "Tickets Jira · alertes prioritaires", `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${jiraRows || '<tr><td style="padding:13px 10px;color:#71817D;font-size:11px">Aucun ticket actif.</td></tr>'}</table>`),
     dossiers: section("Dossiers en cours", dossierRows ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${dossierRows}</table>` : emptyRow),
     operations: section(data.plannerMode === "manual" ? "Simulations · saisie manuelle" : "Simulations", operationRows ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${operationRows}</table>` : emptyRow),
+    promotions: section("Promotions", promotionRows ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${promotionRows}</table>` : emptyRow),
     alerts: section("Vigilances du point", alertRows ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${alertRows}</table>` : emptyRow),
   };
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${escapeHtml(data.mail.subject)}</title></head><body style="margin:0;padding:0;background:#FFFFFF;font-family:Arial,sans-serif;color:#10201D"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#FFFFFF"><tr><td align="center" style="padding:24px 10px"><table role="presentation" width="900" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:900px;background:#FFFFFF;border:1px solid #DCE5E2;border-top:5px solid ${accent}">
@@ -690,7 +772,8 @@ function buildInteractiveHtml(data: PointData, market: Market, archive: PointRec
     const progressHtml = item.showProgress ? `<div class="dossier-progress"><span><i style="width:${progress}%"></i></span><strong>${progress}%</strong></div>` : "";
     return `<article><strong>${escapeHtml(item.title || "Dossier")}</strong><span>${escapeHtml([item.universe, item.reference, item.owner].filter(Boolean).join(" · "))}</span>${progressHtml}<p>${escapeHtml(item.action || item.comment || "Prochaine action à compléter.")}</p><b>${escapeHtml(item.status)}</b></article>`;
   }).join("");
-  const operations = data.operations.map((item) => `<article><strong>${escapeHtml(item.name || "Simulation")}</strong><span>${escapeHtml(item.month || "Mois à définir")}${item.plannerSource ? " · Planner" : ""}${hasMarketSimulationOverride(item.plannerOverride) ? " · modifiée dans le point" : ""}</span><b>${escapeHtml(item.state || "À faire")}</b></article>`).join("");
+  const operations = data.operations.map((item) => `<article><strong>${escapeHtml(item.name || "Simulation")}</strong><span>${escapeHtml(item.month || "Mois à définir")}${hasMarketSimulationOverride(item.plannerOverride) ? " · modifiée dans le point" : ""}</span><b>${escapeHtml(item.state || "À faire")}</b></article>`).join("");
+  const promotions = data.promotions.map((item) => `<article><strong>${escapeHtml(item.name || "Promotion")}</strong><span>${escapeHtml(item.period || "Période à définir")}</span>${item.purchaseNote ? `<p><b>Promotion achat :</b> ${escapeHtml(item.purchaseNote)}</p>` : ""}${item.action ? `<p><b>Action :</b> ${escapeHtml(item.action)}</p>` : ""}${item.comment ? `<small>${escapeHtml(item.comment)}</small>` : ""}<b>${escapeHtml(item.salesState || "À préparer")}</b></article>`).join("");
   const otherAlerts = buildAlerts(data, market).filter((item) => item.category !== "Jira").map((item) => `<article class="${item.severity}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.category)} · ${escapeHtml(item.detail)}</span></article>`).join("");
   const deltaLabel = stats.delta === null ? "—" : `${stats.delta > 0 ? "+" : ""}${stats.delta}`;
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(data.mail.subject)} · interactif</title><style>
@@ -698,7 +781,7 @@ function buildInteractiveHtml(data: PointData, market: Market, archive: PointRec
   </style></head><body><main class="shell"><header class="hero"><div><span class="eyebrow">Market Pulse / ${escapeHtml(market.short)}</span><h1>Point marché</h1><p>${escapeHtml(market.name)} · ${escapeHtml(dateLabel(data.meetingDate))}</p></div><div class="week"><strong>${isoWeekYear(data.meetingDate)} · S${String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong><span>Semaine ISO</span></div></header><section class="priority"><span>Priorité de la semaine</span><strong>${escapeHtml(data.priority || "Aucune priorité renseignée.")}</strong></section>
   ${modules.jira ? `<section class="jira"><header class="jira-head"><div><span class="eyebrow">Radar Jira interactif</span><h2>Tickets ouverts du marché</h2><p>Les tickets en alerte sont placés en premier. Utilisez les filtres, ouvrez une personne puis cliquez sur un ticket pour accéder à Jira.</p></div><div class="delta"><small>Depuis le dernier point</small><strong>${deltaLabel}</strong></div></header><div class="kpis"><button type="button" class="active" data-scope="all"><span>Tickets ouverts</span><strong>${stats.currentVolume}</strong><small>Stock actuel</small></button><button type="button" class="warning" data-scope="attention"><span>Sans activité</span><strong>${stats.attentionCount}</strong><small>Depuis ${market.jiraWarningDays} jours</small></button><button type="button" class="critical" data-scope="critical"><span>Attention forte</span><strong>${stats.criticalCount}</strong><small>Depuis ${market.jiraCriticalDays} jours</small></button></div><div class="visuals"><article class="panel"><strong>Évolution du volume</strong><div class="trend">${trendBars}</div></article><article class="panel"><strong>Répartition par statut</strong><div class="status-bar">${statusSegments || "<i></i>"}</div><div class="status-buttons"><button type="button" class="active" data-status="all">Tous</button>${statusButtons}</div></article></div><div class="filter-line"><span><strong id="visible-total">${stats.currentVolume}</strong> tickets affichés</span><button type="button" id="reset-filter">Réinitialiser</button></div><div class="people">${peopleHtml || '<div class="empty">Aucun ticket Jira actif.</div>'}</div></section>` : ""}
   ${modules.comparison ? `<section class="section"><h2>Comparaison des marchés</h2>${marketComparisonHtml(data.marketComparison)}</section>` : ""}
-  ${(modules.dossiers || modules.operations || modules.alerts) ? `<div class="point-grid"><div>${modules.dossiers ? `<section class="section"><h2>Dossiers en cours</h2><div class="cards">${dossiers || '<div class="empty">Aucun dossier renseigné.</div>'}</div></section>` : ""}${modules.operations ? `<section class="section"${modules.dossiers ? ' style="margin-top:14px"' : ""}><h2>Simulations</h2><div class="cards">${operations || '<div class="empty">Aucune simulation renseignée.</div>'}</div></section>` : ""}</div><aside>${modules.alerts ? `<section class="section"><h2>Vigilances du point</h2><div class="cards alerts">${otherAlerts || '<div class="empty">Aucune vigilance détectée.</div>'}</div></section>` : ""}</aside></div>` : ""}<footer class="footer">Market Pulse · ${escapeHtml(market.name)} · fichier interactif autonome</footer></main>
+  ${(modules.dossiers || modules.operations || modules.promotions || modules.alerts) ? `<div class="point-grid"><div>${modules.dossiers ? `<section class="section"><h2>Dossiers en cours</h2><div class="cards">${dossiers || '<div class="empty">Aucun dossier renseigné.</div>'}</div></section>` : ""}${modules.operations ? `<section class="section"${modules.dossiers ? ' style="margin-top:14px"' : ""}><h2>Simulations</h2><div class="cards">${operations || '<div class="empty">Aucune simulation renseignée.</div>'}</div></section>` : ""}${modules.promotions ? `<section class="section"${modules.dossiers || modules.operations ? ' style="margin-top:14px"' : ""}><h2>Promotions</h2><div class="cards">${promotions || '<div class="empty">Aucune promotion renseignée.</div>'}</div></section>` : ""}</div><aside>${modules.alerts ? `<section class="section"><h2>Vigilances du point</h2><div class="cards alerts">${otherAlerts || '<div class="empty">Aucune vigilance détectée.</div>'}</div></section>` : ""}</aside></div>` : ""}<footer class="footer">Market Pulse · ${escapeHtml(market.name)} · fichier interactif autonome</footer></main>
   ${modules.jira ? "<script>(function(){var scope='all',status='all';var scopeButtons=[].slice.call(document.querySelectorAll('[data-scope]'));var statusButtons=[].slice.call(document.querySelectorAll('[data-status]'));function refresh(){var total=0;[].slice.call(document.querySelectorAll('.person-card')).forEach(function(card){var visible=0;[].slice.call(card.querySelectorAll('.ticket-row')).forEach(function(row){var level=row.getAttribute('data-level');var rowStatus=row.getAttribute('data-status');var scopeOk=scope==='all'||(scope==='attention'&&(level==='warning'||level==='critical'))||(scope==='critical'&&level==='critical');var statusOk=status==='all'||status===rowStatus;row.hidden=!(scopeOk&&statusOk);if(!row.hidden){visible++;total+=Number(row.getAttribute('data-count')||1);}});card.hidden=visible===0;});document.getElementById('visible-total').textContent=String(total);scopeButtons.forEach(function(button){button.classList.toggle('active',button.getAttribute('data-scope')===scope);});statusButtons.forEach(function(button){button.classList.toggle('active',button.getAttribute('data-status')===status);});}scopeButtons.forEach(function(button){button.addEventListener('click',function(){scope=button.getAttribute('data-scope')||'all';refresh();});});statusButtons.forEach(function(button){button.addEventListener('click',function(){var next=button.getAttribute('data-status')||'all';status=status===next&&next!=='all'?'all':next;refresh();});});document.getElementById('reset-filter').addEventListener('click',function(){scope='all';status='all';refresh();});refresh();})();</script>" : ""}
   </body></html>`;
 }
@@ -755,13 +838,18 @@ function MarketPulseWorkspace() {
   const confirmResolver = useRef<((confirmed: boolean) => void) | null>(null);
   const comparisonRequest = useRef(0);
   const comparisonContext = useRef("");
-  comparisonContext.current = `${marketId}:${isoWeekYear(data.meetingDate)}:${isoWeek(data.meetingDate)}`;
+  const undoStack = useRef<PointData[]>([]);
+  const redoStack = useRef<PointData[]>([]);
+  const previousData = useRef(data);
+  const historyRestoring = useRef(false);
+  const lastHistoryAt = useRef(0);
+  const [historyAvailability, setHistoryAvailability] = useState({ undo: false, redo: false });
+  const comparisonContextValue = `${marketId}:${isoWeekYear(data.meetingDate)}:${isoWeek(data.meetingDate)}`;
   const market = marketOptions.find((item) => item.id === marketId) ?? marketOptions[0] ?? defaultMarkets[0];
   const marketPlannerTagsKey = market.plannerTags.join("|");
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
   const accent = normalizeHex(data.customColor) || theme.accent;
-  const themeStyle = useMemo(() => accentTokens(accent) as CSSProperties, [accent]);
-  const alerts = useMemo(() => buildAlerts(data, market), [data, market]);
+  const themeStyle = ({ ...accentTokens(accent), "--point-font-scale": String(data.preferences.fontScalePercent / 100) }) as CSSProperties;
   const preparedData = useMemo(() => {
     const snapshot = data.marketComparison;
     if (!snapshot || snapshot.year !== isoWeekYear(data.meetingDate) || snapshot.week !== isoWeek(data.meetingDate)) return { ...data, marketComparison: null };
@@ -895,6 +983,7 @@ function MarketPulseWorkspace() {
   }, []);
 
   useEffect(() => { const timer = window.setTimeout(() => { void bootstrap(); }, 0); return () => window.clearTimeout(timer); }, [bootstrap]);
+  useEffect(() => { comparisonContext.current = comparisonContextValue; }, [comparisonContextValue]);
   useEffect(() => {
     let active = true;
     void fetch("/api/session", { cache: "no-store" }).then((response) => response.json()).then((payload: SessionPayload) => {
@@ -935,6 +1024,33 @@ function MarketPulseWorkspace() {
     window.addEventListener("beforeunload", protectDraft);
     return () => window.removeEventListener("beforeunload", protectDraft);
   }, [isDirty, session.user]);
+  useEffect(() => {
+    const previous = previousData.current;
+    if (historyRestoring.current) {
+      historyRestoring.current = false;
+    } else if (meetingEditing && previous !== data) {
+      const now = Date.now();
+      if (!undoStack.current.length || now - lastHistoryAt.current > 650) {
+        undoStack.current.push(previous);
+        if (undoStack.current.length > 80) undoStack.current.shift();
+      }
+      redoStack.current = [];
+      lastHistoryAt.current = now;
+    }
+    previousData.current = data;
+    const timer = window.setTimeout(() => setHistoryAvailability({ undo: undoStack.current.length > 0, redo: redoStack.current.length > 0 }), 0);
+    return () => window.clearTimeout(timer);
+  }, [data, meetingEditing]);
+  useEffect(() => {
+    undoStack.current = [];
+    redoStack.current = [];
+    previousData.current = data;
+    lastHistoryAt.current = 0;
+    const timer = window.setTimeout(() => setHistoryAvailability({ undo: false, redo: false }), 0);
+    // A change of saved point starts a separate editing history.
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketId, activeRecordId, currentWeek, currentWeekYear]);
 
   const requestConfirmation = (request: ConfirmRequest) => new Promise<boolean>((resolve) => {
     confirmResolver.current?.(false);
@@ -946,6 +1062,24 @@ function MarketPulseWorkspace() {
     confirmResolver.current = null;
     setConfirmRequest(null);
     resolver?.(confirmed);
+  };
+  const undoPoint = () => {
+    const previous = undoStack.current.pop();
+    if (!previous) return;
+    redoStack.current.push(data);
+    historyRestoring.current = true;
+    lastHistoryAt.current = 0;
+    setData(previous);
+    setHistoryAvailability({ undo: undoStack.current.length > 0, redo: redoStack.current.length > 0 });
+  };
+  const redoPoint = () => {
+    const next = redoStack.current.pop();
+    if (!next) return;
+    undoStack.current.push(data);
+    historyRestoring.current = true;
+    lastHistoryAt.current = 0;
+    setData(next);
+    setHistoryAvailability({ undo: undoStack.current.length > 0, redo: redoStack.current.length > 0 });
   };
 
   const openLogin = () => {
@@ -1016,6 +1150,7 @@ function MarketPulseWorkspace() {
     return { ...item, ...patch, ...resolveMarketSimulationFields(item.plannerBase, plannerOverride), ...(hasMarketSimulationOverride(plannerOverride) ? { plannerOverride } : { plannerOverride: undefined }) };
   }) }));
   const resetOperationOverride = (id: string) => setData((current) => ({ ...current, operations: current.operations.map((item) => item.id === id && item.plannerBase ? { ...item, ...item.plannerBase, plannerOverride: undefined } : item) }));
+  const updatePromotion = (id: string, patch: Partial<Promotion>) => setData((current) => ({ ...current, promotions: current.promotions.map((item) => item.id === id ? { ...item, ...patch } : item) }));
   const updateJira = (id: string, patch: Partial<JiraPointFields>) => setData((current) => ({ ...current, jira: current.jira.map((item) => {
     if (item.id !== id) return item;
     if (!item.importedBase) return { ...item, ...patch };
@@ -1040,8 +1175,24 @@ function MarketPulseWorkspace() {
     return { ...current, preferences: { ...current.preferences, moduleOrder, readModules: { ...current.preferences.readModules, [module]: true }, mailModules: { ...current.preferences.mailModules, [module]: true }, htmlModules: { ...current.preferences.htmlModules, [module]: true } } };
   });
   const hideCanvasModule = (module: PointModule) => setData((current) => ({ ...current, preferences: { ...current.preferences, readModules: { ...current.preferences.readModules, [module]: false }, mailModules: { ...current.preferences.mailModules, [module]: false }, htmlModules: { ...current.preferences.htmlModules, [module]: false } } }));
+  const moveCanvasModule = (module: PointModule, amount: number) => setData((current) => {
+    const moduleOrder = current.preferences.moduleOrder.slice();
+    const index = moduleOrder.indexOf(module);
+    const target = Math.max(0, Math.min(moduleOrder.length - 1, index + amount));
+    if (index < 0 || index === target) return current;
+    moduleOrder.splice(index, 1);
+    moduleOrder.splice(target, 0, module);
+    return { ...current, preferences: { ...current.preferences, moduleOrder } };
+  });
+  const resetCanvasLayout = () => setData((current) => ({ ...current, preferences: { ...current.preferences, moduleOrder: [...defaultModuleOrder], moduleWidths: { ...defaultModuleWidths }, readModules: allModulesVisible(), mailModules: allModulesVisible(), htmlModules: allModulesVisible() } }));
+  const updateFontScalePercent = (value: number) => setData((current) => {
+    const fontScalePercent = Math.max(85, Math.min(130, Math.round(value / 5) * 5));
+    const fontScale: FontScale = fontScalePercent < 98 ? "compact" : fontScalePercent > 107 ? "large" : "standard";
+    return { ...current, preferences: { ...current.preferences, fontScalePercent, fontScale } };
+  });
   const addDossier = () => setData((current) => ({ ...current, dossiers: [...current.dossiers, { id: uid(), title: "", universe: "", reference: "", status: "En cours", owner: "", action: "", deadline: "", progress: 0, comment: "" }] }));
-  const addOperation = (month = calendarMonthLabel(monthStart(data.meetingDate))) => setData((current) => ({ ...current, operations: [...current.operations, { id: uid(), name: "Nouvelle simulation", month, state: "À faire", summary: "", steps: [] }] }));
+  const addOperation = (month = calendarMonthLabel(monthStart(data.meetingDate))) => setData((current) => ({ ...current, operations: [...current.operations, { id: uid(), kind: "simulation", name: "Nouvelle simulation", month, state: "À faire", summary: "", steps: [] }] }));
+  const addPromotion = () => setData((current) => ({ ...current, promotions: [...current.promotions, { id: uid(), name: "Nouvelle promotion", period: calendarMonthLabel(monthStart(current.meetingDate)), purchaseNote: "", salesState: "À préparer", action: "", comment: "" }] }));
   const addJira = () => setData((current) => {
     const existing = new Set(current.jira.map((item) => item.assignee));
     let suffix = 1;
@@ -1133,21 +1284,27 @@ function MarketPulseWorkspace() {
   };
   const setComparisonVisible = (visible: boolean) => setData((current) => ({ ...current, preferences: { ...current.preferences, readModules: { ...current.preferences.readModules, comparison: visible }, mailModules: { ...current.preferences.mailModules, comparison: visible }, htmlModules: { ...current.preferences.htmlModules, comparison: visible } } }));
   const editDuringMeeting = () => { if (!session.user) { chooseView("edit"); return; } setView("read"); setMeetingEditing((current) => !current); };
+  const openPresentation = async () => {
+    setMeetingEditing(false);
+    try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); }
+    catch { setToast("Le plein écran est bloqué par ce navigateur."); }
+  };
   const useManualImport = (source: "jira" | "planner") => { setData((current) => ({ ...current, [`${source}Mode`]: "manual" })); setView("read"); setMeetingEditing(true); };
   useEffect(() => {
     if (!session.user || !ready || comparisonLoading || preparedData.marketComparison || !(comparisonOpen || data.preferences.readModules.comparison || (view === "mail" && (data.preferences.mailModules.comparison || data.preferences.htmlModules.comparison)))) return;
-    void loadMarketComparison();
+    const timer = window.setTimeout(() => { void loadMarketComparison(); }, 0);
     // Refresh explicitly after the first snapshot so saved comparisons remain stable.
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comparisonOpen, comparisonLoading, ready, session.user, preparedData.marketComparison, data.preferences.readModules.comparison, data.preferences.mailModules.comparison, data.preferences.htmlModules.comparison, view]);
   const download = (name: string, content: string, type: string) => { const url = URL.createObjectURL(new Blob([content], { type })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 500); };
   const exportJson = (record?: PointRecord) => {
     const exportMarket = record?.marketId ?? marketId; const exportData = record?.data ?? data; const week = record?.week ?? isoWeek(exportData.meetingDate); const year = record?.year ?? isoWeekYear(exportData.meetingDate); const saved = Boolean(record || activeRecordId);
     const exportMarketInfo = marketOptions.find((item) => item.id === exportMarket);
-    download(`point-marche-${exportMarket}-${year}-S${String(week).padStart(2, "0")}-${saved ? "enregistre" : "brouillon"}.json`, JSON.stringify({ schemaVersion: 5, marketId: exportMarket, market: exportMarketInfo ? { name: exportMarketInfo.name, shortCode: exportMarketInfo.short, tone: exportMarketInfo.tone, colorHex: exportMarketInfo.colorHex } : undefined, year, week, data: exportData }, null, 2), "application/json");
+    download(`point-marche-${exportMarket}-${year}-S${String(week).padStart(2, "0")}-${saved ? "enregistre" : "brouillon"}.json`, JSON.stringify({ schemaVersion: 6, marketId: exportMarket, market: exportMarketInfo ? { name: exportMarketInfo.name, shortCode: exportMarketInfo.short, tone: exportMarketInfo.tone, colorHex: exportMarketInfo.colorHex } : undefined, year, week, data: exportData }, null, 2), "application/json");
   };
   const importJson = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const payload = JSON.parse(String(reader.result)) as { marketId?: string; data?: unknown }; if (!payload.data) throw new Error(); const importedMarketInfo = marketOptions.find((item) => item.id === payload.marketId) ?? market; const importedMarket = importedMarketInfo.id; const importedData = normalizePointData(payload.data, importedMarket, importedMarketInfo); setMarketId(importedMarket); setData(importedData); setCalendarMonth(monthStart(importedData.meetingDate)); setActiveRecordId(null); setSavedAt(null); setLastSavedSignature(""); void loadMarket(importedMarket, false, importedMarketInfo); setToast("JSON importé comme nouveau brouillon."); } catch { setToast("Fichier non reconnu."); } }; reader.readAsText(file); event.target.value = ""; };
-  const resetPoint = async () => { if (!await requestConfirmation({ title: "Réinitialiser cette semaine ?", detail: "Le brouillon actuel sera remplacé. Les points déjà enregistrés resteront disponibles dans l’historique.", confirmLabel: "Créer un brouillon vide", destructive: true })) return; const fresh = initialData(marketId, market); fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail; fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; setData(fresh); setCalendarMonth(monthStart(fresh.meetingDate)); setActiveRecordId(null); setSavedAt(null); setLastSavedSignature(""); setToast("Nouveau brouillon créé."); };
+  const resetPoint = async () => { if (!await requestConfirmation({ title: "Réinitialiser cette semaine ?", detail: "Le brouillon actuel sera remplacé. Les points déjà enregistrés resteront disponibles dans l’historique.", confirmLabel: "Créer un brouillon vide", destructive: true })) return; const fresh = initialData(marketId, market); fresh.dossiers = []; fresh.operations = []; fresh.promotions = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail; fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; fresh.preferences = copyPreferences(data.preferences); setData(fresh); setCalendarMonth(monthStart(fresh.meetingDate)); setActiveRecordId(null); setSavedAt(null); setLastSavedSignature(""); setToast("Nouveau brouillon créé."); };
   const loadRecord = async (record: PointRecord, nextView: View = view, skipConfirm = false) => {
     if (!skipConfirm && session.user && isDirty && !await requestConfirmation({ title: "Charger ce point ?", detail: "Le brouillon non enregistré sera remplacé par le contenu sélectionné.", confirmLabel: "Charger le point", destructive: true })) return;
     const recordMarket = marketOptions.find((item) => item.id === record.marketId) ?? market;
@@ -1174,8 +1331,8 @@ function MarketPulseWorkspace() {
     }
     if (latest) { await loadRecord(latest, view, true); setCalendarExpanded(false); return; }
     const fresh = initialData(marketId, market);
-    fresh.dossiers = []; fresh.operations = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail;
-    fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; fresh.meetingDate = meetingDate;
+    fresh.dossiers = []; fresh.operations = []; fresh.promotions = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail;
+    fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; fresh.preferences = copyPreferences(data.preferences); fresh.meetingDate = meetingDate;
     const nextData = await applyJiraWeek(fresh, marketId);
     setData(nextData); setCalendarMonth(monthStart(nextData.meetingDate)); setCalendarExpanded(false); setActiveRecordId(null); setSavedAt(null); setLastSavedSignature(""); setToast(`${year} · S${String(week).padStart(2, "0")} ouverte comme nouveau brouillon.`);
   };
@@ -1209,7 +1366,17 @@ function MarketPulseWorkspace() {
   };
   useEffect(() => {
     const handleSaveShortcut = (event: KeyboardEvent) => {
-      if (!isLocalWorkspace() && (event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("fr-FR") === "s" && (view === "read" || view === "edit" || view === "settings") && session.user) {
+      const command = event.ctrlKey || event.metaKey;
+      const key = event.key.toLocaleLowerCase("fr-FR");
+      if (command && event.shiftKey && key === "e" && session.user) {
+        event.preventDefault(); setView("read"); setMeetingEditing((current) => !current); return;
+      }
+      if (command && meetingEditing && (key === "z" || key === "y")) {
+        event.preventDefault();
+        if (key === "y" || (key === "z" && event.shiftKey)) redoPoint(); else undoPoint();
+        return;
+      }
+      if (command && key === "s" && (view === "read" || view === "edit" || view === "settings") && session.user) {
         event.preventDefault();
         void savePoint();
       }
@@ -1326,6 +1493,7 @@ function MarketPulseWorkspace() {
     if (!previousPoint) return;
     const dossierSources = new Set(data.dossiers.map((item) => item.sourceId ?? item.id));
     const operationSources = new Set(data.operations.map((item) => item.sourceId ?? item.id));
+    const promotionSources = new Set(data.promotions.map((item) => item.sourceId ?? item.id));
     const selection: Record<string, boolean> = {};
     previousPoint.data.dossiers.forEach((item) => {
       const available = !dossierSources.has(item.sourceId ?? item.id);
@@ -1334,6 +1502,10 @@ function MarketPulseWorkspace() {
     previousPoint.data.operations.forEach((item) => {
       const available = !operationSources.has(item.sourceId ?? item.id);
       selection[`operation:${item.id}`] = available && preset !== "none" && (preset === "all" || !isOperationClosed(item));
+    });
+    previousPoint.data.promotions.forEach((item) => {
+      const available = !promotionSources.has(item.sourceId ?? item.id);
+      selection[`promotion:${item.id}`] = available && preset !== "none" && (preset === "all" || !isPromotionClosed(item));
     });
     setCarryoverSelection(selection);
   };
@@ -1346,11 +1518,13 @@ function MarketPulseWorkspace() {
     if (!previousPoint) return;
     const dossierSources = new Set(data.dossiers.map((item) => item.sourceId ?? item.id));
     const operationSources = new Set(data.operations.map((item) => item.sourceId ?? item.id));
+    const promotionSources = new Set(data.promotions.map((item) => item.sourceId ?? item.id));
     const dossiers = previousPoint.data.dossiers.filter((item) => carryoverSelection[`dossier:${item.id}`] && !dossierSources.has(item.sourceId ?? item.id)).map((item) => ({ ...item, id: uid(), sourceId: item.sourceId ?? item.id, carriedFromYear: previousPoint.year, carriedFromWeek: previousPoint.week }));
     const operations = previousPoint.data.operations.filter((item) => carryoverSelection[`operation:${item.id}`] && !operationSources.has(item.sourceId ?? item.id)).map((item) => ({ ...item, id: uid(), sourceId: item.sourceId ?? item.id, carriedFromYear: previousPoint.year, carriedFromWeek: previousPoint.week, steps: item.steps.map(([label, state]) => [label, state] as [string, string]) }));
-    setData((current) => ({ ...current, dossiers: [...current.dossiers, ...dossiers], operations: [...current.operations, ...operations] }));
+    const promotions = previousPoint.data.promotions.filter((item) => carryoverSelection[`promotion:${item.id}`] && !promotionSources.has(item.sourceId ?? item.id)).map((item) => ({ ...item, id: uid(), sourceId: item.sourceId ?? item.id, carriedFromYear: previousPoint.year, carriedFromWeek: previousPoint.week }));
+    setData((current) => ({ ...current, dossiers: [...current.dossiers, ...dossiers], operations: [...current.operations, ...operations], promotions: [...current.promotions, ...promotions] }));
     setCarryoverOpen(false);
-    const count = dossiers.length + operations.length;
+    const count = dossiers.length + operations.length + promotions.length;
     setToast(count ? `${count} élément${count > 1 ? "s" : ""} repris du point ${previousPoint.year} · S${String(previousPoint.week).padStart(2, "0")}.` : "Aucun nouvel élément à reprendre.");
   };
   const copyMail = async () => {
@@ -1386,7 +1560,7 @@ function MarketPulseWorkspace() {
     { label: "Application", items: [{ id: "personalization", label: "Personnalisation", icon: "settings" }, { id: "markets", label: "Marchés & seuils", icon: "edit" }, { id: "users", label: "Annuaire GLOBAL", icon: "user" }] },
     { label: "Diffusion", items: [{ id: "mail", label: "Paramètres du mail", icon: "mail" }, { id: "saved", label: "Historique des points", icon: "download" }] },
   ] : [
-    { label: "Préparer le point", items: [{ id: "general", label: "Cadre du point", icon: "spark" }, { id: "dossiers", label: "Dossiers en cours", icon: "folder" }, { id: "operations", label: "Simulations & opérations", icon: "trend" }, { id: "jira", label: "Tickets Jira", icon: "ticket" }] },
+    { label: "Contenu du point", items: [{ id: "general", label: "Cadre du point", icon: "spark" }, { id: "dossiers", label: "Dossiers en cours", icon: "folder" }, { id: "operations", label: "Simulations", icon: "trend" }, { id: "promotions", label: "Promotions", icon: "spark" }, { id: "jira", label: "Tickets Jira", icon: "ticket" }] },
     { label: "Vérifier et diffuser", items: [{ id: "mail", label: "Paramètres du mail", icon: "mail" }, { id: "saved", label: "Historique des points", icon: "download" }] },
   ];
 
@@ -1422,8 +1596,8 @@ function MarketPulseWorkspace() {
       <AppearanceSettings/>
       <SectionTitle eyebrow="Paramètres du point actif" title="Personnaliser l’affichage" detail="Ces choix sont enregistrés avec le point : lecture, mail et pièce jointe HTML peuvent conserver des contenus différents."/>
       <div className="surface personalization-card">
-        <div className="personalization-choice"><div><strong>Taille du texte</strong><span>Ajuste toute l’interface de lecture sans changer le contenu.</span></div><div className="segmented-control">{(["compact", "standard", "large"] as FontScale[]).map((value) => <button type="button" key={value} className={data.preferences.fontScale === value ? "active" : ""} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, fontScale: value } }))}>{value === "compact" ? "Petite" : value === "large" ? "Grande" : "Standard"}</button>)}</div></div>
-        <div className="personalization-choice"><div><strong>Densité</strong><span>Le mode compact réduit les espaces pour les points très chargés.</span></div><div className="segmented-control">{(["comfortable", "compact"] as Density[]).map((value) => <button type="button" key={value} className={data.preferences.density === value ? "active" : ""} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, density: value } }))}>{value === "compact" ? "Compacte" : "Confortable"}</button>)}</div></div>
+        <div className="personalization-choice"><div><strong>Taille du texte</strong><span>Réglage libre de 85 à 130 %, enregistré avec le point.</span></div><div className="font-scale-control"><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent - 5)} aria-label="Réduire le texte">A−</button><input type="range" min="85" max="130" step="5" value={data.preferences.fontScalePercent} aria-label="Taille du texte" onChange={(event) => updateFontScalePercent(Number(event.target.value))}/><output>{data.preferences.fontScalePercent}%</output><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent + 5)} aria-label="Agrandir le texte">A+</button><button type="button" onClick={() => updateFontScalePercent(100)}>100%</button></div></div>
+        <div className="personalization-choice"><div><strong>Densité</strong><span>Ajuste les espaces sans modifier le contenu.</span></div><div className="segmented-control">{(["compact", "comfortable", "airy"] as Density[]).map((value) => <button type="button" key={value} className={data.preferences.density === value ? "active" : ""} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, density: value } }))}>{value === "compact" ? "Compacte" : value === "airy" ? "Aérée" : "Normale"}</button>)}</div></div>
       </div>
       <div className="surface market-layout-settings"><ModuleLayoutEditor modules={pointModules} order={data.preferences.moduleOrder} widths={data.preferences.moduleWidths} onChangeOrder={updateModuleOrder} onChangeWidth={updateModuleWidth}/></div>
       <div className="module-settings-grid">
@@ -1472,13 +1646,12 @@ function MarketPulseWorkspace() {
       </article>)}</div> : <EmptyState label="un dossier" onAdd={addDossier}/>}</section>}
 
     {section === "operations" && <section className="editor-section">
-      <SectionTitle eyebrow="Planner et suivi manuel" title="Simulations et opérations" detail={`L’import reconnaît les tags de ${market.name}, puis synchronise les simulations du mois courant et du mois suivant dans le point.`} action={<div className="title-actions"><PlannerImportDialog markets={marketOptions} onImport={importPlannerData}/><button className="secondary-button" type="button" disabled={!plannerReady || data.plannerMode === "manual"} onClick={() => synchronizePlannerPoint()}><Icon name="spark"/> {plannerReady ? "Synchroniser le point" : "Chargement Planner…"}</button>{previousPoint && <button className="secondary-button" onClick={openCarryover}><Icon name="copy"/> Reprendre le précédent</button>}<button className="primary-button" onClick={() => addOperation()}><Icon name="plus"/> Ajouter manuellement</button></div>}/>
+      <SectionTitle eyebrow="État métier" title="Simulations" detail={`L’import synchronise les simulations de ${market.name}. Le point n’affiche que l’état final utile à la réunion.`} action={<div className="title-actions"><PlannerImportDialog markets={marketOptions} onImport={importPlannerData}/><button className="secondary-button" type="button" disabled={!plannerReady || data.plannerMode === "manual"} onClick={() => synchronizePlannerPoint()}><Icon name="spark"/> {plannerReady ? "Synchroniser le point" : "Chargement…"}</button>{previousPoint && <button className="secondary-button" onClick={openCarryover}><Icon name="copy"/> Reprendre le précédent</button>}<button className="primary-button" onClick={() => addOperation()}><Icon name="plus"/> Ajouter une simulation</button></div>}/>
       <SourceModeControl label="Simulations Planner" mode={data.plannerMode} onChange={(mode) => { void setSourceMode("planner", mode); }} busy={sourceChanging !== null}/>
       <div className={`planner-market-note ${market.plannerTags.length ? "" : "warning"}`}><Icon name={market.plannerTags.length ? "check" : "alert"}/><div><strong>{market.plannerTags.length ? `Tags reconnus : ${market.plannerTags.join(" · ")}` : "Aucun tag Planner paramétré"}</strong><span>{market.plannerTags.length ? `Période du point : ${calendarMonthLabel(monthStart(data.meetingDate))} et mois suivant.` : "Ajoute les étiquettes de ce marché dans Paramètres → Marchés avant la synchronisation."}</span></div></div>
-      {data.operations.length ? <div className="record-stack">{data.operations.map((item) => <article className={`surface record-card ${item.plannerSource ? "planner-record-card" : ""}`} key={item.id}>
-        <div className="record-header"><div><strong>{item.name || "Nouvelle simulation ou opération"}</strong><small>{item.month || "Mois à définir"}{item.plannerSource ? " · Source Planner" : carriedFromLabel(item) ? ` · ${carriedFromLabel(item)}` : ""}</small></div><button className="icon-button danger" aria-label="Retirer du point" onClick={() => setData((current) => ({ ...current, operations: current.operations.filter((row) => row.id !== item.id) }))}><Icon name="trash"/></button></div>
-        {item.plannerSource && data.plannerMode !== "manual" ? <div className="planner-record-content"><div className="planner-record-summary"><span className={`report-pill tone-${toneForStatus(item.state)}`}>{item.state}</span><p>{item.summary}</p></div><div className="planner-record-steps">{item.steps.map(([label, state]) => <span key={label}><i className={`tone-${toneForStatus(state)}`}/><strong>{label}</strong><small>{state}</small></span>)}</div><div className="planner-record-metrics"><span><small>Code fournisseur</small><strong>{item.plannerSource.metrics.supplierCode || "—"}</strong></span><SupplierTurnover value={item.plannerSource.metrics.purchases12m}/><span><small>Variation GLOBAL</small><strong>{item.plannerSource.metrics.globalVariation === null ? "—" : `${item.plannerSource.metrics.globalVariation}%`}</strong></span><span><small>Structure</small><strong>{item.plannerSource.metrics.tariffStructure || "—"}</strong></span></div>{item.plannerSource.variationHistory?.length ? <SupplierSparkline points={item.plannerSource.variationHistory} label={item.plannerSource.supplierLabel || item.name}/> : <div className="supplier-variation-missing"><Icon name="alert" size={14}/><span>Variation fournisseur non renseignée dans Planner</span></div>}</div> : <div className="form-grid"><TextField label="Nom" value={item.name} onChange={(name) => updateOperation(item.id, { name })}/><TextField label="Mois affiché" value={item.month} onChange={(month) => updateOperation(item.id, { month })} placeholder="Septembre 2026"/><TextField label="État global" value={item.state} onChange={(state) => updateOperation(item.id, { state })} wide/><TextField label="Résumé" value={item.summary} onChange={(summary) => updateOperation(item.id, { summary })} wide/><div className="steps-editor field-wide"><span>Étapes de traitement</span>{item.steps.map(([label, state], stepIndex) => <div className="step-editor" key={`${item.id}-${stepIndex}`}><input value={label} onChange={(event) => updateOperation(item.id, { steps: item.steps.map((step, i) => i === stepIndex ? [event.target.value, step[1]] as [string,string] : step) })}/><select value={state} onChange={(event) => updateOperation(item.id, { steps: item.steps.map((step, i) => i === stepIndex ? [step[0], event.target.value] as [string,string] : step) })}>{stepOptions.map((option) => <option key={option}>{option}</option>)}</select><button className="icon-button subtle" aria-label="Supprimer l’étape" onClick={() => updateOperation(item.id, { steps: item.steps.filter((_, i) => i !== stepIndex) })}><Icon name="trash" size={15}/></button></div>)}<button className="inline-add" onClick={() => updateOperation(item.id, { steps: [...item.steps, ["Nouvelle étape", "À faire"]] })}><Icon name="plus" size={15}/> Ajouter une étape</button></div></div>}
-      </article>)}</div> : <EmptyState label="une simulation ou opération" onAdd={addOperation}/>}</section>}
+      {data.operations.length ? <div className="record-stack">{data.operations.map((item) => <article className="surface record-card" key={item.id}><div className="record-header"><div><strong>{item.name || "Nouvelle simulation"}</strong><small>{item.month || "Mois à définir"}{carriedFromLabel(item) ? ` · ${carriedFromLabel(item)}` : ""}</small></div><button className="icon-button danger" aria-label="Retirer du point" onClick={() => setData((current) => ({ ...current, operations: current.operations.filter((row) => row.id !== item.id) }))}><Icon name="trash"/></button></div><div className="form-grid"><TextField label="Nom" value={item.name} onChange={(name) => updateOperation(item.id, { name })}/><TextField label="Mois affiché" value={item.month} onChange={(month) => updateOperation(item.id, { month })} placeholder="Septembre 2026"/><label className="field field-wide"><span>État final dans le point</span><select value={item.state} onChange={(event) => updateOperation(item.id, { state: event.target.value })}>{[...new Set([item.state, ...MARKET_SIMULATION_STATES])].map((state) => <option key={state}>{state}</option>)}</select></label>{hasMarketSimulationOverride(item.plannerOverride) && <div className="point-override-actions field-wide"><span>Valeur corrigée pour ce point</span><button type="button" onClick={() => resetOperationOverride(item.id)}>Reprendre la valeur importée</button></div>}</div></article>)}</div> : <EmptyState label="une simulation" onAdd={addOperation}/>}</section>}
+
+    {section === "promotions" && <section className="editor-section"><SectionTitle eyebrow="Suivi commercial" title="Promotions" detail="Bloc manuel distinct des simulations, reportable d’un point au suivant." action={<div className="title-actions">{previousPoint && <button className="secondary-button" onClick={openCarryover}><Icon name="copy"/> Reprendre le précédent</button>}<button className="primary-button" onClick={addPromotion}><Icon name="plus"/> Ajouter une promotion</button></div>}/>{data.promotions.length ? <div className="record-stack">{data.promotions.map((item) => <article className="surface record-card" key={item.id}><div className="record-header"><div><strong>{item.name || "Nouvelle promotion"}</strong><small>{item.period || "Période à définir"}{carriedFromLabel(item) ? ` · ${carriedFromLabel(item)}` : ""}</small></div><button className="icon-button danger" aria-label="Retirer la promotion" onClick={() => setData((current) => ({ ...current, promotions: current.promotions.filter((row) => row.id !== item.id) }))}><Icon name="trash"/></button></div><div className="form-grid"><TextField label="Nom" value={item.name} onChange={(name) => updatePromotion(item.id, { name })}/><TextField label="Période" value={item.period} onChange={(period) => updatePromotion(item.id, { period })}/><TextField label="État vente" value={item.salesState} onChange={(salesState) => updatePromotion(item.id, { salesState })} wide/><TextField label="Promotion achat" value={item.purchaseNote} onChange={(purchaseNote) => updatePromotion(item.id, { purchaseNote })} wide/><TextField label="Action" value={item.action} onChange={(action) => updatePromotion(item.id, { action })} wide/><TextField label="Commentaire" value={item.comment} onChange={(comment) => updatePromotion(item.id, { comment })} wide/></div></article>)}</div> : <EmptyState label="une promotion" onAdd={addPromotion}/>}</section>}
 
     {section === "jira" && <section className="editor-section">
       <SectionTitle eyebrow="Activité Jira" title="Tickets ouverts du marché" detail={`Les tickets sont récupérés automatiquement depuis le centre d’import global pour les chefs de produit et chefs de marché de ${market.name}. Seules les personnes ayant des tickets apparaissent.`} action={<button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter une synthèse</button>}/>
@@ -1511,12 +1684,18 @@ function MarketPulseWorkspace() {
     resetOperation: resetOperationOverride,
     addOperation,
     removeOperation: (id) => setData((current) => ({ ...current, operations: current.operations.filter((item) => item.id !== id) })),
+    updatePromotion,
+    addPromotion,
+    removePromotion: (id) => setData((current) => ({ ...current, promotions: current.promotions.filter((item) => item.id !== id) })),
     updateJira,
     resetJira: resetJiraOverride,
     addJira,
     setSourceMode: (source, mode) => { void setSourceMode(source, mode); },
     insertModule: insertCanvasModule,
     hideModule: hideCanvasModule,
+    moveModule: moveCanvasModule,
+    updateModuleWidth,
+    resetLayout: resetCanvasLayout,
   };
 
   return <div className={`app-shell font-${data.preferences.fontScale} density-${data.preferences.density}`} style={themeStyle}>
@@ -1543,7 +1722,7 @@ function MarketPulseWorkspace() {
     </div>
     {view === "read" && periodNavigator}
     {view === "settings" && session.user && renderEditor()}
-    {view === "read" && <main className="preview-page"><div className={`preview-toolbar ${meetingEditing ? "editing" : ""}`}><div><span>{meetingEditing ? "Modification directe" : "Point marché"}</span><strong>{meetingEditing ? "Clique dans les cartes pour corriger le point, puis sauvegarde." : "Choisis le marché et la semaine dans le calendrier ci-dessus."}</strong></div><div className="meeting-toolbar-actions">{session.user && <><button type="button" className="secondary-button" disabled={!previousPoint} onClick={openCarryover}><Icon name="copy"/> Reprendre le point précédent</button><button type="button" className="secondary-button" onClick={() => { synchronizePlannerPoint(); void refreshJiraFromRegistry(); }}><Icon name="spark"/> Actualiser les imports</button><button type="button" className="secondary-button" onClick={() => setComparisonOpen(true)}><Icon name="trend"/> Comparer les marchés</button></>}{!session.user && <button type="button" className="secondary-button" onClick={() => editDuringMeeting()}><Icon name="lock"/> Connexion GLOBAL pour modifier</button>}</div></div>{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Ce canevas est prêt à être complété puis sauvegardé." : "Aucun brouillon n’est affiché publiquement. Connecte-toi pour préparer cette semaine."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard data={preparedData} market={market} archive={archive} editing={meetingEditing && Boolean(session.user)} actions={session.user ? canvasActions : undefined}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou connecte-toi pour la préparer.</p></div>}</main>}
+    {view === "read" && <main className="preview-page"><div className={`preview-toolbar ${meetingEditing ? "editing" : ""}`}><div><span>{meetingEditing ? "Modification directe" : "Point marché"}</span><strong>{meetingEditing ? "Clique directement dans les cartes. Les corrections importées restent propres à ce point." : "Choisis le marché et la semaine dans le calendrier ci-dessus."}</strong></div><div className="meeting-toolbar-actions">{session.user && <><button type="button" className="secondary-button" disabled={!previousPoint} onClick={openCarryover}><Icon name="copy"/> Reprendre le point précédent</button><button type="button" className="secondary-button" onClick={() => { synchronizePlannerPoint(); void refreshJiraFromRegistry(); }}><Icon name="spark"/> Actualiser les imports</button><button type="button" className="secondary-button" onClick={() => setComparisonOpen(true)}><Icon name="trend"/> Comparer les marchés</button></>}{!session.user && <button type="button" className="secondary-button" onClick={() => editDuringMeeting()}><Icon name="lock"/> Connexion GLOBAL pour modifier</button>}</div></div>{meetingEditing && session.user && <div className="point-layout-toolbar" role="toolbar" aria-label="Mise en page du point"><div className="layout-history"><button type="button" disabled={!historyAvailability.undo} onClick={undoPoint} title="Annuler (Ctrl+Z)">↶</button><button type="button" disabled={!historyAvailability.redo} onClick={redoPoint} title="Rétablir (Ctrl+Y)">↷</button></div><div className="layout-font"><span>Texte</span><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent - 5)}>A−</button><input type="range" min="85" max="130" step="5" value={data.preferences.fontScalePercent} aria-label="Taille du texte du point" onChange={(event) => updateFontScalePercent(Number(event.target.value))}/><output>{data.preferences.fontScalePercent}%</output><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent + 5)}>A+</button><button type="button" onClick={() => updateFontScalePercent(100)}>Réinit.</button></div><div className="layout-density" aria-label="Densité">{(["compact", "comfortable", "airy"] as Density[]).map((density) => <button type="button" key={density} className={data.preferences.density === density ? "active" : ""} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, density } }))}>{density === "compact" ? "Compacte" : density === "airy" ? "Aérée" : "Normale"}</button>)}</div><label className="layout-color" title="Couleur du point"><input type="color" value={accent} aria-label="Couleur du point" onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/></label><button type="button" onClick={() => { updateFontScalePercent(90); setData((current) => ({ ...current, preferences: { ...current.preferences, density: "compact" } })); }}>Ajuster</button><button type="button" onClick={resetCanvasLayout}>Structure initiale</button><button type="button" onClick={() => { void openPresentation(); }}>Présentation</button><button type="button" className="primary" onClick={() => { void savePoint(); }}>Enregistrer</button><button type="button" onClick={() => setMeetingEditing(false)}>Terminer</button></div>}{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Ce canevas est prêt à être complété puis sauvegardé." : "Aucun brouillon n’est affiché publiquement. Connecte-toi pour préparer cette semaine."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard data={preparedData} market={market} archive={archive} editing={meetingEditing && Boolean(session.user)} actions={session.user ? canvasActions : undefined}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou connecte-toi pour la préparer.</p></div>}</main>}
     {view === "stats" && session.user && (plannerReady && directoryReady ? <AnalystStatsDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} registry={plannerRegistry} updatedAt={plannerUpdatedAt} onImport={importPlannerData}/> : <main className="analyst-stats-page"><div className="surface stats-loading"><span>Chargement de la source Planner et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "analyst" && session.user && (plannerReady && directoryReady ? <AnalystPointDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData}/> : <main className="analyst-point-page"><div className="surface stats-loading"><span>Chargement du point analyste, de Planner et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "imports" && session.user && (plannerReady && directoryReady ? <ImportCenter users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerTasks={plannerTasks} plannerRegistry={plannerRegistry} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData} onJiraImported={refreshJiraFromRegistry} onManual={useManualImport}/> : <main className="import-center-page"><div className="surface stats-loading"><span>Chargement des registres et de l’annuaire GLOBAL…</span></div></main>)}
@@ -1571,7 +1750,8 @@ function MarketPulseWorkspace() {
       <div className="carryover-presets"><button type="button" onClick={() => setCarryoverPreset("unfinished")}><Icon name="alert" size={14}/> Non terminés</button><button type="button" onClick={() => setCarryoverPreset("all")}>Tout sélectionner</button><button type="button" onClick={() => setCarryoverPreset("none")}>Tout retirer</button></div>
       <div className="carryover-content">
         <div className="carryover-group"><div className="carryover-group-title"><span>Dossiers</span><b>{previousPoint.data.dossiers.length}</b></div>{previousPoint.data.dossiers.length ? previousPoint.data.dossiers.map((item) => { const alreadyCarried = data.dossiers.some((current) => (current.sourceId ?? current.id) === (item.sourceId ?? item.id)); return <label className={`carryover-row ${alreadyCarried ? "is-disabled" : ""}`} key={`dossier:${item.id}`}><input type="checkbox" disabled={alreadyCarried} checked={!alreadyCarried && Boolean(carryoverSelection[`dossier:${item.id}`])} onChange={(event) => setCarryoverSelection((current) => ({ ...current, [`dossier:${item.id}`]: event.target.checked }))}/><span><strong>{item.title || "Dossier sans titre"}</strong><small>{[item.universe, item.reference, item.owner].filter(Boolean).join(" · ") || "Contexte à compléter"}</small></span><b className={`tone-text-${toneForStatus(item.status)}`}>{alreadyCarried ? "Déjà reporté" : item.status}</b></label>; }) : <div className="carryover-empty">Aucun dossier dans ce point.</div>}</div>
-        <div className="carryover-group"><div className="carryover-group-title"><span>Opérations commerciales</span><b>{previousPoint.data.operations.length}</b></div>{previousPoint.data.operations.length ? previousPoint.data.operations.map((item) => { const alreadyCarried = data.operations.some((current) => (current.sourceId ?? current.id) === (item.sourceId ?? item.id)); return <label className={`carryover-row ${alreadyCarried ? "is-disabled" : ""}`} key={`operation:${item.id}`}><input type="checkbox" disabled={alreadyCarried} checked={!alreadyCarried && Boolean(carryoverSelection[`operation:${item.id}`])} onChange={(event) => setCarryoverSelection((current) => ({ ...current, [`operation:${item.id}`]: event.target.checked }))}/><span><strong>{item.name || "Opération sans titre"}</strong><small>{item.month || "Mois à définir"}</small></span><b className={`tone-text-${toneForStatus(item.state)}`}>{alreadyCarried ? "Déjà reportée" : item.state}</b></label>; }) : <div className="carryover-empty">Aucune opération commerciale dans ce point.</div>}</div>
+        <div className="carryover-group"><div className="carryover-group-title"><span>Simulations</span><b>{previousPoint.data.operations.length}</b></div>{previousPoint.data.operations.length ? previousPoint.data.operations.map((item) => { const alreadyCarried = data.operations.some((current) => (current.sourceId ?? current.id) === (item.sourceId ?? item.id)); return <label className={`carryover-row ${alreadyCarried ? "is-disabled" : ""}`} key={`operation:${item.id}`}><input type="checkbox" disabled={alreadyCarried} checked={!alreadyCarried && Boolean(carryoverSelection[`operation:${item.id}`])} onChange={(event) => setCarryoverSelection((current) => ({ ...current, [`operation:${item.id}`]: event.target.checked }))}/><span><strong>{item.name || "Simulation sans titre"}</strong><small>{item.month || "Mois à définir"}</small></span><b className={`tone-text-${toneForStatus(item.state)}`}>{alreadyCarried ? "Déjà reportée" : item.state}</b></label>; }) : <div className="carryover-empty">Aucune simulation dans ce point.</div>}</div>
+        <div className="carryover-group"><div className="carryover-group-title"><span>Promotions</span><b>{previousPoint.data.promotions.length}</b></div>{previousPoint.data.promotions.length ? previousPoint.data.promotions.map((item) => { const alreadyCarried = data.promotions.some((current) => (current.sourceId ?? current.id) === (item.sourceId ?? item.id)); return <label className={`carryover-row ${alreadyCarried ? "is-disabled" : ""}`} key={`promotion:${item.id}`}><input type="checkbox" disabled={alreadyCarried} checked={!alreadyCarried && Boolean(carryoverSelection[`promotion:${item.id}`])} onChange={(event) => setCarryoverSelection((current) => ({ ...current, [`promotion:${item.id}`]: event.target.checked }))}/><span><strong>{item.name || "Promotion sans titre"}</strong><small>{item.period || "Période à définir"}</small></span><b className={`tone-text-${toneForStatus(item.salesState)}`}>{alreadyCarried ? "Déjà reportée" : item.salesState}</b></label>; }) : <div className="carryover-empty">Aucune promotion dans ce point.</div>}</div>
       </div>
       <div className="carryover-footer"><span>Le point précédent reste intact. Chaque élément repris garde son origine.</span><button className="primary-button" type="button" disabled={!carryoverSelectedCount} onClick={applyCarryover}><Icon name="copy"/> Reporter {carryoverSelectedCount || ""} élément{carryoverSelectedCount > 1 ? "s" : ""}</button></div>
     </AppDialog>}

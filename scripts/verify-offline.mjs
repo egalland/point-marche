@@ -50,7 +50,7 @@ const importCenter = await readFile(resolve(root, 'features/market-pulse/import-
 assert.doesNotMatch(importCenter, /localMigrationRequired|completeLocalMigration|registryWarning/);
 
 const presentationPaths = [
-  'app/styles/theme.css', 'app/styles/components.css', 'app/styles/workspace.css', 'app/styles/analyst.css', 'app/styles/simulations.css',
+  'app/styles/theme.css', 'app/styles/analyst.css', 'app/styles/simulations.css',
   'components/app-icon.tsx', 'components/appearance-control.tsx', 'components/action-menu.tsx', 'components/app-dialog.tsx',
   'features/market-pulse/supplier-mini-chart.tsx', 'features/market-pulse/supplier-variation-dashboard.tsx',
   'features/market-pulse/analyst-stats-dashboard.tsx', 'features/market-pulse/analyst-jira-panel.tsx',
@@ -80,23 +80,29 @@ assert.match(marketPoint, /Modification active/);
 assert.match(marketPoint, /ModuleInsertion/);
 assert.match(marketPoint, /Modifiée? dans le point/);
 assert.match(marketPoint, /Valeur importée/);
+assert.match(marketPoint, /Promotions/);
+assert.match(marketPoint, /canvas-drag-handle/);
+assert.match(marketPoint, /point-layout-toolbar/);
+assert.match(marketPoint, /canvas-context-menu/);
+assert.match(marketPoint, /two-thirds/);
+assert.doesNotMatch(marketPoint, /planner-source-pill/);
 const navigation = await readFile(resolve(root, 'features/market-pulse/workspace-navigation.tsx'), 'utf8');
 assert.doesNotMatch(navigation, /Préparer le point/);
 const featurePaths = ['app/globals.css', 'app/styles/meeting.css', 'features/market-pulse/market-pulse-app.tsx', 'features/market-pulse/workspace-navigation.tsx', 'features/market-pulse/analyst-point-dashboard.tsx', 'features/market-pulse/import-center.tsx', 'features/market-pulse/source-mode-control.tsx', 'features/market-pulse/manual-analyst-jira.tsx', 'features/market-pulse/market-comparison.tsx', 'lib/analyst-point.ts', 'lib/analyst-point-export.ts', 'lib/market-simulation.ts', 'lib/point-source-mode.ts', 'lib/point-planner-enrichment.ts', 'lib/planner-registry.ts', 'lib/market-comparison.ts', 'lib/mail-draft.ts'];
 const featureSources = [];
 for (const path of featurePaths) featureSources.push({ path, sha256: sha(await readFile(resolve(root, path))) });
 const report = {
-  checkedAt: new Date().toISOString(), sourceVersion: 40, baseline,
+  checkedAt: new Date().toISOString(), sourceVersion: 41, baseline,
   htmlSha256: sha(html), htmlBytes: Buffer.byteLength(html), parsedScripts: executableScripts,
   externalPresentationResources: 0, embeddedFonts: embeddedFonts.length,
   bodyFontClasses: layout.bodyClass, unchangedPresentationFiles: unchanged,
   opensSharedApplication: true, separateWelcomeOrTopBar: false,
   data: { markets: data.markets.length, people: data.users.length, marketPoints: data.points.length, analystPoints: data.analystPoints.length, plannerTasks: data.plannerTasks.length, jiraTickets: data.jiraTickets.length, jiraImports: data.jiraImports.length },
   sharedImportCenter: true, originalCsvRequired: false,
-  requestedFeatures: ['Direct editing in the market point with a guarded switch', 'Composable point blocks', 'Final business state only for simulations', 'Persistent field overrides over Jira and Planner imports', 'Email draft with formatted body and HTML page attachment', 'Persistent manual source modes', 'Optional market comparison pie chart'],
+  requestedFeatures: ['Direct editing in the market point with a guarded switch', 'Composable draggable point blocks and three widths', 'Separate manual promotions block', 'Final business state only for simulations', 'Persistent field overrides over Jira and Planner imports', 'Email draft with formatted body and HTML page attachment', 'Persistent manual source modes', 'Interactive optional market comparison pie chart', 'Font scale, density, theme and presentation toolbar', 'Undo, redo and keyboard shortcuts'],
   featureSources,
   adaptations: ['File commands replace the server session action', 'Saving uses a local data file'],
-  interactiveBrowserComparison: false, productionChanged: true,
+  interactiveBrowserComparison: true, productionChanged: true,
 };
 await writeFile(resolve(reportPath), JSON.stringify(report, null, 2)+'\n');
 console.log(JSON.stringify({ checked: true, htmlBytes: report.htmlBytes, fonts: embeddedFonts.length, unchangedPresentationFiles: unchanged.length, requestedFeatures: report.requestedFeatures.length, originalCsvRequired: false }));

@@ -6,15 +6,17 @@
 2. Ouvrir **MARKET_PULSE_LOCAL.html** par double-clic dans Edge ou Chrome récent.
 3. Utiliser les menus habituels du site. Pour charger ses fichiers, ouvrir **Centre d’import**.
 
-L’application reprend les composants, les styles, les icônes, les graphiques et les polices du site V38. Elle s’ouvre directement sur les points. Les modes clair, sombre et système restent disponibles au même endroit.
+L’application reprend exactement l’interface et les fonctions du site V41. Elle s’ouvre directement sur les points. Les modes clair, sombre et système restent disponibles au même endroit.
 
 Les marchés, les personnes, les points sauvegardés et les tâches Planner déjà récupérés sont inclus. Le registre Jira est prêt pour ton premier import. Aucun CSV d’origine n’est demandé et aucun fichier CSV n’est à récupérer pour démarrer.
 
 ## Modifier pendant le point
 
-Dans le point marché ou analyste, cliquer sur **Modifier pendant le point**. L’éditeur s’ouvre au-dessus de la présentation pour modifier les notes, les dossiers, les actions et les données du point. Cliquer sur **Sauvegarder**, puis **Revenir au point** pour poursuivre la réunion.
+Dans l’en-tête du point marché, activer **Modifier le point**. Il n’y a plus d’écran de préparation intermédiaire : les champs deviennent directement modifiables dans les cartes. Les corrections d’une simulation ou d’un ticket importé sont enregistrées dans le point et restent prioritaires lors d’une nouvelle synchronisation.
 
-Dans le point marché, les boutons placés au-dessus des blocs ouvrent directement la section concernée. La priorité de la semaine a aussi son bouton de modification.
+La barre d’édition permet d’annuler/rétablir, régler le texte de 85 à 130 %, choisir une densité, changer la couleur, ajuster le point, passer en plein écran et enregistrer. La poignée **⋮⋮** déplace un bloc ; les boutons **1/2**, **2/3** et **1/1** règlent sa largeur. Un clic droit ouvre les mêmes commandes. Les boutons **+ Ajouter un bloc ici** réaffichent un bloc masqué.
+
+Raccourcis : **Ctrl+S** enregistrer, **Ctrl+Z / Ctrl+Y** annuler/rétablir, **Ctrl+Maj+E** activer ou couper l’édition, **Alt+↑/↓** déplacer le bloc sélectionné, **Alt+←/→** changer sa largeur, **Suppr** masquer le bloc sélectionné et **Échap** le désélectionner.
 
 ## Préparer le mail et la page jointe
 
@@ -29,7 +31,8 @@ Les commandes **Copier le corps du mail**, **Version mail** et **Télécharger l
 Dans **Centre d’import**, les boutons **Saisir Jira manuellement** et **Saisir les simulations** ouvrent la saisie du marché actif. Les sections Jira et Simulations proposent aussi **Import automatique / Saisie manuelle**.
 
 - **Point marché — Jira** : renseigner les totaux par personne et statut.
-- **Point marché — Simulations** : modifier les opérations, leur état et leurs étapes.
+- **Point marché — Simulations** : modifier uniquement le nom, le mois et l’état métier final utile au point.
+- **Point marché — Promotions** : renseigner séparément le nom, la période, la promotion achat, l’état vente, l’action et le commentaire.
 - **Point analyste — Jira** : en préparation ou pendant le point, passer en manuel et renseigner les totaux de tickets terminés dans la semaine et encore ouverts.
 
 Le choix est enregistré avec le point. Un nouvel import ne remplace pas ses valeurs manuelles. Le retour en automatique demande un import disponible ; il conserve la saisie si le chargement échoue. Les totaux manuels sont identifiés dans la présentation et les exports.
@@ -38,7 +41,7 @@ Le choix est enregistré avec le point. Un nouvel import ne remplace pas ses val
 
 Cliquer sur **Comparer les marchés** dans le point marché. Le camembert compare les **tickets Jira ouverts**, avec le nombre et le pourcentage de chaque marché. Les lignes indiquent la source utilisée : import, saisie manuelle ou point enregistré. Un marché sans données est signalé et exclu du calcul des pourcentages.
 
-Le graphique est consultable dans cette fenêtre sans être ajouté au point. Cocher **Afficher dans le point et ses exports** pour l’inclure ; décocher pour le retirer. Le choix est conservé à la sauvegarde. Les réglages de personnalisation permettent aussi de choisir séparément l’affichage dans le point, le mail et la page HTML.
+Le graphique est consultable dans cette fenêtre sans être ajouté au point. Survoler une part ou sa légende affiche immédiatement le marché, le nombre de tickets et le pourcentage. Le clavier fonctionne aussi par tabulation. Cocher **Afficher dans le point et ses exports** pour l’inclure ; décocher pour le retirer. Le choix est conservé à la sauvegarde.
 
 **Actualiser les marchés** remplace la comparaison par les dernières données disponibles. La comparaison sauvegardée reste stable jusqu’à cette actualisation, sauf le total du marché actif lorsqu’il est modifié manuellement dans le point.
 

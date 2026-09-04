@@ -89,13 +89,41 @@ test("comparison visibility is independent in the point, mail and standalone pag
   assert.doesNotMatch(app.buildInteractiveHtml(data, market, []), /Marché A/);
   data.preferences.htmlModules.comparison = true;
   assert.match(app.buildInteractiveHtml(data, market, []), /Marché A/);
-  const actions = { updatePriority() {}, updateDossier() {}, addDossier() {}, removeDossier() {}, updateOperation() {}, resetOperation() {}, addOperation() {}, removeOperation() {}, updateJira() {}, resetJira() {}, addJira() {}, setSourceMode() {}, insertModule() {}, hideModule() {} };
+  const actions = { updatePriority() {}, updateDossier() {}, addDossier() {}, removeDossier() {}, updateOperation() {}, resetOperation() {}, addOperation() {}, removeOperation() {}, updatePromotion() {}, addPromotion() {}, removePromotion() {}, updateJira() {}, resetJira() {}, addJira() {}, setSourceMode() {}, insertModule() {}, hideModule() {}, moveModule() {}, updateModuleWidth() {}, resetLayout() {} };
   const read = renderToStaticMarkup(createElement(app.PreviewDashboard, { data, market, archive: [], editing: true, actions }));
   assert.match(read, /Modification|Ajouter un dossier|Sources du point/);
   assert.doesNotMatch(read, /Modifier pendant le point/);
   assert.doesNotMatch(read, /Marché A/);
   data.preferences.readModules.comparison = true;
   assert.match(renderToStaticMarkup(createElement(app.PreviewDashboard, { data, market, archive: [] })), /Marché A/);
+});
+
+test("separates legacy promotions from simulations and never exposes the Planner source badge", () => {
+  const market = app.defaultMarkets[0];
+  const legacy = app.normalizePointData({
+    meetingDate: "2026-09-03",
+    operations: [
+      { id: "promo", name: "Promo rentrée", month: "Septembre 2026", state: "En cours", summary: "Remise achat", steps: [] },
+      { id: "planner:sim", name: "Simulation fournisseur", month: "Septembre 2026", state: "Faite", summary: "", steps: [], plannerSource: { externalId: "sim", metrics: {} } },
+    ],
+  }, market.id);
+  assert.deepEqual(legacy.operations.map((item) => item.name), ["Simulation fournisseur"]);
+  assert.deepEqual(legacy.promotions.map((item) => item.name), ["Promo rentrée"]);
+  assert.equal(legacy.promotions[0].purchaseNote, "Remise achat");
+  assert.ok(legacy.preferences.moduleOrder.includes("promotions"));
+  for (const html of [app.buildMailHtml(legacy, market, []), app.buildInteractiveHtml(legacy, market, []), renderToStaticMarkup(createElement(app.PreviewDashboard, { data: legacy, market, archive: [] }))]) {
+    assert.match(html, /Promotions|Promo rentrée/);
+    assert.doesNotMatch(html, /· Planner|planner-source-pill/);
+  }
+});
+
+test("normalizes free font scale, airy density and three block widths", () => {
+  const market = app.defaultMarkets[0];
+  const normalized = app.normalizePointData({ preferences: { fontScalePercent: 127, density: "airy", moduleWidths: { promotions: "two-thirds" } } }, market.id);
+  assert.equal(normalized.preferences.fontScalePercent, 127);
+  assert.equal(normalized.preferences.fontScale, "large");
+  assert.equal(normalized.preferences.density, "airy");
+  assert.equal(normalized.preferences.moduleWidths.promotions, "two-thirds");
 });
 
 test("manual analyst totals, including zero, replace imported counts only in this point", () => {

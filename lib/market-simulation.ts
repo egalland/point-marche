@@ -46,15 +46,19 @@ function stateFromText(value: string): MarketSimulationState | null {
 }
 
 export function marketSimulationState(task: PlannerTask): MarketSimulationState {
+  const categoryCode = Number.parseInt(/^\s*(\d+)/.exec(normalized(task.category))?.[1] ?? "", 10);
+  if (categoryCode === 11) return "Non finalisée";
+  if (Number.isFinite(categoryCode) && categoryCode >= 8) return "Faite";
   if (task.workflowState === "stopped") return "Non finalisée";
   if (task.workflowState === "completed" || task.checklist.some((item) => item.kind === "control" && Boolean(item.date))) return "Faite";
-  const described = stateFromText([task.category, task.plannerStatus, task.goal].filter(Boolean).join(" · "));
+  const categoryState = stateFromText(task.category);
+  if (categoryState) return categoryState;
+  const described = stateFromText([task.plannerStatus, task.goal].filter(Boolean).join(" · "));
   if (described) return described;
   const simulationDone = task.checklist.some((item) => item.kind === "simulation" && Boolean(item.date));
   const controlExpected = task.checklist.some((item) => item.kind === "control" && !item.nonApplicable);
   if (simulationDone && controlExpected) return "En attente de contrôle";
   if (simulationDone) return "En attente du marché";
-  if (task.checklist.some((item) => item.kind === "trame" && Boolean(item.date))) return "En cours";
   return "À faire";
 }
 

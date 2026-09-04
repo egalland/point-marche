@@ -25,6 +25,18 @@ test("a completed control makes the simulation done", () => {
   assert.equal(simulation.marketSimulationState(task("2-Simulation en cours", checklist)), "Faite");
 });
 
+test("a business category above control wins over a missing optional trame", () => {
+  assert.equal(simulation.marketSimulationState(task("9-Tarif Vente terminé - Attente Ctrl Marge", [
+      { kind: "simulation", date: "2026-08-10", nonApplicable: false },
+      { kind: "control", date: "2026-08-12", nonApplicable: false },
+      { kind: "trame", date: "", nonApplicable: false },
+    ], "stopped")), "Faite");
+});
+
+test("an early closed card remains non finalized", () => {
+  assert.equal(simulation.marketSimulationState(task("3-Attente retour fournisseur", [], "stopped")), "Non finalisée");
+});
+
 test("point overrides survive a refreshed imported value and can be reset", () => {
   const base = { name: "A", month: "Septembre 2026", state: "En cours", summary: "" };
   const override = simulation.updateMarketSimulationOverride(base, undefined, { state: "En attente du fournisseur" }, "2026-09-04T12:00:00Z");
