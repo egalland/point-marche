@@ -112,7 +112,7 @@ test("theme controller follows system changes only in system mode and syncs othe
 });
 
 test("modular styles contain valid selectors and resolved local design tokens", () => {
-  const names = ["theme", "analyst", "components", "workspace", "simulations"];
+  const names = ["theme", "analyst", "components", "workspace", "simulations", "meeting", "mobile"];
   const definitions = new Set(["--font-geist-sans", "--font-geist-mono", "--accent-light", "--accent-dark", "--on-accent-light", "--on-accent-dark", "--swatch"]);
   const used = new Set();
   for (const name of names) {

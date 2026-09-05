@@ -1,0 +1,828 @@
+/* Responsive safety layer — imported last so every workspace shares the same mobile rules. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.app-shell,
+.workspace-content,
+.editor-content,
+.preview-page,
+.mail-page,
+.analyst-point-page,
+.analyst-stats-page,
+.import-center-page,
+.report-module-item,
+.analyst-render-item,
+.surface,
+main,
+section,
+article,
+form,
+fieldset {
+  min-width: 0;
+}
+
+img,
+canvas,
+iframe {
+  max-width: 100%;
+}
+
+.data-table-wrap,
+.jira-csv-preview,
+.stats-detail,
+.supplier-table-wrap,
+.analyst-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 900px) {
+  .report-module-item.width-half,
+  .report-module-item.width-two-thirds,
+  .analyst-render-item.width-half,
+  .analyst-render-item.width-two-thirds {
+    grid-column: 1 / -1;
+  }
+
+  .preview-toolbar > div:last-child,
+  .mail-toolbar > div:last-child,
+  .section-title .title-actions,
+  .meeting-toolbar-actions,
+  .meeting-dialog-actions,
+  .comparison-dialog-actions,
+  .directory-dialog-footer,
+  .planner-import-footer,
+  .html-attachment-card,
+  .mail-kit-steps article {
+    flex-wrap: wrap;
+  }
+
+  .market-comparison-dialog,
+  .meeting-edit-dialog,
+  .directory-dialog,
+  .carryover-dialog,
+  .planner-import-dialog,
+  .supplier-variation-dialog,
+  .analyst-week-dialog {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+  }
+
+  .market-admin-fields,
+  .directory-fields,
+  .mail-automation-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  html {
+    scroll-padding-top: 1rem;
+  }
+
+  .app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    min-height: auto;
+    padding: 10px 12px 9px 60px;
+  }
+
+  .workspace-menu-trigger {
+    top: 10px;
+    left: 10px;
+  }
+
+  .workspace-location > span {
+    display: none;
+  }
+
+  .workspace-location > strong {
+    overflow: hidden;
+    font-size: .9375rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .header-actions {
+    width: calc(100vw - 24px);
+    margin-left: -48px;
+    padding: 2px 0 4px;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .header-actions::-webkit-scrollbar,
+  .editor-nav-group::-webkit-scrollbar,
+  .stats-view-tabs::-webkit-scrollbar,
+  .stats-period-presets > div::-webkit-scrollbar,
+  .week-quick-actions::-webkit-scrollbar,
+  .point-layout-toolbar::-webkit-scrollbar,
+  .analyst-point-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .header-actions > * {
+    flex: 0 0 auto;
+  }
+
+  .header-actions .primary-button,
+  .header-actions .login-button,
+  .header-actions .save-point {
+    width: auto;
+    min-width: auto;
+    height: 42px;
+    min-height: 42px;
+    padding: 8px 11px;
+  }
+
+  .header-actions .save-point > span,
+  .header-actions .login-button > span {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: nowrap;
+  }
+
+  .header-actions .icon-button {
+    width: 42px;
+    height: 42px;
+  }
+
+  .header-more > div {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    width: min(300px, calc(100vw - 24px));
+    max-height: min(70dvh, 560px);
+    overflow-y: auto;
+  }
+
+  .workspace-content {
+    width: 100%;
+    padding: 14px 12px 36px;
+  }
+
+  .workspace-context {
+    align-items: flex-start;
+  }
+
+  .workspace-context > span:not(.workspace-week):not(.workspace-draft) {
+    overflow-wrap: anywhere;
+  }
+
+  .period-navigator,
+  .appearance-settings,
+  .stats-filters,
+  .supplier-dashboard-filters,
+  .mail-kit-panel,
+  .jira-source-card,
+  .planner-source-card {
+    padding: 16px;
+  }
+
+  .period-head {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .period-market,
+  .period-state,
+  .period-calendar-toggle {
+    grid-column: 1;
+  }
+
+  .period-state {
+    justify-content: flex-start;
+  }
+
+  .period-calendar-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .week-picker-toolbar,
+  .month-navigation,
+  .analyst-calendar-controls {
+    width: 100%;
+  }
+
+  .week-picker-toolbar {
+    display: grid;
+  }
+
+  .month-navigation {
+    justify-content: space-between;
+  }
+
+  .week-card-strip {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+  }
+
+  .week-choice {
+    flex: 0 0 min(76vw, 220px);
+    scroll-snap-align: start;
+  }
+
+  .editor-nav {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .editor-nav-group,
+  .stats-view-tabs,
+  .stats-period-presets > div,
+  .week-quick-actions {
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .editor-nav-group > button,
+  .stats-view-tabs > button,
+  .stats-period-presets > div > button,
+  .week-quick-actions > button {
+    flex: 0 0 auto;
+    min-height: 42px;
+    scroll-snap-align: start;
+  }
+
+  .editor-nav .autosave-card {
+    min-width: 0;
+  }
+
+  .section-title,
+  .preview-toolbar,
+  .mail-toolbar,
+  .analyst-point-hero,
+  .stats-hero,
+  .import-center-hero {
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .section-title h2,
+  .analyst-point-hero h1,
+  .stats-hero h1,
+  .import-center-hero h1,
+  .report-hero h1 {
+    font-size: clamp(1.55rem, 8vw, 2rem);
+  }
+
+  .title-actions,
+  .preview-toolbar > div:last-child,
+  .mail-toolbar > div:last-child,
+  .meeting-toolbar-actions,
+  .comparison-dialog-actions,
+  .meeting-dialog-actions {
+    width: 100%;
+  }
+
+  .title-actions > button,
+  .title-actions > .primary-button,
+  .title-actions > .secondary-button,
+  .meeting-toolbar-actions > button,
+  .meeting-dialog-actions > button,
+  .comparison-dialog-actions > button {
+    flex: 1 1 180px;
+  }
+
+  .point-layout-toolbar,
+  .analyst-point-toolbar {
+    position: static;
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .point-layout-toolbar > div,
+  .point-layout-toolbar > label,
+  .point-layout-toolbar > button,
+  .analyst-point-toolbar > div,
+  .analyst-point-toolbar > button {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+
+  .point-layout-toolbar button,
+  .analyst-point-toolbar button {
+    min-height: 42px;
+  }
+
+  .point-layout-toolbar button.primary {
+    margin-left: 0;
+  }
+
+  .layout-font input {
+    width: 105px;
+  }
+
+  .report-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .report-hero .week-card {
+    width: 100%;
+  }
+
+  .report-standalone,
+  .jira-command-center,
+  .report-alert-card,
+  .analyst-point-module,
+  .stats-delay-panel,
+  .stats-panel,
+  .supplier-overall-chart {
+    padding: 16px;
+  }
+
+  .report-module-grid,
+  .analyst-render-grid,
+  .stats-grid,
+  .simulation-month-grid,
+  .promotion-card-grid,
+  .guidance-grid,
+  .module-settings-grid,
+  .analyst-edit-layout,
+  .jira-command-visuals {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-dossier,
+  .report-dossier.is-inline-editing {
+    grid-template-columns: 9px minmax(0, 1fr);
+    gap: 9px 11px;
+  }
+
+  .report-dossier > div,
+  .report-dossier > p,
+  .report-dossier > .report-pill,
+  .report-dossier > .canvas-action-input,
+  .report-dossier > .canvas-status-cell {
+    grid-column: 2;
+  }
+
+  .report-dossier > .report-pill {
+    grid-row: auto;
+    justify-self: start;
+    max-width: 100%;
+  }
+
+  .canvas-meta-fields,
+  .promotion-edit-grid,
+  .canvas-jira-fields > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .canvas-source-controls {
+    align-items: stretch;
+  }
+
+  .canvas-source-controls > span {
+    flex-basis: 100%;
+  }
+
+  .canvas-source-controls > div {
+    display: grid;
+    grid-template-columns: minmax(86px, auto) 1fr 1fr;
+    width: 100%;
+  }
+
+  .canvas-source-controls button {
+    min-height: 40px;
+  }
+
+  .canvas-module-toolbar {
+    height: 40px;
+    padding: 4px 6px;
+  }
+
+  .report-module-grid.is-inline-editing .canvas-module-shell {
+    padding-top: 48px;
+  }
+
+  .canvas-module-toolbar button {
+    min-width: 38px;
+    height: 34px;
+  }
+
+  .canvas-module-toolbar .canvas-module-options {
+    min-width: 44px;
+    font-size: .9rem;
+    letter-spacing: 1px;
+  }
+
+  .canvas-module-insertion > div {
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
+  }
+
+  .canvas-module-insertion > div button {
+    flex: 1 1 150px;
+    min-height: 42px;
+  }
+
+  .canvas-context-menu {
+    top: auto !important;
+    right: 12px;
+    bottom: 12px;
+    left: 12px !important;
+    width: auto;
+    max-height: min(72dvh, 560px);
+    padding: 10px;
+    border-radius: 16px;
+    transform: none;
+  }
+
+  .canvas-context-menu button,
+  .canvas-context-menu label {
+    min-height: 44px;
+    padding: 10px 11px;
+    font-size: .875rem;
+  }
+
+  .canvas-context-menu label {
+    grid-template-columns: minmax(0, 1fr) minmax(110px, 1fr);
+  }
+
+  .canvas-context-width button {
+    min-width: 44px;
+  }
+
+  .jira-command-kpis,
+  .analyst-point-kpis,
+  .stats-kpis,
+  .analyst-delay-grid,
+  .stats-delay-grid,
+  .supplier-dialog-stats,
+  .analyst-visibility-grid,
+  .jira-file-kpis,
+  .import-registry-kpis,
+  .planner-source-status {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .jira-person-toggle {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+  }
+
+  .jira-person-toggle > .icon {
+    display: none;
+  }
+
+  .jira-person-alert {
+    grid-column: 2 / -1;
+  }
+
+  .jira-read-ticket,
+  .analyst-jira-list > a,
+  .canvas-jira-edit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .jira-read-ticket > div,
+  .analyst-jira-list > a > div,
+  .jira-read-ticket > b,
+  .analyst-jira-list > a > b {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
+
+  .market-comparison-card {
+    padding: 16px;
+  }
+
+  .market-comparison-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .comparison-tooltip {
+    position: static;
+    max-width: 100%;
+    margin: 10px auto 0;
+    transform: none;
+  }
+
+  .comparison-legend > button {
+    grid-template-columns: 12px minmax(0, 1fr) auto;
+    min-height: 56px;
+  }
+
+  .comparison-legend em {
+    grid-column: 2 / -1;
+    text-align: left;
+  }
+
+  .comparison-dialog-actions label,
+  .comparison-settings-shortcut label {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .font-scale-control {
+    width: 100%;
+  }
+
+  .font-scale-control input {
+    flex: 1 1 130px;
+    width: auto;
+  }
+
+  .personalization-choice {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .personalization-choice > div:last-child,
+  .personalization-choice .segmented-control {
+    width: 100%;
+  }
+
+  .personalization-choice .segmented-control button {
+    flex: 1;
+  }
+
+  .directory-table {
+    overflow-x: auto;
+  }
+
+  .directory-table-head,
+  .directory-row {
+    min-width: 760px;
+  }
+
+  .market-admin-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .market-admin-card > .record-index,
+  .market-admin-actions {
+    grid-column: 1;
+  }
+
+  .analyst-point-controls,
+  .analyst-point-controls > label,
+  .analyst-week-control {
+    width: 100%;
+  }
+
+  .analyst-point-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .analyst-point-toolbar > div:last-child {
+    width: auto;
+    flex-wrap: nowrap;
+  }
+
+  .analyst-point-toolbar .segmented-control {
+    width: auto;
+    flex-wrap: nowrap;
+  }
+
+  .analyst-chart-bars,
+  .stats-month-chart {
+    min-width: 520px;
+  }
+
+  .analyst-completed-trend,
+  .stats-panel:has(.stats-month-chart) {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .stats-filters,
+  .supplier-dashboard-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stats-filters > *,
+  .supplier-dashboard-filters > * {
+    grid-column: 1 !important;
+  }
+
+  .stats-period-presets {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .stats-period-presets > div {
+    display: flex;
+  }
+
+  .jira-query-heading,
+  .planner-source-action,
+  .jira-file-selected,
+  .import-quality-alert,
+  .unknown-usercode-list,
+  .supplier-source-note {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .jira-query-heading > button,
+  .planner-source-action > button,
+  .jira-file-selected > button,
+  .manual-import-fallback .primary-button,
+  .manual-import-fallback .secondary-button {
+    width: 100%;
+  }
+
+  .import-history-list article {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .mail-frame-wrap iframe {
+    height: min(72dvh, 900px);
+  }
+
+  .html-attachment-card,
+  .mail-kit-steps article {
+    align-items: flex-start;
+  }
+
+  .html-attachment-card > button,
+  .mail-kit-steps article > button {
+    width: 100%;
+  }
+
+  .app-dialog-backdrop:not(.workspace-menu-backdrop) {
+    padding: 0;
+    place-items: end stretch;
+  }
+
+  .app-dialog:not(.workspace-menu-dialog) {
+    width: 100%;
+    max-width: none;
+    max-height: 92dvh;
+    margin: 0;
+    padding: 24px 16px calc(18px + env(safe-area-inset-bottom));
+    border-radius: 20px 20px 0 0;
+  }
+
+  .meeting-edit-dialog,
+  .market-comparison-dialog,
+  .directory-dialog,
+  .carryover-dialog,
+  .planner-import-dialog,
+  .supplier-variation-dialog,
+  .analyst-week-dialog {
+    width: 100%;
+    max-width: none;
+  }
+
+  .meeting-dialog-actions,
+  .comparison-dialog-actions,
+  .directory-dialog-footer,
+  .planner-import-footer {
+    position: sticky;
+    z-index: 2;
+    bottom: calc(-18px - env(safe-area-inset-bottom));
+    margin-inline: -16px;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    background: var(--surface);
+  }
+
+  .toast {
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    left: 12px;
+    max-width: none;
+  }
+}
+
+@media (max-width: 430px) {
+  .workspace-content {
+    padding-inline: 10px;
+  }
+
+  .header-actions {
+    width: calc(100vw - 20px);
+    margin-left: -50px;
+  }
+
+  .header-actions .save-point > span,
+  .header-actions .login-button > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .header-actions .primary-button,
+  .header-actions .login-button,
+  .header-actions .save-point {
+    width: 42px;
+    min-width: 42px;
+    padding: 8px;
+  }
+
+  .jira-command-kpis,
+  .analyst-point-kpis,
+  .stats-kpis,
+  .analyst-delay-grid,
+  .stats-delay-grid,
+  .supplier-dialog-stats,
+  .analyst-visibility-grid,
+  .jira-file-kpis,
+  .import-registry-kpis,
+  .planner-source-status {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .appearance-options > button {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .appearance-preview {
+    width: 72px;
+  }
+
+  .font-scale-control button {
+    min-width: 44px;
+  }
+
+  .font-scale-control button:last-child {
+    flex: 1 1 100%;
+  }
+
+  .canvas-source-controls > div {
+    grid-template-columns: minmax(0, 1fr) 1fr 1fr;
+  }
+
+  .canvas-source-controls b {
+    grid-column: 1 / -1;
+  }
+
+  .canvas-context-menu label {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .meeting-dialog-actions > button,
+  .comparison-dialog-actions > button,
+  .directory-dialog-footer > button,
+  .planner-import-footer button {
+    width: 100%;
+    flex-basis: 100%;
+  }
+
+  .comparison-legend > button {
+    grid-template-columns: 12px minmax(0, 1fr) auto;
+  }
+
+  .comparison-legend b {
+    font-size: .9rem;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .canvas-drag-handle {
+    cursor: default;
+  }
+
+  .canvas-module-options::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+  }
+}
+
+@media print {
+  html,
+  body {
+    overflow: visible;
+  }
+}
