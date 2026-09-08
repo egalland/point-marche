@@ -38,6 +38,25 @@ async function importTickets(api, tickets) {
   return call(api, "/api/jira-imports", { action: "finish", importId: started.batch.id });
 }
 
+test("an incomplete Jira import keeps the registry intact until all tickets and participants arrive", async () => {
+  const data = fixture();
+  data.jiraTickets = [ticket("GLOBAL-9999")];
+  const store = new WorkspaceStore(data);
+  const api = createLocalApi(store);
+  const started = await call(api, "/api/jira-imports", { action: "start", filename: "export.csv", rowCount: 2 });
+  const importId = started.batch.id;
+  await call(api, "/api/jira-imports", { action: "chunk", importId, tickets: [ticket("GLOBAL-1")] });
+  const incomplete = await call(api, "/api/jira-imports", { action: "finish", importId, expectedTicketCount: 2, expectedParticipantCount: 60 });
+  assert.equal(incomplete.status, 409);
+  assert.deepEqual(store.read().jiraTickets, data.jiraTickets);
+  const participants = Array.from({ length: 60 }, (_, index) => ({ usercode: `C${String(index).padStart(7, "0")}`, jiraUserId: String(index) }));
+  await call(api, "/api/jira-imports", { action: "chunk", importId, tickets: [ticket("GLOBAL-2", { participants })] });
+  const complete = await call(api, "/api/jira-imports", { action: "finish", importId, expectedTicketCount: 2, expectedParticipantCount: 60 });
+  assert.equal(complete.status, 200);
+  assert.equal(complete.batch.participantCount, 60);
+  assert.equal(store.read().jiraTickets.find((item) => item.key === "GLOBAL-2").participants.length, 60);
+});
+
 test("local file round-trip preserves every collection, zero values, accents, dates and drafts", async () => {
   const data = fixture();
   data.jiraTickets = [ticket("GLOBAL-1", { summary: "Échéance, réglage ; \"test\"\nDeuxième ligne", participants: [{ usercode: "C1234567", jiraUserId: "x" }] })];
@@ -181,7 +200,7 @@ test("imports and links 25,000 CSV rows with repeated participant columns withou
   assert.equal((await decodeWorkspace(await encodeWorkspace(store.snapshot()))).jiraTickets.length, 25000);
 });
 
-test("Planner imports share the market registry and preserve per-simulation turnover without accumulating", async () => {
+test("Planner imports preserve per-simulation turnover without changing saved points on read", async () => {
   const data = fixture(); data.markets[0].plannerTags = ["MEN-PB"];
   const store = new WorkspaceStore(data); const api = createLocalApi(store);
   const rawText = "ID de tâche\tNom de tâche\tCatégorie\tStatut\tÉtiquettes\tCommentaires\nTASK1\t2026-08-AOUT-FOURNISSEUR TEST\tSimulation\tNon démarrées\tMEN-PB\tAchats 12 mG : 1 234,56 €;Code Fournisseur : X0001;Variation GLOBAL : 2%;Variation pondérée : 1,5%";
@@ -193,8 +212,10 @@ test("Planner imports share the market registry and preserve per-simulation turn
   assert.equal(store.read().plannerTasks.length, 1);
   await call(api, "/api/points", { marketId: "market-local", data: { meetingDate: "2026-08-28", operations: [], dossiers: [], jira: [] } });
   const points = await call(api, "/api/points?marketId=market-local");
-  assert.equal(points.points[0].data.operations.length, 1);
-  assert.equal(points.points[0].data.operations[0].plannerSource.metrics.purchases12m, 1234.56);
+  assert.deepEqual(points.points[0].data.operations, []);
+  const planner = await call(api, "/api/planner-tasks");
+  assert.equal(planner.tasks.length, 1);
+  assert.equal(planner.tasks[0].metrics.purchases12m, 1234.56);
 });
 
 test("draft snapshots survive serialization and are isolated from caller mutations", async () => {

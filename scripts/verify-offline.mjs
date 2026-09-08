@@ -56,21 +56,22 @@ const presentationPaths = [
   'features/market-pulse/analyst-stats-dashboard.tsx', 'features/market-pulse/analyst-jira-panel.tsx',
   'lib/supplier-mini-trend.ts', 'lib/analyst-jira-history-html.ts',
 ];
-const baseline = '5b669025992454e15a02e351a00847dc974a9f6e';
-const unchanged = [];
-for (const path of presentationPaths) {
-  const original = execFileSync('git', ['show', `${baseline}:${path}`], { cwd: root });
-  const current = await readFile(resolve(root, path));
-  assert.equal(sha(original), sha(current), `Site V38 presentation changed: ${path}`);
-  unchanged.push({ path, sha256: sha(current) });
+const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+const sharedPresentationFiles = [];
+for (const path of [...presentationPaths, 'app/styles/meeting.css', 'app/styles/mobile.css', 'app/styles/components.css', 'app/styles/workspace.css']) {
+  sharedPresentationFiles.push({ path, sha256: sha(await readFile(resolve(root, path))) });
 }
+const entryCss = await readFile(resolve(root, 'offline/entry.css'), 'utf8');
+assert.match(entryCss, /@import\s+["']\.\.\/app\/globals\.css["']/);
 const jsonBlock = scripts.find((match) => /id="market-pulse-workspace"/.test(match[1]));
-assert.ok(jsonBlock, 'Embedded data missing');
-const envelope = JSON.parse(jsonBlock[2]);
-assert.equal(envelope.checksum, sha(JSON.stringify(envelope.data)));
-assert.equal(envelope.format, 'market-pulse-local');
-const data = envelope.data;
-assert.equal(data.source?.pendingJira, undefined);
+let data = null;
+if (jsonBlock) {
+  const envelope = JSON.parse(jsonBlock[2]);
+  assert.equal(envelope.checksum, sha(JSON.stringify(envelope.data)));
+  assert.equal(envelope.format, 'market-pulse-local');
+  data = envelope.data;
+  assert.equal(data.source?.pendingJira, undefined);
+}
 assert.match(importCenter, /import \{ appFetch as fetch \} from "@\/lib\/app-transport"/);
 assert.match(importCenter, /onManual/);
 assert.match(css, /\.meeting-edit-dialog/);
@@ -92,17 +93,17 @@ const featurePaths = ['app/globals.css', 'app/styles/meeting.css', 'features/mar
 const featureSources = [];
 for (const path of featurePaths) featureSources.push({ path, sha256: sha(await readFile(resolve(root, path))) });
 const report = {
-  checkedAt: new Date().toISOString(), sourceVersion: 41, baseline,
+  checkedAt: new Date().toISOString(), sourceCommit,
   htmlSha256: sha(html), htmlBytes: Buffer.byteLength(html), parsedScripts: executableScripts,
   externalPresentationResources: 0, embeddedFonts: embeddedFonts.length,
-  bodyFontClasses: layout.bodyClass, unchangedPresentationFiles: unchanged,
+  bodyFontClasses: layout.bodyClass, sharedPresentationFiles,
   opensSharedApplication: true, separateWelcomeOrTopBar: false,
-  data: { markets: data.markets.length, people: data.users.length, marketPoints: data.points.length, analystPoints: data.analystPoints.length, plannerTasks: data.plannerTasks.length, jiraTickets: data.jiraTickets.length, jiraImports: data.jiraImports.length },
+  data: data ? { embedded: true, markets: data.markets.length, people: data.users.length, marketPoints: data.points.length, analystPoints: data.analystPoints.length, plannerTasks: data.plannerTasks.length, jiraTickets: data.jiraTickets.length, jiraImports: data.jiraImports.length } : { embedded: false },
   sharedImportCenter: true, originalCsvRequired: false,
   requestedFeatures: ['Direct editing in the market point with a guarded switch', 'Composable draggable point blocks and three widths', 'Separate manual promotions block', 'Final business state only for simulations', 'Persistent field overrides over Jira and Planner imports', 'Email draft with formatted body and HTML page attachment', 'Persistent manual source modes', 'Interactive optional market comparison pie chart', 'Font scale, density, theme and presentation toolbar', 'Undo, redo and keyboard shortcuts'],
   featureSources,
   adaptations: ['File commands replace the server session action', 'Saving uses a local data file'],
-  interactiveBrowserComparison: true, productionChanged: true,
+  interactiveBrowserComparison: false,
 };
 await writeFile(resolve(reportPath), JSON.stringify(report, null, 2)+'\n');
-console.log(JSON.stringify({ checked: true, htmlBytes: report.htmlBytes, fonts: embeddedFonts.length, unchangedPresentationFiles: unchanged.length, requestedFeatures: report.requestedFeatures.length, originalCsvRequired: false }));
+console.log(JSON.stringify({ checked: true, htmlBytes: report.htmlBytes, fonts: embeddedFonts.length, sharedPresentationFiles: sharedPresentationFiles.length, requestedFeatures: report.requestedFeatures.length, originalCsvRequired: false }));

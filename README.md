@@ -1,108 +1,40 @@
-# vinext-starter
+# Market Pulse — points marché et analystes
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Application de préparation, présentation et diffusion des points hebdomadaires GLOBAL. Le site et l’application HTML autonome utilisent les mêmes composants React, styles et règles métier.
 
-## Prerequisites
+## Utilisation
 
-- Node.js `>=22.13.0`
-- Linux with `flock`, `curl`, and GNU `timeout`
+1. Importer Jira et Planner dans le Centre d’import, puis vérifier l’annuaire et les marchés.
+2. Choisir le marché ou l’analyste et la semaine.
+3. Activer « Modifier le point » pour modifier les blocs directement pendant la réunion.
+4. Enregistrer le point, puis préparer le mail avec sa page HTML jointe.
 
-## Sites Lifecycle
+Les corrections apportées aux données importées restent dans le point. Une nouvelle semaine utilise les sources importées ; la reprise du point précédent reste une action explicite. La trame facultative ne bloque pas une simulation dont le contrôle est fait ou dont la catégorie dépasse l’étape 6 ; la catégorie d’abandon 11 reste non finalisée.
 
-The Sites lifecycle CLI runs the locked dependency install before returning this checkout. Edit the source under `app/`, then checkpoint when a coherent milestone is ready to inspect or share. The remote Sites builder runs `npm run build` against the pushed commit. Do not repeat install or build as a normal pre-checkpoint step.
+Sur le site, les brouillons suivent la navigation dans l’onglet. « Enregistrer » les conserve sur le serveur. Dans l’application locale, les commandes de sauvegarde écrivent un fichier `.marketpulse.json` ; une copie de récupération locale protège aussi le travail en cours.
 
-This starter does not use `wrangler.jsonc`.
+## Structure
 
-`install:ci` is intentionally a single, non-retrying `npm ci`. It refuses a concurrent install for the same project, consumes a matching image-seeded npm cache with `--prefer-offline` while retaining registry fallback for a missing cache object, otherwise downloads and verifies the complete vinext tarball recorded in `package-lock.json`, limits npm to one socket, and terminates a stalled install. `build` applies a short timeout and then validates the Sites artifact. These helpers target Linux and use GNU `timeout`; they are not native macOS scripts.
+- `features/market-pulse/` : points marché et analystes, imports, statistiques, graphiques.
+- `components/` : contrôles partagés, fenêtres, thèmes, disposition.
+- `lib/` : règles métier, normalisation, exports, transport et brouillons de session.
+- `app/api/`, `db/`, `drizzle/` : API du site, base D1 et migrations.
+- `offline/` : application autonome, fichier de données et adaptateur des mêmes API.
+- `tests/` : tests métier, sauvegardes et scénarios de navigation asynchrone.
 
-Scripts that need writable project-scoped home, npm, XDG, and temporary paths use `scripts/sites-env.sh`. The `dev` and `start` scripts honor the caller's runtime environment and keep Wrangler logs inside the checkout. The generated `.sites-runtime/` directory is disposable and ignored by Git.
+## Développement et validation
 
-## Included Shape
+Utiliser les dépendances verrouillées du dépôt et Node 22.13 ou supérieur.
 
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```sh
+npm run dev
+npm run build
+node --test tests/*.test.mjs
+npx tsc --noEmit --incremental false
+npm run build:offline -- MARKET_PULSE_LOCAL.html
+node scripts/verify-offline.mjs MARKET_PULSE_LOCAL.html VERIFICATION.json
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+L’export sans données initiales ouvre une application vide, prête pour les imports ou l’ouverture d’un fichier existant. Aucun CSV historique n’est nécessaire. Le script de vérification contrôle le JavaScript, les styles, les polices intégrées et les composants communs ; il ne prétend pas effectuer une comparaison visuelle dans un navigateur ni une ouverture dans Outlook.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Diagnostic Commands
-
-- `npm run install:ci`: perform the one bounded lockfile install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build and validate the deployable Sites artifact
-- `npm run start`: start the built Vinext application
-- `npm test`: build, validate, and verify the rendered development-preview metadata
-- `npm run validate:artifact`: recheck an existing artifact's manifest and ESM `default.fetch` export
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-Use build and validation commands for targeted diagnosis after a remote failure, not as part of the normal checkpoint path.
-
-The timeout defaults can be overridden for a controlled canary with `SITES_INSTALL_TIMEOUT`, `SITES_INSTALL_KILL_AFTER`, `SITES_BUILD_TIMEOUT`, and `SITES_BUILD_KILL_AFTER`. A timeout fails the command; the helpers never retry an unchanged install or build.
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Voir `docs/review-20260908.md` pour les corrections de la revue complète.

@@ -826,3 +826,25 @@ iframe {
     overflow: visible;
   }
 }
+
+/* Review: keep point columns stable while editing and leave room for dialogs. */
+.report-module-item > .canvas-module-insertion { margin-top: 8px; }
+.canvas-module-insertion > div { max-width: min(620px, 100%); }
+.app-dialog > :is(header, h1, h2, h3):first-of-type { padding-inline-end: 44px; }
+.point-edit-toggle:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 10px; }
+.point-edit-toggle:has(input:disabled) { opacity: .5; cursor: wait; }
+.point-loading-status { padding: 12px 24px; color: var(--muted); font-size: .875rem; }
+.workspace-content[aria-busy="true"] { opacity: .55; }
+
+@media screen and (max-width: 760px) {
+  .analyst-point-toolbar { flex-direction: column; align-items: stretch; overflow: visible; }
+  .analyst-point-toolbar > div,
+  .analyst-point-toolbar > div:last-child { width: 100%; min-width: 0; flex-wrap: wrap; }
+  .analyst-point-toolbar .segmented-control { max-width: 100%; }
+  .analyst-point-toolbar > div:last-child > button { flex: 1 1 140px; }
+  .app-dialog-close { width: 44px; height: 44px; }
+  .app-dialog > :is(header, h1, h2, h3):first-of-type { padding-inline-end: 52px; }
+  .is-inline-editing :is(input:not([type="range"]):not([type="color"]), textarea, select),
+  .canvas-jira-edit :is(input, select), .field :is(input, select, textarea) { font-size: 16px !important; }
+  .comparison-tooltip { left: 50%; max-width: calc(100% - 16px); transform: translate(-50%, 12px); }
+}

@@ -1,9 +1,11 @@
 import type { ModuleWidth } from "@/components/module-layout-editor";
 import type { GlobalDirectoryUser } from "./global-directory";
 import type { JiraChartSettings } from "./analyst-jira-history";
-export { isoWeekParts } from "./iso-week";
+export { isoWeekParts };
 import { isAbandonedJiraStatus, isClosedJiraStatus, parseJiraAssigneeSummary } from "./jira-import";
 import { normalizeSourceMode, type PointSourceMode } from "./point-source-mode";
+import { isIsoDate, isoWeekParts } from "./iso-week";
+import { safeExternalUrl } from "./safe-link";
 
 export type AnalystPointModule = "overview" | "jira" | "planner" | "cycle20" | "dossiers";
 export type AnalystJiraTicket = { id: string; key: string; internalId: string; summary: string; status: string; createdAt: string; updatedAt: string; link: string };
@@ -115,25 +117,36 @@ export function initialAnalystPoint(analyst: GlobalDirectoryUser, manager?: Glob
 
 export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUser, manager?: GlobalDirectoryUser): AnalystPointData {
   const fallback = initialAnalystPoint(analyst, manager);
-  if (!value || typeof value !== "object") return fallback;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
   const source = value as Partial<AnalystPointData>;
+  const text = (value: unknown, initial = "") => typeof value === "string" ? value : initial;
+  const date = (value: unknown, initial: string) => typeof value === "string" && isIsoDate(value) ? value : initial;
+  const rows = <T,>(value: unknown): T[] => Array.isArray(value) ? value.filter((item) => item && typeof item === "object" && !Array.isArray(item)) as T[] : [];
+  const tickets = (value: unknown) => rows<AnalystJiraTicket>(value).map((item) => ({ ...item, id: text(item.id) || crypto.randomUUID(), key: text(item.key), internalId: text(item.internalId), summary: text(item.summary), status: text(item.status), createdAt: text(item.createdAt), updatedAt: text(item.updatedAt), link: safeExternalUrl(item.link) })).filter((ticket) => !isAbandonedJiraStatus(ticket.status));
   const preferences = source.preferences && typeof source.preferences === "object" ? source.preferences : fallback.preferences;
-  const visible = (candidate: unknown) => ({ ...allVisible(), ...(candidate && typeof candidate === "object" ? candidate : {}) });
-  const order = Array.isArray(preferences.order) ? [...preferences.order.filter((id) => analystPointModules.some((module) => module.id === id)), ...analystPointModules.map((module) => module.id).filter((id) => !preferences.order.includes(id))] : fallback.preferences.order;
+  const visible = (candidate: unknown) => Object.fromEntries(analystPointModules.map(({ id }) => [id, !candidate || typeof candidate !== "object" || (candidate as Record<string, unknown>)[id] !== false])) as Record<AnalystPointModule, boolean>;
+  const order = Array.isArray(preferences.order) ? [...new Set([...preferences.order.filter((id) => analystPointModules.some((module) => module.id === id)), ...analystPointModules.map((module) => module.id)])] : fallback.preferences.order;
   return {
     ...fallback,
     ...source,
     analystId: analyst.id,
-    dossiers: Array.isArray(source.dossiers) ? source.dossiers : [],
-    jira: Array.isArray(source.jira) ? source.jira.filter((ticket) => !isAbandonedJiraStatus(ticket.status)) : [],
-    jiraResolved: Array.isArray(source.jiraResolved) ? source.jiraResolved.filter((ticket) => !isAbandonedJiraStatus(ticket.status)) : [],
+    meetingDate: date(source.meetingDate, fallback.meetingDate),
+    periodFrom: date(source.periodFrom, fallback.periodFrom),
+    periodTo: date(source.periodTo, fallback.periodTo),
+    cycleFrom: date(source.cycleFrom, fallback.cycleFrom),
+    cycleTo: date(source.cycleTo, fallback.cycleTo),
+    note: text(source.note, fallback.note),
+    includeCycle20: typeof source.includeCycle20 === "boolean" ? source.includeCycle20 : fallback.includeCycle20,
+    dossiers: rows<AnalystDossier>(source.dossiers).map((item) => ({ ...item, id: text(item.id) || crypto.randomUUID(), title: text(item.title), status: text(item.status, "À faire"), action: text(item.action), deadline: text(item.deadline), comment: text(item.comment), progress: Math.max(0, Math.min(100, Number(item.progress) || 0)), showProgress: Boolean(item.showProgress) })),
+    jira: tickets(source.jira),
+    jiraResolved: tickets(source.jiraResolved),
     jiraMode: normalizeSourceMode(source.jiraMode),
     manualJiraCounts: source.manualJiraCounts && [source.manualJiraCounts.open, source.manualJiraCounts.resolved].every((count) => Number.isSafeInteger(count) && count >= 0) ? { ...source.manualJiraCounts } : undefined,
     preferences: {
       ...fallback.preferences,
       ...preferences,
       order,
-      widths: { ...fallback.preferences.widths, ...(preferences.widths ?? {}) },
+      widths: Object.fromEntries(analystPointModules.map(({ id }) => [id, ["half", "two-thirds", "full"].includes(preferences.widths?.[id]) ? preferences.widths[id] : fallback.preferences.widths[id]])) as Record<AnalystPointModule, ModuleWidth>,
       readModules: visible(preferences.readModules),
       mailModules: visible(preferences.mailModules),
       htmlModules: visible(preferences.htmlModules),
@@ -145,7 +158,7 @@ export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUs
         to: typeof preferences.jiraChart?.to === "string" ? preferences.jiraChart.to : fallback.preferences.jiraChart.to,
       },
     },
-    mail: { ...fallback.mail, ...(source.mail ?? {}) },
+    mail: { to: text(source.mail?.to, fallback.mail.to), cc: text(source.mail?.cc), subject: text(source.mail?.subject, fallback.mail.subject), intro: text(source.mail?.intro, fallback.mail.intro), autoTo: Array.isArray(source.mail?.autoTo) ? source.mail.autoTo.filter((email) => typeof email === "string") : fallback.mail.autoTo },
   };
 }
 

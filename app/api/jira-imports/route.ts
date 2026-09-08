@@ -5,6 +5,9 @@ import type { JiraCsvTicket } from "../../../lib/jira-csv";
 import { JIRA_DELETE_KEYS_PER_STATEMENT, JIRA_PARTICIPANT_ROWS_PER_STATEMENT, JIRA_STATEMENTS_PER_BATCH, JIRA_TICKET_ROWS_PER_STATEMENT, jiraImportChunks } from "../../../lib/jira-import-batching";
 import { getRuntimeEnv } from "../../../lib/runtime-env";
 import { getEditorUser } from "../../simple-auth";
+import { jiraImportCountError } from "../../../lib/jira-import-integrity";
+import { isIsoDate } from "../../../lib/iso-week";
+import { safeExternalUrl } from "../../../lib/safe-link";
 
 const MAX_CHUNK_SIZE = 250;
 
@@ -19,7 +22,7 @@ function cleanText(value: unknown, maxLength: number) {
 }
 
 function validDateTime(value: string) {
-  return !value || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value);
+  return !value || (isIsoDate(value.slice(0, 10)) && /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(value));
 }
 
 function cleanTicket(value: unknown): JiraCsvTicket | null {
@@ -37,7 +40,7 @@ function cleanTicket(value: unknown): JiraCsvTicket | null {
     const usercode = cleanText(participant.usercode, 20).toUpperCase();
     if (!/^[A-Z]\d{7}$/.test(usercode)) return [];
     return [{ usercode, jiraUserId: cleanText(participant.jiraUserId, 80) }];
-  }).slice(0, 50) : [];
+  }) : [];
   return {
     key,
     internalId: cleanText(source.internalId, 60),
@@ -48,7 +51,7 @@ function cleanTicket(value: unknown): JiraCsvTicket | null {
     updatedAt,
     resolutionAt,
     participants: Array.from(new Map(participants.map((participant) => [participant.usercode, participant])).values()),
-    link: cleanText(source.link, 500) || `https://jira.example.test/browse/${key}`,
+    link: safeExternalUrl(cleanText(source.link, 500)) || `https://jira.example.test/browse/${key}`,
   };
 }
 
@@ -170,6 +173,12 @@ export async function POST(request: Request) {
       const repairedTextCount = Math.max(0, Math.round(Number(body.repairedTextCount) || 0));
       const unknownUserCodeCount = Math.max(0, Math.round(Number(body.unknownUserCodeCount) || 0));
       const raw = rawDb();
+      const [tickets, participants] = await Promise.all([
+        raw.prepare("SELECT count(*) AS count FROM jira_import_tickets WHERE import_id = ?").bind(importId).first<{ count: number }>(),
+        raw.prepare("SELECT count(*) AS count FROM jira_import_participants WHERE import_id = ?").bind(importId).first<{ count: number }>(),
+      ]);
+      const integrityError = jiraImportCountError({ tickets: body.expectedTicketCount, participants: body.expectedParticipantCount }, { tickets: Number(tickets?.count ?? 0), participants: Number(participants?.count ?? 0) });
+      if (integrityError) return Response.json({ error: integrityError }, { status: 409 });
       await raw.batch([
         raw.prepare(`INSERT INTO jira_tickets (ticket_key, internal_id, status, summary, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, last_import_id, imported_at)
           SELECT ticket_key, internal_id, status, summary, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, import_id, CURRENT_TIMESTAMP

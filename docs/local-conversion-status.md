@@ -1,10 +1,12 @@
-# Production et conversion locale — V41 du 4 septembre 2026
+# Production et conversion locale — revue du 8 septembre 2026
+
+La revue courante est décrite dans `review-20260908.md`. L’export courant ne contient pas de données métier initiales : il est prêt pour les imports ou l’ouverture d’un fichier local existant.
 
 ## Retours intégrés
 
 - Édition directe du point marché derrière un interrupteur de sécurité, sans écran de préparation intermédiaire.
 - Promotions séparées des simulations, avec leur propre bloc manuel et leur reprise depuis le point précédent.
-- Simulations réduites au nom, au mois et à l’état métier final. La catégorie Planner prime ; une catégorie 8 ou supérieure est faite, même si la trame facultative manque. Une carte arrêtée dans une étape précoce est non finalisée.
+- Simulations réduites au nom, au mois et à l’état métier final. La catégorie Planner prime ; une catégorie supérieure à 6 (hors abandon 11) est faite, même si la trame facultative manque. Une carte arrêtée dans une étape précoce est non finalisée.
 - Corrections Jira et simulations conservées dans le point et prioritaires sur les imports suivants.
 - Blocs réordonnables par glisser-déposer, largeurs 1/2, 2/3 et pleine, insertion, masquage et remise à zéro de la structure.
 - Barre d’édition avec annuler/rétablir, texte de 85 à 130 %, trois densités, couleur, ajustement compact, plein écran et sauvegarde.
@@ -36,7 +38,7 @@ Le Centre d’import conserve les parcours du site et ajoute les accès à la sa
 
 Les commandes de disque sont accessibles dans « Fichier local », en bas de la navigation. Les boutons habituels de sauvegarde des points enregistrent aussi le fichier ; Ctrl+S conserve toutes les données et les brouillons, Ctrl+O rouvre un fichier. Les données Jira, Planner, les participants et les calculs utilisent les règles métier partagées.
 
-## Données initiales et anciennes sauvegardes
+## Données initiales des anciennes livraisons et sauvegardes
 
 Les marchés, les personnes, les points marché et analystes et les tâches Planner déjà récupérés sont conservés dans le HTML livré. Le registre Jira démarre sans tickets et sans ancien journal d’import distant ; l’utilisateur l’alimente depuis le Centre d’import. Aucune extraction Jira partielle n’est embarquée.
 

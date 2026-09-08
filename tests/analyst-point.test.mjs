@@ -1,19 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import ts from "typescript";
+import { moduleUrl } from "./helpers/module-url.mjs";
 
-function transpile(path) {
-  return ts.transpileModule(readFileSync(new URL(path, import.meta.url), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-}
-
-const jiraUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/jira-import.ts")).toString("base64")}`;
-const isoUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/iso-week.ts")).toString("base64")}`;
-const sourceModeUrl = `data:text/javascript;base64,${Buffer.from(transpile("../lib/point-source-mode.ts")).toString("base64")}`;
-const analystSource = transpile("../lib/analyst-point.ts").replace('from "./jira-import"', `from "${jiraUrl}"`).replace('from "./iso-week"', `from "${isoUrl}"`).replace('from "./point-source-mode"', `from "${sourceModeUrl}"`);
-const analystPoint = await import(`data:text/javascript;base64,${Buffer.from(analystSource).toString("base64")}`);
+const analystPoint = await import(moduleUrl("../../lib/analyst-point.ts"));
 
 const analyst = { id: "analyst", name: "Jane DOE", email: "jane@example.test", usercode: "A1234567", plannerAlias: "Jane", role: "analyste-tarif-referentiel", marketIds: [] };
 

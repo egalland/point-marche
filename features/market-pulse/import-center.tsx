@@ -131,7 +131,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
         if (!response.ok) throw new Error(payload.error || `Échec du lot ${Math.floor(index / chunkSize) + 1}.`);
         setProgress(Math.round(Math.min(preview.tickets.length, index + tickets.length) / preview.tickets.length * 100));
       }
-      const finishedResponse = await fetch("/api/jira-imports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "finish", importId, rejectedCount: preview.rejectedRows, repairedTextCount, unknownUserCodeCount: unknownUserCodes.length }) });
+      const finishedResponse = await fetch("/api/jira-imports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "finish", importId, expectedTicketCount: preview.tickets.length, expectedParticipantCount: preview.participantCount, rejectedCount: preview.rejectedRows, repairedTextCount, unknownUserCodeCount: unknownUserCodes.length }) });
       const finished = await finishedResponse.json() as { batch?: ImportBatch; error?: string };
       if (!finishedResponse.ok || !finished.batch) throw new Error(finished.error || "Finalisation impossible.");
       await Promise.all([loadHistory(), onJiraImported()]);

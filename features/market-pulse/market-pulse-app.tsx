@@ -1,6 +1,6 @@
 "use client";
 
-import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft, saveLocalFile } from "@/lib/app-transport";
+import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft, saveLocalFile, markPointSaved, hasUnsavedSessionDrafts, clearSessionDrafts } from "@/lib/app-transport";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type FormEvent, type ReactNode } from "react";
 import { AppDialog } from "@/components/app-dialog";
 import { AppIcon as Icon } from "@/components/app-icon";
@@ -8,6 +8,7 @@ import { AppearanceProvider } from "@/components/appearance-provider";
 import { AppearanceControl, AppearanceSettings } from "@/components/appearance-control";
 import { ActionMenu } from "@/components/action-menu";
 import { accentTokens } from "@/lib/color-contrast";
+import { safeExternalUrl } from "@/lib/safe-link";
 import type { ModuleWidth } from "@/components/module-layout-editor";
 import { GLOBAL_ROLE_OPTIONS, roleLabel, roleMailMode, roleUsesAutomaticJira, type GlobalDirectoryUser, type GlobalRole } from "@/lib/global-directory";
 import { isAbandonedJiraStatus, isClosedJiraStatus, JIRA_SUMMARY_STATUSES, type JiraSummaryImport } from "@/lib/jira-import";
@@ -98,6 +99,10 @@ const isIsoDate = (value: string) => {
 const safeIsoDate = (value: string, fallback = isoToday()) => isIsoDate(value) ? value : fallback;
 const validHex = (value: string) => /^#[0-9A-F]{6}$/i.test(value.trim());
 const normalizeHex = (value: unknown) => typeof value === "string" && validHex(value) ? value.trim().toUpperCase() : "";
+const textValue = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
+const objectRows = <T,>(value: unknown): T[] => Array.isArray(value) ? value.filter(isRecord) as T[] : [];
+const stringFields = <T extends object, K extends keyof T>(item: T, keys: K[]): Pick<T, K> => Object.fromEntries(keys.map((key) => [key, textValue(item[key])])) as Pick<T, K>;
 
 function initialData(marketId = "revetements-menuiserie", marketOverride?: Market): PointData {
   const market = marketOverride ?? defaultMarkets.find((item) => item.id === marketId) ?? defaultMarkets[0];
@@ -111,40 +116,22 @@ function initialData(marketId = "revetements-menuiserie", marketOverride?: Marke
     preferences: defaultPreferences(),
     mail: { to: "", cc: "", subject: `Point marché — ${market.name}`, intro: "Bonjour à tous, voici le point d’avancement de la semaine.", autoTo: [], autoCc: [] },
   };
-  if (marketId !== "revetements-menuiserie") return { ...common, dossiers: [], operations: [], promotions: [], tariffs: [], jira: [] };
-  return {
-    ...common,
-    dossiers: [
-      { id: uid(), title: "EDAC", universe: "Revêtements", reference: "B9822", status: "En attente", owner: "Équipe marché", action: "Obtenir le retour de l’équipe marché.", deadline: "", progress: 35, comment: "Évolution décalée en septembre." },
-      { id: uid(), title: "JELDWEN ALLEMAGNE", universe: "Menuiserie", reference: "D2381", status: "Action requise", owner: "", action: "Vérifier la trame transmise avant poursuite.", deadline: "", progress: 55, comment: "Trame à contrôler." },
-      { id: uid(), title: "CIB", universe: "Dossier marché", reference: "", status: "En attente", owner: "Équipe vente", action: "Relancer l’équipe vente.", deadline: "", progress: 25, comment: "En attente du retour de l’équipe vente." },
-    ],
-    operations: [],
-    promotions: [
-      { id: uid(), name: "Incontournables de la rentrée", period: "Septembre 2026", purchaseNote: "", salesState: "En attente de contrôle", action: "", comment: "" },
-      { id: uid(), name: "Champagne Flooring", period: "Octobre 2026", purchaseNote: "", salesState: "En cours", action: "", comment: "" },
-    ],
-    tariffs: [],
-    jira: [
-      ["GLOBAL-10001", "Contrôle règle tarifaire", "En attente d’un tiers", "Moyenne", "John DOE", "", "", ""],
-      ["GLOBAL-10002", "Écart de promotion", "En cours", "Haute", "Jane DOE", "", "", ""],
-      ["GLOBAL-10003", "Mise à jour fournisseur", "En attente de changement", "Moyenne", "Alex MARTIN", "", "", ""],
-    ].map(([key, summary, status, priority, assignee, lastActivity, link, comment]) => ({ id: uid(), key, summary, status, priority, assignee, lastActivity, link, comment })),
-  };
+  return { ...common, dossiers: [], operations: [], promotions: [], tariffs: [], jira: [] };
 }
 
 function normalizeCommercialOperation(item: CommercialOperation): CommercialOperation {
   const current: CommercialOperation = {
     ...item,
+    id: textValue(item.id) || uid(),
     kind: "simulation",
     name: typeof item.name === "string" ? item.name : "",
     month: typeof item.month === "string" ? item.month : "",
     state: typeof item.state === "string" ? item.state : "À faire",
     summary: typeof item.summary === "string" ? item.summary : "",
-    steps: Array.isArray(item.steps) ? item.steps : [],
+    steps: Array.isArray(item.steps) ? item.steps.filter((step) => Array.isArray(step) && step.length === 2 && step.every((value) => typeof value === "string")) : [],
   };
   if (!current.plannerSource) return current;
-  const plannerBase = current.plannerBase && typeof current.plannerBase === "object" ? current.plannerBase : { name: current.name, month: current.month, state: normalizeMarketSimulationState(current.state), summary: "" };
+  const plannerBase = isRecord(current.plannerBase) ? { ...stringFields(current.plannerBase, ["name", "month", "state", "summary"]), state: normalizeMarketSimulationState(textValue(current.plannerBase.state)) } : { name: current.name, month: current.month, state: normalizeMarketSimulationState(current.state), summary: "" };
   const plannerOverride = normalizeMarketSimulationOverride(current.plannerOverride);
   return { ...current, plannerBase, ...resolveMarketSimulationFields(plannerBase, plannerOverride), ...(hasMarketSimulationOverride(plannerOverride) ? { plannerOverride } : { plannerOverride: undefined }) };
 }
@@ -165,16 +152,16 @@ function normalizePromotion(item: Partial<Promotion> & Partial<CommercialOperati
 }
 
 function normalizeJiraTicket(item: JiraTicket): JiraTicket {
-  const current = { ...item, summary: item.summary || "", status: item.status || "À faire", priority: item.priority || "", assignee: item.assignee || "", lastActivity: item.lastActivity || "", comment: item.comment || "" };
-  const importedBase = item.importedBase && typeof item.importedBase === "object" ? item.importedBase : /^(?:Import Jira détaillé|Tableau Jira hebdomadaire)$/.test(current.comment) ? jiraImportedFields(current) : undefined;
+  const current = { ...item, ...stringFields(item, ["key", "summary", "priority", "assignee", "lastActivity", "comment"]), id: textValue(item.id) || uid(), status: textValue(item.status, "À faire"), link: safeExternalUrl(item.link) };
+  const importedBase = isRecord(item.importedBase) ? jiraImportedFields({ ...current, ...stringFields(item.importedBase, ["summary", "status", "priority", "assignee", "lastActivity", "comment"]), count: typeof item.importedBase.count === "number" ? item.importedBase.count : current.count }) : /^(?:Import Jira détaillé|Tableau Jira hebdomadaire)$/.test(current.comment) ? jiraImportedFields(current) : undefined;
   if (!importedBase) return current;
-  const pointOverride = item.pointOverride && typeof item.pointOverride === "object" ? item.pointOverride : undefined;
+  const pointOverride: JiraPointOverride | undefined = isRecord(item.pointOverride) ? Object.fromEntries(Object.entries(item.pointOverride).filter(([key, value]) => key === "count" ? typeof value === "number" && Number.isFinite(value) && value > 0 : ["summary", "status", "priority", "assignee", "lastActivity", "comment", "updatedAt"].includes(key) && typeof value === "string")) : undefined;
   return { ...current, importedBase, ...resolveJiraFields(importedBase, pointOverride), ...(hasJiraOverride(pointOverride) ? { pointOverride } : { pointOverride: undefined }) };
 }
 
 function normalizePointData(value: unknown, marketId: string, marketOverride?: Market): PointData {
   const fallback = initialData(marketId, marketOverride);
-  if (!value || typeof value !== "object") return fallback;
+  if (!isRecord(value)) return fallback;
   const source = value as Partial<PointData> & { simulations?: CommercialOperation[] };
   const themeColor = themes.some((theme) => theme.id === source.themeColor) ? source.themeColor as ThemeKey : fallback.themeColor;
   const sourcePreferences = source.preferences && typeof source.preferences === "object" ? source.preferences : defaultPreferences();
@@ -182,7 +169,7 @@ function normalizePointData(value: unknown, marketId: string, marketOverride?: M
     const sourceModules = value && typeof value === "object" ? value as Record<string, unknown> : {};
     return Object.fromEntries(pointModules.map((module) => [module.id, module.id === "comparison" ? sourceModules[module.id] === true : sourceModules[module.id] !== false])) as ModuleVisibility;
   };
-  const legacyOperations = Array.isArray(source.operations) ? source.operations : Array.isArray(source.simulations) ? source.simulations : [];
+  const legacyOperations = objectRows<CommercialOperation>(Array.isArray(source.operations) ? source.operations : source.simulations);
   const hasSeparatedPromotions = Array.isArray(source.promotions);
   const usesSimulationAlias = !Array.isArray(source.operations) && Array.isArray(source.simulations);
   const legacySimulation = (item: CommercialOperation) => Boolean(item.plannerSource || item.kind === "simulation" || /^nouvelle simulation/i.test(item.name || "") || (Array.isArray(item.steps) && item.steps.length));
@@ -195,7 +182,7 @@ function normalizePointData(value: unknown, marketId: string, marketOverride?: M
     pointName: "Point marché",
     themeColor,
     customColor: normalizeHex(source.customColor) || fallback.customColor,
-    meetingDate: typeof source.meetingDate === "string" ? source.meetingDate : fallback.meetingDate,
+    meetingDate: typeof source.meetingDate === "string" ? safeIsoDate(source.meetingDate) : fallback.meetingDate,
     priority: typeof source.priority === "string" ? source.priority : fallback.priority,
     jiraMode: normalizeSourceMode(source.jiraMode), plannerMode: normalizeSourceMode(source.plannerMode), marketComparison: normalizeMarketComparison(source.marketComparison),
     preferences: {
@@ -205,18 +192,18 @@ function normalizePointData(value: unknown, marketId: string, marketOverride?: M
       readModules: mergeModules(sourcePreferences.readModules),
       mailModules: mergeModules(sourcePreferences.mailModules),
       htmlModules: mergeModules(sourcePreferences.htmlModules),
-      moduleOrder: Array.isArray(sourcePreferences.moduleOrder) ? [...sourcePreferences.moduleOrder.filter((id) => pointModules.some((module) => module.id === id)), ...defaultModuleOrder.filter((id) => !sourcePreferences.moduleOrder.includes(id))] : [...defaultModuleOrder],
+      moduleOrder: Array.isArray(sourcePreferences.moduleOrder) ? [...new Set([...sourcePreferences.moduleOrder.filter((id) => pointModules.some((module) => module.id === id)), ...defaultModuleOrder])] : [...defaultModuleOrder],
       moduleWidths: Object.fromEntries(pointModules.map((module) => {
         const candidate = sourcePreferences.moduleWidths && typeof sourcePreferences.moduleWidths === "object" ? sourcePreferences.moduleWidths[module.id] : undefined;
         return [module.id, candidate === "half" || candidate === "two-thirds" || candidate === "full" ? candidate : defaultModuleWidths[module.id]];
       })) as Record<PointModule, ModuleWidth>,
     },
-    dossiers: Array.isArray(source.dossiers) ? source.dossiers.map((item) => ({ ...item, showProgress: Boolean(item.showProgress) })) : [],
+    dossiers: objectRows<Dossier>(source.dossiers).map((item) => ({ ...item, ...stringFields(item, ["title", "universe", "reference", "status", "owner", "action", "deadline", "comment"]), id: textValue(item.id) || uid(), progress: Math.max(0, Math.min(100, Number(item.progress) || 0)), showProgress: Boolean(item.showProgress) })),
     operations: simulations.map(normalizeCommercialOperation),
-    promotions: promotions.map((item) => normalizePromotion(item)),
-    tariffs: Array.isArray(source.tariffs) ? source.tariffs : [],
-    jira: Array.isArray(source.jira) ? source.jira.filter((ticket) => !isAbandonedJiraStatus(ticket.status)).map(normalizeJiraTicket) : [],
-    mail: { ...fallback.mail, ...(source.mail && typeof source.mail === "object" ? source.mail : {}) },
+    promotions: objectRows<Promotion>(promotions).map((item) => normalizePromotion(item)),
+    tariffs: objectRows<Tariff>(source.tariffs).map((item) => ({ ...item, ...stringFields(item, ["code", "supplier", "month", "state", "receptionDate", "dueDate", "owner", "comment"]), id: textValue(item.id) || uid() })),
+    jira: objectRows<JiraTicket>(source.jira).map(normalizeJiraTicket).filter((ticket) => !isAbandonedJiraStatus(ticket.status)),
+    mail: isRecord(source.mail) ? { ...fallback.mail, ...Object.fromEntries(["to", "cc", "subject", "intro"].filter((key) => typeof source.mail?.[key as keyof PointData["mail"]] === "string").map((key) => [key, source.mail![key as keyof PointData["mail"]]])), autoTo: Array.isArray(source.mail.autoTo) ? source.mail.autoTo.filter((value) => typeof value === "string") : [], autoCc: Array.isArray(source.mail.autoCc) ? source.mail.autoCc.filter((value) => typeof value === "string") : [] } : fallback.mail,
   };
 }
 
@@ -366,6 +353,7 @@ function dateLabel(value: string) { if (!isIsoDate(value)) return "Date à défi
 function dateValue(value: string) { const date = new Date(value.includes("T") ? value : `${value}T12:00:00`); return Number.isFinite(date.valueOf()) ? date.valueOf() : Number.NaN; }
 function daysBetween(from: string, to: string) { if (!from || !to) return 0; const difference = dateValue(to) - dateValue(from); return Number.isFinite(difference) ? Math.max(0, Math.floor(difference / 86400000)) : 0; }
 function isClosed(status: string) { return /(termin|cl[oô]tur|r[eé]solu|annul)/i.test(status); }
+function operationIdentity(operation: CommercialOperation) { return operation.plannerSource?.externalId || operation.sourceId || operation.id; }
 function isOperationClosed(operation: CommercialOperation) {
   return /(faite|fait|termin|non finalis|annul)/i.test(operation.state);
 }
@@ -698,7 +686,7 @@ function PreviewDashboard({ data, market, archive, editing = false, actions }: {
     {editing && actions ? <div className="canvas-source-controls"><span>Sources du point</span><div><b>Jira</b><button type="button" className={data.jiraMode === "automatic" ? "active" : ""} onClick={() => actions.setSourceMode("jira", "automatic")}>Import</button><button type="button" className={data.jiraMode === "manual" ? "active" : ""} onClick={() => actions.setSourceMode("jira", "manual")}>Manuel</button></div><div><b>Simulations</b><button type="button" className={data.plannerMode === "automatic" ? "active" : ""} onClick={() => actions.setSourceMode("planner", "automatic")}>Import</button><button type="button" className={data.plannerMode === "manual" ? "active" : ""} onClick={() => actions.setSourceMode("planner", "manual")}>Manuel</button></div></div> : (data.jiraMode === "manual" || data.plannerMode === "manual") && <p className="point-source-caption">{[data.jiraMode === "manual" ? "Jira : saisie manuelle" : "", data.plannerMode === "manual" ? "Simulations : saisie manuelle" : ""].filter(Boolean).join(" · ")}</p>}
     <div className={`report-module-grid ${editing ? "is-inline-editing" : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { if (!actions || !draggedModule || dropModule) return; event.preventDefault(); actions.insertModule(draggedModule, null); setDraggedModule(null); }}>
       {editing && actions && <ModuleInsertion key="insert:first" hidden={hiddenModules} before={visibleModules[0] ?? null} onInsert={actions.insertModule}/>}
-      {visibleModules.flatMap((module, index) => [<div key={module} className={`report-module-item width-${data.preferences.moduleWidths[module]} ${selectedModule === module ? "is-selected" : ""} ${dropModule === module ? "is-drop-target" : ""}`} onClick={(event) => { if (editing) { event.stopPropagation(); setSelectedModule(module); setContextMenu(null); } }} onContextMenu={(event) => { if (!editing || !actions) return; event.preventDefault(); event.stopPropagation(); setSelectedModule(module); setContextMenu({ module, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 245)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 420)) }); }} onDragEnter={(event) => { if (!editing || !draggedModule || draggedModule === module) return; event.preventDefault(); setDropModule(module); }} onDragOver={(event) => { if (editing && draggedModule) event.preventDefault(); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDropModule((current) => current === module ? null : current); }} onDrop={(event) => { if (!actions || !draggedModule || draggedModule === module) return; event.preventDefault(); event.stopPropagation(); actions.insertModule(draggedModule, module); setDraggedModule(null); setDropModule(null); }}><div className="canvas-module-shell">{moduleToolbar(module)}{content[module]}</div></div>, editing && actions ? <ModuleInsertion key={`insert:${module}`} hidden={hiddenModules} before={visibleModules[index + 1] ?? null} onInsert={actions.insertModule}/> : null])}
+      {visibleModules.map((module, index) => <div key={module} className={`report-module-item width-${data.preferences.moduleWidths[module]} ${selectedModule === module ? "is-selected" : ""} ${dropModule === module ? "is-drop-target" : ""}`} onClick={(event) => { if (editing) { event.stopPropagation(); setSelectedModule(module); setContextMenu(null); } }} onContextMenu={(event) => { if (!editing || !actions) return; event.preventDefault(); event.stopPropagation(); setSelectedModule(module); setContextMenu({ module, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 245)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 420)) }); }} onDragEnter={(event) => { if (!editing || !draggedModule || draggedModule === module) return; event.preventDefault(); setDropModule(module); }} onDragOver={(event) => { if (editing && draggedModule) event.preventDefault(); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDropModule((current) => current === module ? null : current); }} onDrop={(event) => { if (!actions || !draggedModule || draggedModule === module) return; event.preventDefault(); event.stopPropagation(); actions.insertModule(draggedModule, module); setDraggedModule(null); setDropModule(null); }}><div className="canvas-module-shell">{moduleToolbar(module)}{content[module]}</div>{editing && actions && <ModuleInsertion hidden={hiddenModules} before={visibleModules[index + 1] ?? null} onInsert={actions.insertModule}/>}</div>)}
     </div>
     {contextMenu && editing && actions && <div className="canvas-context-menu" role="menu" aria-label={`Actions pour ${moduleLabel(contextMenu.module)}`} style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}><strong>{moduleLabel(contextMenu.module)}</strong><button type="button" onClick={() => { actions.moveModule(contextMenu.module, -1); setContextMenu(null); }}>↑ Monter</button><button type="button" onClick={() => { actions.moveModule(contextMenu.module, 1); setContextMenu(null); }}>↓ Descendre</button><div className="canvas-context-width"><span>Largeur</span>{(["half", "two-thirds", "full"] as ModuleWidth[]).map((width) => <button key={width} type="button" className={data.preferences.moduleWidths[contextMenu.module] === width ? "active" : ""} onClick={() => actions.updateModuleWidth(contextMenu.module, width)}>{width === "half" ? "1/2" : width === "two-thirds" ? "2/3" : "1/1"}</button>)}</div>{hiddenModules.length > 0 && <><label>Ajouter avant<select defaultValue="" onChange={(event) => { const moduleId = event.target.value as PointModule; if (moduleId) actions.insertModule(moduleId, contextMenu.module); setContextMenu(null); }}><option value="">Choisir…</option>{hiddenModules.map((module) => <option key={module} value={module}>{moduleLabel(module)}</option>)}</select></label><label>Ajouter après<select defaultValue="" onChange={(event) => { const moduleId = event.target.value as PointModule; if (moduleId) { const index = data.preferences.moduleOrder.indexOf(contextMenu.module); actions.insertModule(moduleId, data.preferences.moduleOrder[index + 1] ?? null); } setContextMenu(null); }}><option value="">Choisir…</option>{hiddenModules.map((module) => <option key={module} value={module}>{moduleLabel(module)}</option>)}</select></label></>}<button type="button" className="danger" onClick={() => { actions.hideModule(contextMenu.module); setSelectedModule(null); setContextMenu(null); }}>Masquer le bloc</button><button type="button" onClick={() => { actions.resetLayout(); setContextMenu(null); }}>Réinitialiser la structure</button></div>}
     <footer className="report-footer"><span>Market Pulse · {market.name}</span><span>Point marché · {isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</span></footer>
@@ -721,7 +709,7 @@ function buildMailHtml(data: PointData, market: Market, archive: PointRecord[]) 
   const operationRows = data.operations.map((item) => `<tr><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA"><b style="display:block;color:#10201D;font-size:11px">${escapeHtml(item.name || "Simulation")}</b><span style="display:block;margin-top:3px;color:#70807C;font-size:9px">${escapeHtml(item.month || "Mois à définir")}${hasMarketSimulationOverride(item.plannerOverride) ? " · modifiée dans le point" : ""}</span></td><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA;color:#274C40;font-size:10px;font-weight:700;text-align:right">${escapeHtml(item.state || "À faire")}</td></tr>`).join("");
   const promotionRows = data.promotions.map((item) => `<tr><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA"><b style="display:block;color:#10201D;font-size:11px">${escapeHtml(item.name || "Promotion")}</b><span style="display:block;margin-top:3px;color:#70807C;font-size:9px">${escapeHtml(item.period || "Période à définir")}</span>${item.purchaseNote ? `<span style="display:block;margin-top:5px;color:#41534E;font-size:10px"><b>Promotion achat :</b> ${escapeHtml(item.purchaseNote)}</span>` : ""}${item.action ? `<span style="display:block;margin-top:4px;color:#41534E;font-size:10px"><b>Action :</b> ${escapeHtml(item.action)}</span>` : ""}${item.comment ? `<span style="display:block;margin-top:4px;color:#70807C;font-size:9px">${escapeHtml(item.comment)}</span>` : ""}</td><td style="padding:12px 10px;border-bottom:1px solid #E7EDEA;color:#274C40;font-size:10px;font-weight:700;text-align:right">${escapeHtml(item.salesState || "À préparer")}</td></tr>`).join("");
   const sortedJiraRows = stats.rows.slice().sort((left, right) => attentionRank[left.level] - attentionRank[right.level] || (right.inactivity ?? -1) - (left.inactivity ?? -1));
-  const jiraRows = groupJiraPeople(sortedJiraRows.map((row) => row.item)).map((person) => `<tr><td colspan="4" style="padding:13px 10px 7px;border-bottom:1px solid #DCE5E2;color:#10201D;font-size:12px;font-weight:700">${escapeHtml(person.assignee)} <span style="color:#72827E;font-weight:400">· ${person.total} ticket${person.total > 1 ? "s" : ""}</span></td></tr>${person.items.map((item) => { const signal = jiraAttention(item, data.meetingDate, market); const key = item.link ? `<a href="${escapeHtml(item.link)}" target="_blank" style="color:#126887;font-weight:700;text-decoration:underline">${escapeHtml(item.key || "Ouvrir")}</a>` : `<span style="color:#566A64;font-weight:700">${escapeHtml(item.key || "Synthèse")}</span>`; const alertColor = signal.level === "critical" ? "#B42318" : signal.level === "warning" ? "#9A5B13" : "#47615A"; const alertBackground = signal.level === "critical" ? "#FEECEB" : signal.level === "warning" ? "#FFF3E4" : "#EEF3F1"; return `<tr><td width="105" style="padding:10px;border-bottom:1px solid #EDF1EF;font-size:10px">${key}</td><td style="padding:10px;border-bottom:1px solid #EDF1EF;color:#263C36;font-size:11px"><b>${escapeHtml(item.summary || "Synthèse de la file Jira")}</b><br><span style="color:#71817D;font-size:9px">${escapeHtml(item.status)}</span></td><td width="115" style="padding:10px;border-bottom:1px solid #EDF1EF;color:#71817D;font-size:9px">${signal.inactivity === null ? "Activité non datée" : `Modifié il y a ${signal.inactivity} j`}</td><td width="95" style="padding:10px;border-bottom:1px solid #EDF1EF;text-align:right"><span style="display:inline-block;padding:5px 7px;border-radius:7px;background:${alertBackground};color:${alertColor};font-size:9px;font-weight:700">${signal.level === "critical" ? "Critique" : signal.level === "warning" ? "À surveiller" : "À jour"}</span></td></tr>`; }).join("")}`).join("");
+  const jiraRows = groupJiraPeople(sortedJiraRows.map((row) => row.item)).map((person) => `<tr><td colspan="4" style="padding:13px 10px 7px;border-bottom:1px solid #DCE5E2;color:#10201D;font-size:12px;font-weight:700">${escapeHtml(person.assignee)} <span style="color:#72827E;font-weight:400">· ${person.total} ticket${person.total > 1 ? "s" : ""}</span></td></tr>${person.items.map((item) => { const signal = jiraAttention(item, data.meetingDate, market); const key = item.link ? `<a href="${escapeHtml(safeExternalUrl(item.link))}" target="_blank" style="color:#126887;font-weight:700;text-decoration:underline">${escapeHtml(item.key || "Ouvrir")}</a>` : `<span style="color:#566A64;font-weight:700">${escapeHtml(item.key || "Synthèse")}</span>`; const alertColor = signal.level === "critical" ? "#B42318" : signal.level === "warning" ? "#9A5B13" : "#47615A"; const alertBackground = signal.level === "critical" ? "#FEECEB" : signal.level === "warning" ? "#FFF3E4" : "#EEF3F1"; return `<tr><td width="105" style="padding:10px;border-bottom:1px solid #EDF1EF;font-size:10px">${key}</td><td style="padding:10px;border-bottom:1px solid #EDF1EF;color:#263C36;font-size:11px"><b>${escapeHtml(item.summary || "Synthèse de la file Jira")}</b><br><span style="color:#71817D;font-size:9px">${escapeHtml(item.status)}</span></td><td width="115" style="padding:10px;border-bottom:1px solid #EDF1EF;color:#71817D;font-size:9px">${signal.inactivity === null ? "Activité non datée" : `Modifié il y a ${signal.inactivity} j`}</td><td width="95" style="padding:10px;border-bottom:1px solid #EDF1EF;text-align:right"><span style="display:inline-block;padding:5px 7px;border-radius:7px;background:${alertBackground};color:${alertColor};font-size:9px;font-weight:700">${signal.level === "critical" ? "Critique" : signal.level === "warning" ? "À surveiller" : "À jour"}</span></td></tr>`; }).join("")}`).join("");
   const alertRows = alerts.map((item) => `<tr><td style="padding:10px;border-bottom:1px solid #F0D9D3"><b style="display:block;color:${item.severity === "danger" ? "#9B241C" : "#784615"};font-size:11px">${escapeHtml(item.title)}</b><span style="color:#6C5751;font-size:10px">${escapeHtml(item.category)} · ${escapeHtml(item.detail)}</span></td></tr>`).join("");
   const deltaLabel = stats.delta === null ? "—" : `${stats.delta > 0 ? "+" : ""}${stats.delta}`;
   const emptyRow = '<table role="presentation" width="100%"><tr><td style="padding:13px 10px;color:#71817D;font-size:11px">Aucune donnée pour cette section.</td></tr></table>';
@@ -736,7 +724,7 @@ function buildMailHtml(data: PointData, market: Market, archive: PointRecord[]) 
   };
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${escapeHtml(data.mail.subject)}</title></head><body style="margin:0;padding:0;background:#FFFFFF;font-family:Arial,sans-serif;color:#10201D"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#FFFFFF"><tr><td align="center" style="padding:24px 10px"><table role="presentation" width="900" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:900px;background:#FFFFFF;border:1px solid #DCE5E2;border-top:5px solid ${accent}">
   <tr><td style="padding:26px 30px 18px;background:#FFFFFF"><span style="color:#46615A;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px">Market Pulse / ${escapeHtml(market.short)}</span><table role="presentation" width="100%"><tr><td><h1 style="margin:8px 0 4px;color:#10201D;font-size:31px;line-height:36px">Point marché</h1><p style="margin:0;color:#38524B;font-size:15px;font-weight:700">${escapeHtml(market.name)}</p></td><td align="right" valign="bottom"><b style="display:block;color:#10201D;font-size:18px">${isoWeekYear(data.meetingDate)} · S${String(isoWeek(data.meetingDate)).padStart(2, "0")}</b><span style="color:#71817D;font-size:11px">${escapeHtml(dateLabel(data.meetingDate))}</span></td></tr></table><p style="margin:17px 0 0;color:#41534E;font-size:12px;line-height:18px">${escapeHtml(data.mail.intro || "Bonjour à tous, voici le point d’avancement de la semaine.")}</p></td></tr>
-  <tr><td style="padding:0 30px 18px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>${kpis.map(([value, label], index) => `<td width="25%" valign="top" style="padding-right:${index < 3 ? "8px" : "0"}"><table role="presentation" width="100%" style="background:${index === 2 ? "#FEECEB" : index === 1 ? "#FFF3E4" : "#F4F7F6"};border:1px solid ${index === 2 ? "#F6C8C5" : index === 1 ? "#F2D7B6" : "#DCE5E2"}"><tr><td style="padding:13px"><b style="display:block;color:${index === 2 ? "#B42318" : index === 1 ? "#9A5B13" : "#10201D"};font-size:22px">${value}</b><span style="color:#61736E;font-size:9px;text-transform:uppercase">${label}</span></td></tr></table></td>`).join("")}</tr></table></td></tr>
+  ${modules.jira ? `<tr><td style="padding:0 30px 18px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>${kpis.map(([value, label], index) => `<td width="25%" valign="top" style="padding-right:${index < 3 ? "8px" : "0"}"><table role="presentation" width="100%" style="background:${index === 2 ? "#FEECEB" : index === 1 ? "#FFF3E4" : "#F4F7F6"};border:1px solid ${index === 2 ? "#F6C8C5" : index === 1 ? "#F2D7B6" : "#DCE5E2"}"><tr><td style="padding:13px"><b style="display:block;color:${index === 2 ? "#B42318" : index === 1 ? "#9A5B13" : "#10201D"};font-size:22px">${value}</b><span style="color:#61736E;font-size:9px;text-transform:uppercase">${label}</span></td></tr></table></td>`).join("")}</tr></table></td></tr>` : ""}
   <tr><td style="padding:0 30px 18px"><table role="presentation" width="100%" style="background:#F4F7F6;border-left:4px solid ${accent}"><tr><td style="padding:13px 15px"><b style="display:block;color:#38524B;font-size:9px;text-transform:uppercase">Priorité de la semaine</b><span style="display:block;margin-top:5px;color:#10201D;font-size:13px">${escapeHtml(data.priority || "Aucune priorité renseignée.")}</span></td></tr></table></td></tr>
   ${data.preferences.moduleOrder.filter((module) => modules[module]).map((module) => mailSections[module]).join("")}
   <tr><td style="padding:18px 30px;border-top:1px solid #E7EDEA;background:#FFFFFF;color:#71817D;font-size:9px;text-transform:uppercase">Market Pulse · ${escapeHtml(market.name)} · la pièce jointe HTML conserve les filtres et les liens interactifs</td></tr></table></td></tr></table></body></html>`;
@@ -749,7 +737,7 @@ function buildInteractiveHtml(data: PointData, market: Market, archive: PointRec
   const accent = normalizeHex(data.customColor) || theme.accent;
   const maxVolume = Math.max(1, ...stats.points.map((point) => point.value));
   const statusColors = ["#B39AFF", "#FF7287", "#70D8FF", "#FFB083", "#FFD56A", "#72F5C5"];
-  const trendBars = stats.points.map((point, index) => `<div class="trend-bar ${index === stats.points.length - 1 ? "current" : ""}"><b>${point.value}</b><span><i style="height:${Math.max(7, (point.value / maxVolume) * 100)}%"></i></span><small>${escapeHtml(point.label)}</small></div>`).join("");
+  const trendBars = stats.points.map((point, index) => `<div class="trend-bar ${index === stats.points.length - 1 ? "current" : ""}"><b>${point.value}</b><span><i style="height:${(point.value / maxVolume) * 100}%"></i></span><small>${escapeHtml(point.label)}</small></div>`).join("");
   const statusButtons = stats.statusTotals.map((item, index) => `<button type="button" data-status="${escapeHtml(item.status)}"><i style="background:${statusColors[index % statusColors.length]}"></i>${escapeHtml(item.status)} <b>${item.value}</b></button>`).join("");
   const statusSegments = stats.statusTotals.map((item, index) => `<button type="button" title="${escapeHtml(item.status)} : ${item.value}" data-status="${escapeHtml(item.status)}" style="width:${(item.value / Math.max(1, stats.currentVolume)) * 100}%;background:${statusColors[index % statusColors.length]}"></button>`).join("");
   const attentionRank: Record<JiraAttentionLevel, number> = { critical: 0, warning: 1, undated: 2, fresh: 3 };
@@ -758,9 +746,9 @@ function buildInteractiveHtml(data: PointData, market: Market, archive: PointRec
     const rows = person.items.map((item) => {
       const signal = jiraAttention(item, data.meetingDate, market);
       const activity = signal.inactivity === null ? "Activité non datée" : signal.inactivity === 0 ? "Mise à jour aujourd’hui" : `Dernière modification il y a ${signal.inactivity} jours`;
-      const content = `<span>${escapeHtml(item.key || "Synthèse")}</span><div><strong>${escapeHtml(item.summary || "Synthèse de la file Jira")}</strong><small>${escapeHtml(item.status)} · ${escapeHtml(activity)}</small></div><b>${signal.level === "critical" ? `Critique · ${signal.inactivity} j` : signal.level === "warning" ? `À surveiller · ${signal.inactivity} j` : jiraItemCount(item) > 1 ? jiraItemCount(item) : "À jour"}</b>`;
+      const content = `<span>${escapeHtml(item.key || "Synthèse")}</span><div><strong>${escapeHtml(item.summary || "Synthèse de la file Jira")}</strong><small>${escapeHtml(item.status)} · ${escapeHtml(activity)}</small></div><b>${signal.level === "critical" ? `Critique · ${signal.inactivity} j` : signal.level === "warning" ? `À surveiller · ${signal.inactivity} j` : signal.level === "undated" ? "Non datée" : jiraItemCount(item) > 1 ? jiraItemCount(item) : "À jour"}</b>`;
       const attributes = `class="ticket-row ${signal.level}" data-level="${signal.level}" data-status="${escapeHtml(item.status)}" data-count="${jiraItemCount(item)}"`;
-      return item.link ? `<a ${attributes} href="${escapeHtml(item.link)}" target="_blank" rel="noreferrer" title="Ouvrir ${escapeHtml(item.key || "le ticket")} dans Jira">${content}</a>` : `<div ${attributes}>${content}</div>`;
+      return item.link ? `<a ${attributes} href="${escapeHtml(safeExternalUrl(item.link))}" target="_blank" rel="noreferrer" title="Ouvrir ${escapeHtml(item.key || "le ticket")} dans Jira">${content}</a>` : `<div ${attributes}>${content}</div>`;
     }).join("");
     return `<details class="person-card"><summary><span class="avatar">${escapeHtml(person.assignee.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase())}</span><span><strong>${escapeHtml(person.assignee)}</strong><small>${escapeHtml(jiraStatusSummary(person.items))}</small></span><b>${person.total}</b><i>⌄</i></summary><div class="tickets">${rows}</div></details>`;
   }).join("");
@@ -769,16 +757,23 @@ function buildInteractiveHtml(data: PointData, market: Market, archive: PointRec
     const progressHtml = item.showProgress ? `<div class="dossier-progress"><span><i style="width:${progress}%"></i></span><strong>${progress}%</strong></div>` : "";
     return `<article><strong>${escapeHtml(item.title || "Dossier")}</strong><span>${escapeHtml([item.universe, item.reference, item.owner].filter(Boolean).join(" · "))}</span>${progressHtml}<p>${escapeHtml(item.action || item.comment || "Prochaine action à compléter.")}</p><b>${escapeHtml(item.status)}</b></article>`;
   }).join("");
-  const operations = data.operations.map((item) => `<article><strong>${escapeHtml(item.name || "Simulation")}</strong><span>${escapeHtml(item.month || "Mois à définir")}${hasMarketSimulationOverride(item.plannerOverride) ? " · modifiée dans le point" : ""}</span><b>${escapeHtml(item.state || "À faire")}</b></article>`).join("");
+  const operations = data.operations.map((item) => `<article><strong>${escapeHtml(item.name || "Simulation")}</strong><span>${escapeHtml(item.month || "Mois à définir")}${hasMarketSimulationOverride(item.plannerOverride) ? " · modifiée dans le point" : ""}</span><b>${escapeHtml(item.state || "À faire")}</b>${item.summary ? `<p>${escapeHtml(item.summary)}</p>` : ""}</article>`).join("");
   const promotions = data.promotions.map((item) => `<article><strong>${escapeHtml(item.name || "Promotion")}</strong><span>${escapeHtml(item.period || "Période à définir")}</span>${item.purchaseNote ? `<p><b>Promotion achat :</b> ${escapeHtml(item.purchaseNote)}</p>` : ""}${item.action ? `<p><b>Action :</b> ${escapeHtml(item.action)}</p>` : ""}${item.comment ? `<small>${escapeHtml(item.comment)}</small>` : ""}<b>${escapeHtml(item.salesState || "À préparer")}</b></article>`).join("");
-  const otherAlerts = buildAlerts(data, market).filter((item) => item.category !== "Jira").map((item) => `<article class="${item.severity}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.category)} · ${escapeHtml(item.detail)}</span></article>`).join("");
+  const otherAlerts = buildAlerts(data, market).map((item) => `<article class="${item.severity}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.category)} · ${escapeHtml(item.detail)}</span></article>`).join("");
   const deltaLabel = stats.delta === null ? "—" : `${stats.delta > 0 ? "+" : ""}${stats.delta}`;
+  const htmlSections: Record<PointModule, string> = {
+    jira: `<section class="jira"><header class="jira-head"><div><span class="eyebrow">Radar Jira interactif</span><h2>Tickets ouverts du marché</h2><p>Les tickets en alerte sont placés en premier. Utilisez les filtres, ouvrez une personne puis cliquez sur un ticket pour accéder à Jira.</p></div><div class="delta"><small>Depuis le dernier point</small><strong>${deltaLabel}</strong></div></header><div class="kpis"><button type="button" class="active" data-scope="all"><span>Tickets ouverts</span><strong>${stats.currentVolume}</strong><small>Stock actuel</small></button><button type="button" class="warning" data-scope="attention"><span>Sans activité</span><strong>${stats.attentionCount}</strong><small>Depuis ${market.jiraWarningDays} jours</small></button><button type="button" class="critical" data-scope="critical"><span>Attention forte</span><strong>${stats.criticalCount}</strong><small>Depuis ${market.jiraCriticalDays} jours</small></button></div><div class="visuals"><article class="panel"><strong>Évolution du volume</strong><div class="trend">${trendBars}</div></article><article class="panel"><strong>Répartition par statut</strong><div class="status-bar">${statusSegments || "<i></i>"}</div><div class="status-buttons"><button type="button" class="active" data-status="all">Tous</button>${statusButtons}</div></article></div><div class="filter-line"><span><strong id="visible-total">${stats.currentVolume}</strong> tickets affichés</span><button type="button" id="reset-filter">Réinitialiser</button></div><div class="people">${peopleHtml || '<div class="empty">Aucun ticket Jira actif.</div>'}</div></section>`,
+    comparison: `<section class="section"><h2>Comparaison des marchés</h2>${marketComparisonHtml(data.marketComparison)}</section>`,
+    dossiers: `<section class="section"><h2>Dossiers en cours</h2><div class="cards">${dossiers || '<div class="empty">Aucun dossier renseigné.</div>'}</div></section>`,
+    operations: `<section class="section"><h2>Simulations</h2><div class="cards">${operations || '<div class="empty">Aucune simulation renseignée.</div>'}</div></section>`,
+    promotions: `<section class="section"><h2>Promotions</h2><div class="cards">${promotions || '<div class="empty">Aucune promotion renseignée.</div>'}</div></section>`,
+    alerts: `<section class="section"><h2>Vigilances du point</h2><div class="cards alerts">${otherAlerts || '<div class="empty">Aucune vigilance détectée.</div>'}</div></section>`,
+  };
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(data.mail.subject)} · interactif</title><style>
-  :root{--accent:${accent};--bg:#061012;--surface:#0d1a1d;--line:#23383c;--text:#f3f8f6;--muted:#89a0a3;--aqua:#70d8ff;--peach:#ffb083;--red:#ff7287}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,color-mix(in srgb,var(--accent) 13%,transparent),transparent 32%),var(--bg);color:var(--text);font-family:Arial,sans-serif}.shell{width:min(1180px,calc(100% - 30px));margin:auto;padding:30px 0 50px}.hero{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:20px}.eyebrow{color:var(--accent);font:700 11px/1 monospace;text-transform:uppercase}.hero h1{margin:10px 0 5px;font-size:42px}.hero p{margin:0;color:var(--muted)}.week{padding:14px 18px;border:1px solid var(--line);border-radius:16px;background:var(--surface);text-align:right}.week strong{display:block;color:var(--accent);font:800 24px/1 monospace}.priority{margin-bottom:16px;padding:15px 17px;border-left:4px solid var(--accent);border-radius:12px;background:color-mix(in srgb,var(--accent) 9%,var(--surface))}.priority span{display:block;margin-bottom:5px;color:var(--accent);font-size:10px;font-weight:700;text-transform:uppercase}.jira{padding:20px;border:1px solid #29454b;border-radius:22px;background:linear-gradient(145deg,#0d1b1f,#081315);box-shadow:0 25px 70px #0005}.jira-head{display:flex;justify-content:space-between;gap:20px}.jira-head h2{margin:5px 0 0;font-size:25px}.jira-head p{max-width:650px;margin:7px 0 0;color:var(--muted);font-size:12px}.delta{text-align:right}.delta strong{display:block;color:var(--aqua);font:800 26px/1 monospace}.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}.kpis button{padding:15px;border:1px solid var(--line);border-radius:14px;color:var(--text);background:#ffffff05;text-align:left;cursor:pointer}.kpis button:hover,.kpis button.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,transparent)}.kpis span,.kpis small{display:block;color:var(--muted);font-size:10px}.kpis strong{display:block;margin:5px 0;font:800 26px/1 monospace}.kpis .warning strong{color:var(--peach)}.kpis .critical strong{color:var(--red)}.visuals{display:grid;grid-template-columns:.7fr 1.3fr;gap:12px}.panel{padding:15px;border:1px solid var(--line);border-radius:15px;background:#ffffff04}.panel>strong{font-size:13px}.trend{display:flex;align-items:end;justify-content:center;gap:12px;height:130px;margin-top:10px}.trend-bar{display:grid;grid-template-rows:auto 78px auto;gap:5px;text-align:center}.trend-bar>b,.trend-bar>small{font:700 10px/1 monospace}.trend-bar>span{display:flex;align-items:end;width:22px;margin:auto;border-radius:6px;background:#ffffff07;overflow:hidden}.trend-bar i{display:block;width:100%;background:#35545b}.trend-bar.current i{background:var(--aqua)}.status-bar{display:flex;height:10px;margin:15px 0 12px;border-radius:99px;overflow:hidden;background:#ffffff09}.status-bar button{min-width:3px;padding:0;border:0;cursor:pointer}.status-buttons{display:flex;flex-wrap:wrap;gap:7px}.status-buttons button{display:flex;gap:6px;align-items:center;padding:7px 9px;border:1px solid var(--line);border-radius:9px;color:var(--muted);background:transparent;font-size:10px;cursor:pointer}.status-buttons button i{width:7px;height:7px;border-radius:50%}.status-buttons button.active{border-color:var(--accent);color:var(--text);background:#ffffff08}.filter-line{display:flex;justify-content:space-between;align-items:center;margin:14px 0;padding:10px 12px;border-radius:10px;background:#ffffff05;color:var(--muted);font-size:11px}.filter-line strong{color:var(--aqua)}.filter-line button{border:0;color:var(--accent);background:transparent;cursor:pointer}.people{display:grid;gap:8px}.person-card{border:1px solid var(--line);border-radius:14px;background:#ffffff03;overflow:hidden}.person-card[open]{border-color:#3b5c63}.person-card summary{display:grid;grid-template-columns:38px 1fr auto 18px;align-items:center;gap:10px;padding:12px;cursor:pointer;list-style:none}.person-card summary::-webkit-details-marker{display:none}.avatar{display:grid;place-items:center;width:38px;height:38px;border-radius:11px;color:var(--aqua);background:#70d8ff13;font:700 11px monospace}.person-card summary>span:nth-child(2){display:grid;gap:4px}.person-card summary small{color:var(--muted);font-size:10px}.person-card summary>b{font:800 16px monospace}.tickets{border-top:1px solid var(--line)}.ticket-row{display:grid;grid-template-columns:110px 1fr auto;align-items:center;gap:12px;padding:11px 13px;border-bottom:1px solid #ffffff0b;color:inherit;text-decoration:none}.ticket-row:hover{background:#ffffff08}.ticket-row:last-child{border-bottom:0}.ticket-row>span{color:var(--aqua);font:700 10px monospace}.ticket-row>div{display:grid;gap:3px}.ticket-row small{color:var(--muted);font-size:10px}.ticket-row>b{padding:6px 8px;border-radius:8px;color:#8fa4a7;background:#ffffff08;font-size:9px}.ticket-row.warning{background:#ffb08308}.ticket-row.warning>b{color:var(--peach);background:#ffb08313}.ticket-row.critical{border-left:4px solid var(--red);background:#ff72870b}.ticket-row.critical>b{color:var(--red);background:#ff728717}.empty{padding:25px;color:var(--muted);text-align:center}.point-grid{display:grid;grid-template-columns:1.35fr .65fr;gap:14px;margin-top:16px}.section{padding:18px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}.section h2{margin:0 0 13px;font-size:18px}.cards{display:grid;gap:8px}.cards article{position:relative;display:grid;gap:4px;padding:12px;border:1px solid #ffffff0d;border-radius:11px;background:#ffffff03}.cards article span,.cards article small{color:var(--muted);font-size:10px}.cards article p{margin:4px 0;color:#c6d2d1;font-size:11px;line-height:1.45}.cards article>b{justify-self:start;margin-top:3px;padding:5px 7px;border-radius:7px;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);font-size:9px}.dossier-progress{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;margin-top:5px}.dossier-progress>span{height:6px;border-radius:99px;background:#ffffff0c;overflow:hidden}.dossier-progress>span>i{display:block;height:100%;border-radius:99px;background:var(--accent)}.dossier-progress>strong{color:var(--accent);font:700 9px/1 monospace}.alerts article.warning{border-color:#ffb0832b}.alerts article.danger{border-color:#ff72873a}.variation-trigger{display:grid;grid-template-columns:1fr 150px auto;align-items:center;gap:10px;width:100%;margin-top:9px;padding:9px 10px;border:1px solid #70d8ff35;border-radius:10px;color:var(--text);background:#70d8ff08;text-align:left;cursor:pointer}.variation-trigger>span{display:grid;gap:4px}.variation-trigger svg{display:block;width:150px;height:42px}.variation-trigger>b{color:var(--aqua);font-size:9px}.variation-missing{margin-top:8px;padding:8px 9px;border:1px dashed var(--line);border-radius:9px}.variation-modal{width:min(720px,calc(100% - 24px));padding:18px;border:1px solid #35565d;border-radius:18px;color:var(--text);background:#0b171a;box-shadow:0 30px 100px #000b}.variation-modal::backdrop{background:#020708cc}.variation-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.variation-modal-head>div{display:grid;gap:4px}.variation-modal-head small{color:var(--aqua);font-size:9px;text-transform:uppercase}.variation-modal-head strong{font-size:18px}.variation-modal-head button{width:34px;height:34px;border:1px solid var(--line);border-radius:10px;color:var(--text);background:transparent;font-size:22px;cursor:pointer}.variation-modal>svg{display:block;width:100%}.variation-legend{display:flex;gap:14px;margin:8px 0 12px;color:var(--muted);font-size:9px}.variation-legend span{display:flex;align-items:center;gap:6px}.variation-legend i{width:18px;height:3px;border-radius:3px}.variation-legend .global{background:var(--aqua)}.variation-legend .weighted{background:#b39aff}.variation-values{display:grid;gap:4px}.variation-values span{font:700 9px/1.4 monospace}.variation-values b{color:var(--text)}.footer{padding:18px 0;color:#60777b;font:700 10px monospace;text-transform:uppercase}[hidden]{display:none!important}@media(max-width:760px){.hero,.jira-head{align-items:flex-start;flex-direction:column}.week,.delta{text-align:left}.kpis,.visuals,.point-grid{grid-template-columns:1fr}.ticket-row{grid-template-columns:1fr}.variation-trigger{grid-template-columns:1fr}.variation-trigger svg{width:100%}.shell{width:min(100% - 18px,1180px)}}
+  :root{--point-scale:${data.preferences.fontScalePercent / 100};--space:${data.preferences.density === "compact" ? 12 : data.preferences.density === "airy" ? 24 : 18}px;--accent:${accent};--bg:#061012;--surface:#0d1a1d;--line:#23383c;--text:#f3f8f6;--muted:#89a0a3;--aqua:#70d8ff;--peach:#ffb083;--red:#ff7287}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,color-mix(in srgb,var(--accent) 13%,transparent),transparent 32%),var(--bg);color:var(--text);font-family:Arial,sans-serif}.shell{width:min(1180px,calc(100% - 30px));margin:auto;padding:30px 0 50px}.hero{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:20px}.eyebrow{color:var(--accent);font:700 11px/1 monospace;text-transform:uppercase}.hero h1{margin:10px 0 5px;font-size:calc(42px * var(--point-scale))}.hero p{margin:0;color:var(--muted)}.week{padding:14px 18px;border:1px solid var(--line);border-radius:16px;background:var(--surface);text-align:right}.week strong{display:block;color:var(--accent);font:800 24px/1 monospace}.priority{margin-bottom:16px;padding:15px 17px;border-left:4px solid var(--accent);border-radius:12px;background:color-mix(in srgb,var(--accent) 9%,var(--surface))}.priority span{display:block;margin-bottom:5px;color:var(--accent);font-size:calc(10px * var(--point-scale));font-weight:700;text-transform:uppercase}.jira{padding:20px;border:1px solid #29454b;border-radius:22px;background:linear-gradient(145deg,#0d1b1f,#081315);box-shadow:0 25px 70px #0005}.jira-head{display:flex;justify-content:space-between;gap:20px}.jira-head h2{margin:5px 0 0;font-size:calc(25px * var(--point-scale))}.jira-head p{max-width:650px;margin:7px 0 0;color:var(--muted);font-size:calc(12px * var(--point-scale))}.delta{text-align:right}.delta strong{display:block;color:var(--aqua);font:800 26px/1 monospace}.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}.kpis button{padding:15px;border:1px solid var(--line);border-radius:14px;color:var(--text);background:#ffffff05;text-align:left;cursor:pointer}.kpis button:hover,.kpis button.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,transparent)}.kpis span,.kpis small{display:block;color:var(--muted);font-size:calc(10px * var(--point-scale))}.kpis strong{display:block;margin:5px 0;font:800 26px/1 monospace}.kpis .warning strong{color:var(--peach)}.kpis .critical strong{color:var(--red)}.visuals{display:grid;grid-template-columns:.7fr 1.3fr;gap:12px}.panel{padding:15px;border:1px solid var(--line);border-radius:15px;background:#ffffff04}.panel>strong{font-size:calc(13px * var(--point-scale))}.trend{display:flex;align-items:end;justify-content:center;gap:12px;height:130px;margin-top:10px}.trend-bar{display:grid;grid-template-rows:auto 78px auto;gap:5px;text-align:center}.trend-bar>b,.trend-bar>small{font:700 10px/1 monospace}.trend-bar>span{display:flex;align-items:end;width:22px;margin:auto;border-radius:6px;background:#ffffff07;overflow:hidden}.trend-bar i{display:block;width:100%;background:#35545b}.trend-bar.current i{background:var(--aqua)}.status-bar{display:flex;height:10px;margin:15px 0 12px;border-radius:99px;overflow:hidden;background:#ffffff09}.status-bar button{min-width:3px;padding:0;border:0;cursor:pointer}.status-buttons{display:flex;flex-wrap:wrap;gap:7px}.status-buttons button{display:flex;gap:6px;align-items:center;padding:7px 9px;border:1px solid var(--line);border-radius:9px;color:var(--muted);background:transparent;font-size:calc(10px * var(--point-scale));cursor:pointer}.status-buttons button i{width:7px;height:7px;border-radius:50%}.status-buttons button.active{border-color:var(--accent);color:var(--text);background:#ffffff08}.filter-line{display:flex;justify-content:space-between;align-items:center;margin:14px 0;padding:10px 12px;border-radius:10px;background:#ffffff05;color:var(--muted);font-size:calc(11px * var(--point-scale))}.filter-line strong{color:var(--aqua)}.filter-line button{border:0;color:var(--accent);background:transparent;cursor:pointer}.people{display:grid;gap:8px}.person-card{border:1px solid var(--line);border-radius:14px;background:#ffffff03;overflow:hidden}.person-card[open]{border-color:#3b5c63}.person-card summary{display:grid;grid-template-columns:38px 1fr auto 18px;align-items:center;gap:10px;padding:12px;cursor:pointer;list-style:none}.person-card summary::-webkit-details-marker{display:none}.avatar{display:grid;place-items:center;width:38px;height:38px;border-radius:11px;color:var(--aqua);background:#70d8ff13;font:700 11px monospace}.person-card summary>span:nth-child(2){display:grid;gap:4px}.person-card summary small{color:var(--muted);font-size:calc(10px * var(--point-scale))}.person-card summary>b{font:800 16px monospace}.tickets{border-top:1px solid var(--line)}.ticket-row{display:grid;grid-template-columns:110px 1fr auto;align-items:center;gap:12px;padding:11px 13px;border-bottom:1px solid #ffffff0b;color:inherit;text-decoration:none}.ticket-row:hover{background:#ffffff08}.ticket-row:last-child{border-bottom:0}.ticket-row>span{color:var(--aqua);font:700 10px monospace}.ticket-row>div{display:grid;gap:3px}.ticket-row small{color:var(--muted);font-size:calc(10px * var(--point-scale))}.ticket-row>b{padding:6px 8px;border-radius:8px;color:#8fa4a7;background:#ffffff08;font-size:calc(9px * var(--point-scale))}.ticket-row.warning{background:#ffb08308}.ticket-row.warning>b{color:var(--peach);background:#ffb08313}.ticket-row.critical{border-left:4px solid var(--red);background:#ff72870b}.ticket-row.critical>b{color:var(--red);background:#ff728717}.empty{padding:25px;color:var(--muted);text-align:center}.point-grid{display:grid;grid-template-columns:1.35fr .65fr;gap:14px;margin-top:16px}.section{padding:18px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}.section h2{margin:0 0 13px;font-size:calc(18px * var(--point-scale))}.cards{display:grid;gap:8px}.cards article{position:relative;display:grid;gap:4px;padding:12px;border:1px solid #ffffff0d;border-radius:11px;background:#ffffff03}.cards article span,.cards article small{color:var(--muted);font-size:calc(10px * var(--point-scale))}.cards article p{margin:4px 0;color:#c6d2d1;font-size:calc(11px * var(--point-scale));line-height:1.45}.cards article>b{justify-self:start;margin-top:3px;padding:5px 7px;border-radius:7px;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);font-size:calc(9px * var(--point-scale))}.dossier-progress{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;margin-top:5px}.dossier-progress>span{height:6px;border-radius:99px;background:#ffffff0c;overflow:hidden}.dossier-progress>span>i{display:block;height:100%;border-radius:99px;background:var(--accent)}.dossier-progress>strong{color:var(--accent);font:700 9px/1 monospace}.alerts article.warning{border-color:#ffb0832b}.alerts article.danger{border-color:#ff72873a}.variation-trigger{display:grid;grid-template-columns:1fr 150px auto;align-items:center;gap:10px;width:100%;margin-top:9px;padding:9px 10px;border:1px solid #70d8ff35;border-radius:10px;color:var(--text);background:#70d8ff08;text-align:left;cursor:pointer}.variation-trigger>span{display:grid;gap:4px}.variation-trigger svg{display:block;width:150px;height:42px}.variation-trigger>b{color:var(--aqua);font-size:calc(9px * var(--point-scale))}.variation-missing{margin-top:8px;padding:8px 9px;border:1px dashed var(--line);border-radius:9px}.variation-modal{width:min(720px,calc(100% - 24px));padding:18px;border:1px solid #35565d;border-radius:18px;color:var(--text);background:#0b171a;box-shadow:0 30px 100px #000b}.variation-modal::backdrop{background:#020708cc}.variation-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.variation-modal-head>div{display:grid;gap:4px}.variation-modal-head small{color:var(--aqua);font-size:calc(9px * var(--point-scale));text-transform:uppercase}.variation-modal-head strong{font-size:calc(18px * var(--point-scale))}.variation-modal-head button{width:34px;height:34px;border:1px solid var(--line);border-radius:10px;color:var(--text);background:transparent;font-size:calc(22px * var(--point-scale));cursor:pointer}.variation-modal>svg{display:block;width:100%}.variation-legend{display:flex;gap:14px;margin:8px 0 12px;color:var(--muted);font-size:calc(9px * var(--point-scale))}.variation-legend span{display:flex;align-items:center;gap:6px}.variation-legend i{width:18px;height:3px;border-radius:3px}.variation-legend .global{background:var(--aqua)}.variation-legend .weighted{background:#b39aff}.variation-values{display:grid;gap:4px}.variation-values span{font:700 9px/1.4 monospace}.variation-values b{color:var(--text)}.footer{padding:18px 0;color:#60777b;font:700 10px monospace;text-transform:uppercase}[hidden]{display:none!important}@media(max-width:760px){.hero,.jira-head{align-items:flex-start;flex-direction:column}.week,.delta{text-align:left}.kpis,.visuals,.point-grid{grid-template-columns:1fr}.ticket-row{grid-template-columns:1fr}.variation-trigger{grid-template-columns:1fr}.variation-trigger svg{width:100%}.shell{width:min(100% - 18px,1180px)}}
+  .export-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space);align-items:start}.export-module{min-width:0;grid-column:span var(--columns)}.export-module .jira,.export-module .section{padding:var(--space)}.export-module :is(strong,p,span,a){overflow-wrap:anywhere}.export-module .cards p{white-space:pre-wrap}.export-module button,.export-module summary{min-height:40px}.export-module .ticket-row.undated>b{color:var(--muted)}@media(max-width:760px){.export-module{grid-column:1/-1}.export-module button,.export-module summary{min-height:44px}.people{grid-template-columns:1fr}}
   </style></head><body><main class="shell"><header class="hero"><div><span class="eyebrow">Market Pulse / ${escapeHtml(market.short)}</span><h1>Point marché</h1><p>${escapeHtml(market.name)} · ${escapeHtml(dateLabel(data.meetingDate))}</p></div><div class="week"><strong>${isoWeekYear(data.meetingDate)} · S${String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong><span>Semaine ISO</span></div></header><section class="priority"><span>Priorité de la semaine</span><strong>${escapeHtml(data.priority || "Aucune priorité renseignée.")}</strong></section>
-  ${modules.jira ? `<section class="jira"><header class="jira-head"><div><span class="eyebrow">Radar Jira interactif</span><h2>Tickets ouverts du marché</h2><p>Les tickets en alerte sont placés en premier. Utilisez les filtres, ouvrez une personne puis cliquez sur un ticket pour accéder à Jira.</p></div><div class="delta"><small>Depuis le dernier point</small><strong>${deltaLabel}</strong></div></header><div class="kpis"><button type="button" class="active" data-scope="all"><span>Tickets ouverts</span><strong>${stats.currentVolume}</strong><small>Stock actuel</small></button><button type="button" class="warning" data-scope="attention"><span>Sans activité</span><strong>${stats.attentionCount}</strong><small>Depuis ${market.jiraWarningDays} jours</small></button><button type="button" class="critical" data-scope="critical"><span>Attention forte</span><strong>${stats.criticalCount}</strong><small>Depuis ${market.jiraCriticalDays} jours</small></button></div><div class="visuals"><article class="panel"><strong>Évolution du volume</strong><div class="trend">${trendBars}</div></article><article class="panel"><strong>Répartition par statut</strong><div class="status-bar">${statusSegments || "<i></i>"}</div><div class="status-buttons"><button type="button" class="active" data-status="all">Tous</button>${statusButtons}</div></article></div><div class="filter-line"><span><strong id="visible-total">${stats.currentVolume}</strong> tickets affichés</span><button type="button" id="reset-filter">Réinitialiser</button></div><div class="people">${peopleHtml || '<div class="empty">Aucun ticket Jira actif.</div>'}</div></section>` : ""}
-  ${modules.comparison ? `<section class="section"><h2>Comparaison des marchés</h2>${marketComparisonHtml(data.marketComparison)}</section>` : ""}
-  ${(modules.dossiers || modules.operations || modules.promotions || modules.alerts) ? `<div class="point-grid"><div>${modules.dossiers ? `<section class="section"><h2>Dossiers en cours</h2><div class="cards">${dossiers || '<div class="empty">Aucun dossier renseigné.</div>'}</div></section>` : ""}${modules.operations ? `<section class="section"${modules.dossiers ? ' style="margin-top:14px"' : ""}><h2>Simulations</h2><div class="cards">${operations || '<div class="empty">Aucune simulation renseignée.</div>'}</div></section>` : ""}${modules.promotions ? `<section class="section"${modules.dossiers || modules.operations ? ' style="margin-top:14px"' : ""}><h2>Promotions</h2><div class="cards">${promotions || '<div class="empty">Aucune promotion renseignée.</div>'}</div></section>` : ""}</div><aside>${modules.alerts ? `<section class="section"><h2>Vigilances du point</h2><div class="cards alerts">${otherAlerts || '<div class="empty">Aucune vigilance détectée.</div>'}</div></section>` : ""}</aside></div>` : ""}<footer class="footer">Market Pulse · ${escapeHtml(market.name)} · fichier interactif autonome</footer></main>
+  <div class="export-grid">${data.preferences.moduleOrder.filter((module) => modules[module]).map((module) => `<div class="export-module" data-module="${module}" style="--columns:${data.preferences.moduleWidths[module] === "half" ? 3 : data.preferences.moduleWidths[module] === "two-thirds" ? 4 : 6}">${htmlSections[module]}</div>`).join("")}</div><footer class="footer">Market Pulse · ${escapeHtml(market.name)} · fichier interactif autonome</footer></main>
   ${modules.jira ? "<script>(function(){var scope='all',status='all';var scopeButtons=[].slice.call(document.querySelectorAll('[data-scope]'));var statusButtons=[].slice.call(document.querySelectorAll('[data-status]'));function refresh(){var total=0;[].slice.call(document.querySelectorAll('.person-card')).forEach(function(card){var visible=0;[].slice.call(card.querySelectorAll('.ticket-row')).forEach(function(row){var level=row.getAttribute('data-level');var rowStatus=row.getAttribute('data-status');var scopeOk=scope==='all'||(scope==='attention'&&(level==='warning'||level==='critical'))||(scope==='critical'&&level==='critical');var statusOk=status==='all'||status===rowStatus;row.hidden=!(scopeOk&&statusOk);if(!row.hidden){visible++;total+=Number(row.getAttribute('data-count')||1);}});card.hidden=visible===0;});document.getElementById('visible-total').textContent=String(total);scopeButtons.forEach(function(button){button.classList.toggle('active',button.getAttribute('data-scope')===scope);});statusButtons.forEach(function(button){button.classList.toggle('active',button.getAttribute('data-status')===status);});}scopeButtons.forEach(function(button){button.addEventListener('click',function(){scope=button.getAttribute('data-scope')||'all';refresh();});});statusButtons.forEach(function(button){button.addEventListener('click',function(){var next=button.getAttribute('data-status')||'all';status=status===next&&next!=='all'?'all':next;refresh();});});document.getElementById('reset-filter').addEventListener('click',function(){scope='all';status='all';refresh();});refresh();})();</script>" : ""}
   </body></html>`;
 }
@@ -827,6 +822,7 @@ function MarketPulseWorkspace() {
   const [meetingEditing, setMeetingEditing] = useState(false);
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [refreshingImports, setRefreshingImports] = useState(false);
   const [sourceChanging, setSourceChanging] = useState<"jira" | "planner" | null>(null);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
   const [directorySort, setDirectorySort] = useState<{ key: "name" | "role" | "market"; direction: "asc" | "desc" }>({ key: "name", direction: "asc" });
@@ -841,7 +837,7 @@ function MarketPulseWorkspace() {
   const historyRestoring = useRef(false);
   const lastHistoryAt = useRef(0);
   const [historyAvailability, setHistoryAvailability] = useState({ undo: false, redo: false });
-  const comparisonContextValue = `${marketId}:${isoWeekYear(data.meetingDate)}:${isoWeek(data.meetingDate)}`;
+  const comparisonContextValue = `${marketId}:${data.meetingDate}`;
   const market = marketOptions.find((item) => item.id === marketId) ?? marketOptions[0] ?? defaultMarkets[0];
   const marketPlannerTagsKey = market.plannerTags.join("|");
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
@@ -882,20 +878,18 @@ function MarketPulseWorkspace() {
 
   const loadMarket = useCallback(async (nextMarket: string, loadLatest = true, marketOverride?: Market) => {
     const requestId = ++archiveRequest.current;
-    setMarketId(nextMarket);
     setArchiveLoading(true);
     setArchiveError("");
     try {
       const points = await fetchPointRecords(nextMarket, marketOverride);
       if (requestId !== archiveRequest.current) return;
-      setArchive(points);
       if (loadLatest) {
         const draft = readLocalDraft("market", nextMarket);
         const latest = points[0];
         if (draft) {
           const draftData = normalizePointData(draft.data, nextMarket, marketOverride);
           const saved = points.find((point) => point.year === isoWeekYear(draftData.meetingDate) && point.week === isoWeek(draftData.meetingDate));
-          const nextData = saved && pointSignature(nextMarket, saved.data) === pointSignature(nextMarket, draftData) ? draftData : await applyJiraWeek(draftData, nextMarket);
+          const nextData = draftData;
           setData(nextData);
           setCalendarMonth(monthStart(nextData.meetingDate));
           setActiveRecordId(saved?.id ?? null);
@@ -910,6 +904,7 @@ function MarketPulseWorkspace() {
           setLastSavedSignature(pointSignature(nextMarket, nextData));
         } else {
           const nextData = await applyJiraWeek(initialData(nextMarket, marketOverride), nextMarket);
+          if (requestId !== archiveRequest.current) return;
           setData(nextData);
           setCalendarMonth(monthStart(nextData.meetingDate));
           setActiveRecordId(null);
@@ -917,18 +912,13 @@ function MarketPulseWorkspace() {
           setLastSavedSignature("");
         }
       }
+      setMarketId(nextMarket);
+      setArchive(points);
+      points.forEach((point) => markPointSaved({ scope: "market", ownerId: nextMarket, data: point.data }));
     } catch (error) {
       if (requestId !== archiveRequest.current) return;
-      setArchive([]);
       setArchiveError(error instanceof Error ? error.message : "Impossible de charger les sauvegardes.");
-      if (loadLatest) {
-        const nextData = await applyJiraWeek(initialData(nextMarket, marketOverride), nextMarket);
-        setData(nextData);
-        setCalendarMonth(monthStart(nextData.meetingDate));
-        setActiveRecordId(null);
-        setSavedAt(null);
-        setLastSavedSignature("");
-      }
+      setToast("Chargement impossible. Le point affiché et ses modifications sont conservés.");
     } finally {
       if (requestId === archiveRequest.current) {
         setArchiveLoading(false);
@@ -996,18 +986,18 @@ function MarketPulseWorkspace() {
     return () => { active = false; };
   }, [loadDirectory, loadPlanner]);
   useEffect(() => {
-    if (!session.user || !directoryReady) return;
+    if (!session.user || !directoryReady || archiveLoading) return;
     const timer = window.setTimeout(() => setData((current) => applyDirectoryMail(current, marketId, directoryUsers)), 0);
     return () => window.clearTimeout(timer);
-  }, [data, directoryReady, directoryUsers, marketId, session.user]);
+  }, [archiveLoading, data, directoryReady, directoryUsers, marketId, session.user]);
   useEffect(() => {
-    if (!session.user || !ready || !plannerReady || !plannerTasks.length || data.plannerMode === "manual" || activeRecordId) return;
+    if (!session.user || !ready || archiveLoading || !plannerReady || !plannerTasks.length || data.plannerMode === "manual" || activeRecordId) return;
     const timer = window.setTimeout(() => setData((current) => current.plannerMode === "manual" ? current : ({ ...current, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate), plannerTasks) })), 0);
     return () => window.clearTimeout(timer);
-  }, [activeRecordId, data.meetingDate, data.plannerMode, market, marketPlannerTagsKey, plannerReady, plannerTasks, ready, session.user]);
+  }, [activeRecordId, archiveLoading, data.meetingDate, data.plannerMode, market, marketPlannerTagsKey, plannerReady, plannerTasks, ready, session.user]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(timer); }, [toast]);
   useEffect(() => {
-    if (!isLocalWorkspace() || !ready || archiveLoading || !session.user) return;
+    if (!ready || archiveLoading || !session.user) return;
     writeLocalDraft({ scope: "market", ownerId: marketId, data });
   }, [archiveLoading, data, marketId, ready, session.user]);
   useEffect(() => {
@@ -1016,11 +1006,14 @@ function MarketPulseWorkspace() {
   }, [directoryEditor]);
   useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [view]);
   useEffect(() => {
-    if (isLocalWorkspace() || !isDirty || !session.user) return;
-    const protectDraft = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    if (isLocalWorkspace() || !session.user) return;
+    const protectDraft = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedSessionDrafts()) return;
+      event.preventDefault(); event.returnValue = "";
+    };
     window.addEventListener("beforeunload", protectDraft);
     return () => window.removeEventListener("beforeunload", protectDraft);
-  }, [isDirty, session.user]);
+  }, [session.user]);
   useEffect(() => {
     const previous = previousData.current;
     if (historyRestoring.current) {
@@ -1106,7 +1099,11 @@ function MarketPulseWorkspace() {
     }
   };
   const logout = async () => {
-    await fetch("/api/logout", { method: "POST" }).catch(() => undefined);
+    if (!isLocalWorkspace() && hasUnsavedSessionDrafts() && !await requestConfirmation({ title: "Se déconnecter ?", detail: "Des brouillons ne sont pas enregistrés. La déconnexion les fermera.", confirmLabel: "Se déconnecter", destructive: true })) return;
+    try {
+      const response = await fetch("/api/logout", { method: "POST" });
+      if (!response.ok) throw new Error();
+    } catch { setToast("Déconnexion impossible. Réessaie quand la connexion est rétablie."); return; }
     setSession({ user: null });
     setDirectoryUsers([]);
     setDirectoryReady(false);
@@ -1115,7 +1112,14 @@ function MarketPulseWorkspace() {
     setPlannerUpdatedAt("");
     setPlannerRegistry(emptyPlannerRegistry());
     setView("read");
+    setMeetingEditing(false);
     setLoginPassword("");
+    clearSessionDrafts();
+    const published = archive[0];
+    setData(published?.data ?? initialData(marketId, market));
+    setActiveRecordId(published?.id ?? null);
+    setLastSavedSignature(published ? pointSignature(marketId, published.data) : "");
+    await loadMarket(marketId, true, market);
     setToast("Déconnexion effectuée.");
   };
 
@@ -1132,7 +1136,7 @@ function MarketPulseWorkspace() {
   };
 
   const chooseMarket = async (nextMarket: string) => {
-    if (!isLocalWorkspace() && nextMarket !== marketId && session.user && isDirty && !await requestConfirmation({ title: "Changer de marché ?", detail: "Les modifications du brouillon actuel ne seront pas enregistrées.", confirmLabel: "Changer de marché", destructive: true })) return;
+    if (archiveLoading || nextMarket === marketId) return;
     if (session.user) writeLocalDraft({ scope: "market", ownerId: marketId, data });
     setSection("general");
     await loadMarket(nextMarket, true, marketOptions.find((item) => item.id === nextMarket));
@@ -1218,6 +1222,7 @@ function MarketPulseWorkspace() {
     return relevant.length;
   };
   const importPlannerData = async (rawText: string) => {
+    const selection = archiveRequest.current, context = comparisonContext.current;
     const response = await fetch("/api/planner-tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rawText }) });
     const payload = await response.json() as { imported?: number; ignoredRows?: number; error?: string };
     if (!response.ok) throw new Error(payload.error || "Import Planner impossible.");
@@ -1227,7 +1232,7 @@ function MarketPulseWorkspace() {
     setPlannerUpdatedAt(refreshed.updatedAt);
     setPlannerReady(true);
     const relevant = plannerTasksForPoint(refreshed.tasks, market, data.meetingDate);
-    setData((current) => current.plannerMode === "manual" ? current : ({ ...current, operations: mergePlannerOperations(current.operations, relevant, refreshed.tasks) }));
+    if (selection === archiveRequest.current && context === comparisonContext.current) setData((current) => current.plannerMode === "manual" ? current : ({ ...current, operations: mergePlannerOperations(current.operations, relevant, refreshed.tasks) }));
     return {
       imported: payload.imported ?? 0,
       message: `${payload.imported ?? 0} tâche${(payload.imported ?? 0) > 1 ? "s" : ""} enregistrée${(payload.imported ?? 0) > 1 ? "s" : ""} · ${relevant.length} liée${relevant.length > 1 ? "s" : ""} au point actif.`,
@@ -1235,21 +1240,55 @@ function MarketPulseWorkspace() {
   };
   const refreshJiraFromRegistry = async () => {
     if (data.jiraMode === "manual") { setToast("Import enregistré. La saisie manuelle du point est conservée."); return; }
-    const refreshed = await applyJiraWeek(data, marketId, true);
-    setData((current) => current.jiraMode === "manual" ? current : ({ ...current, jira: refreshed.jira }));
-    setToast("Registre Jira actualisé dans le point marché actif.");
+    const selection = archiveRequest.current, context = comparisonContext.current;
+    try {
+      const payload = await fetchJiraWeek(currentWeekYear, currentWeek, marketId, true);
+      if ((selection !== archiveRequest.current || context !== comparisonContext.current)) return;
+      if (!payload.snapshot) throw new Error("Aucun import Jira disponible pour cette semaine. Les données du point sont conservées.");
+      setData((current) => current.jiraMode === "manual" ? current : ({ ...current, jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
+      setToast("Registre Jira actualisé. Les corrections du point sont conservées.");
+    } catch (error) {
+      if (selection === archiveRequest.current && context === comparisonContext.current) setToast(error instanceof Error ? error.message : "Actualisation Jira impossible. Les données sont conservées.");
+    }
+  };
+  const refreshImports = async () => {
+    if (refreshingImports || archiveLoading) return;
+    const selection = archiveRequest.current, context = comparisonContext.current;
+    setRefreshingImports(true);
+    try {
+      const [planner, jira] = await Promise.allSettled([
+        data.plannerMode === "automatic" ? fetchPlannerTasks() : Promise.resolve(null),
+        data.jiraMode === "automatic" ? fetchJiraWeek(currentWeekYear, currentWeek, marketId, true) : Promise.resolve(null),
+      ]);
+      if ((selection !== archiveRequest.current || context !== comparisonContext.current)) return;
+      const errors: string[] = [];
+      if (planner.status === "fulfilled" && planner.value) {
+        const source = planner.value;
+        setPlannerTasks(source.tasks); setPlannerRegistry(source.registry); setPlannerUpdatedAt(source.updatedAt);
+        if (source.updatedAt || source.tasks.length) setData((current) => current.plannerMode === "manual" ? current : { ...current, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(source.tasks, market, current.meetingDate), source.tasks) });
+        else errors.push("Aucun import Planner disponible.");
+      } else if (planner.status === "rejected") errors.push(planner.reason instanceof Error ? planner.reason.message : "Planner indisponible.");
+      if (jira.status === "fulfilled" && jira.value) {
+        const source = jira.value;
+        if (source.snapshot) setData((current) => current.jiraMode === "manual" ? current : { ...current, jira: jiraTicketsFromSummary(source.snapshot!.summary, source.assignments[marketId] ?? [], marketId, current.jira) });
+        else errors.push("Aucun import Jira disponible.");
+      } else if (jira.status === "rejected") errors.push(jira.reason instanceof Error ? jira.reason.message : "Jira indisponible.");
+      setToast(errors.length ? `${errors.join(" ")} Les données concernées sont conservées.` : "Imports actualisés. Les saisies manuelles et corrections du point sont conservées.");
+    } finally { setRefreshingImports(false); }
   };
   const setSourceMode = async (source: "jira" | "planner", mode: PointSourceMode) => {
     if (sourceChanging || data[`${source}Mode`] === mode) return;
+    const selection = archiveRequest.current;
     if (mode === "manual") { setData((current) => ({ ...current, [`${source}Mode`]: "manual" })); return; }
     if (!await requestConfirmation({ title: "Reprendre les données importées ?", detail: "Le dernier import actualisera les valeurs non modifiées. Les ajouts manuels et les corrections propres à ce point seront conservés.", confirmLabel: "Reprendre l’import" })) return;
+    if (selection !== archiveRequest.current) return;
     setSourceChanging(source);
     const context = comparisonContext.current;
     try {
       if (source === "jira") {
         const payload = await fetchJiraWeek(currentWeekYear, currentWeek, marketId, true);
         if (!payload.snapshot) throw new Error("Aucun import Jira disponible. La saisie manuelle est conservée.");
-        if (comparisonContext.current === context) setData((current) => ({ ...current, jiraMode: "automatic", jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
+        if (selection === archiveRequest.current && comparisonContext.current === context) setData((current) => ({ ...current, jiraMode: "automatic", jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
       } else {
         if (!plannerReady || (!plannerUpdatedAt && !plannerTasks.length)) throw new Error("Aucun import Planner disponible. La saisie manuelle est conservée.");
         setData((current) => ({ ...current, plannerMode: "automatic", operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate), plannerTasks) }));
@@ -1299,37 +1338,68 @@ function MarketPulseWorkspace() {
     const exportMarketInfo = marketOptions.find((item) => item.id === exportMarket);
     download(`point-marche-${exportMarket}-${year}-S${String(week).padStart(2, "0")}-${saved ? "enregistre" : "brouillon"}.json`, JSON.stringify({ schemaVersion: 6, marketId: exportMarket, market: exportMarketInfo ? { name: exportMarketInfo.name, shortCode: exportMarketInfo.short, tone: exportMarketInfo.tone, colorHex: exportMarketInfo.colorHex } : undefined, year, week, data: exportData }, null, 2), "application/json");
   };
-  const importJson = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const payload = JSON.parse(String(reader.result)) as { marketId?: string; data?: unknown }; if (!payload.data) throw new Error(); const importedMarketInfo = marketOptions.find((item) => item.id === payload.marketId) ?? market; const importedMarket = importedMarketInfo.id; const importedData = normalizePointData(payload.data, importedMarket, importedMarketInfo); setMarketId(importedMarket); setData(importedData); setCalendarMonth(monthStart(importedData.meetingDate)); setActiveRecordId(null); setSavedAt(null); setLastSavedSignature(""); void loadMarket(importedMarket, false, importedMarketInfo); setToast("JSON importé comme nouveau brouillon."); } catch { setToast("Fichier non reconnu."); } }; reader.readAsText(file); event.target.value = ""; };
-  const resetPoint = async () => { if (!await requestConfirmation({ title: "Réinitialiser cette semaine ?", detail: "Le brouillon actuel sera remplacé. Les points déjà enregistrés resteront disponibles dans l’historique.", confirmLabel: "Créer un brouillon vide", destructive: true })) return; const fresh = initialData(marketId, market); fresh.dossiers = []; fresh.operations = []; fresh.promotions = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail; fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; fresh.preferences = copyPreferences(data.preferences); setData(fresh); setCalendarMonth(monthStart(fresh.meetingDate)); setActiveRecordId(null); setSavedAt(null); setLastSavedSignature(""); setToast("Nouveau brouillon créé."); };
+  const importJson = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || archiveLoading) return;
+    const selection = archiveRequest.current;
+    try {
+      if (file.size > 2_000_000) throw new Error("Ce fichier de point dépasse la taille acceptée (2 Mo).");
+      const payload = JSON.parse(await file.text()) as { marketId?: unknown; data?: unknown };
+      if (selection !== archiveRequest.current) return;
+      if (!isRecord(payload) || !isRecord(payload.data) || typeof payload.data.meetingDate !== "string" || !isIsoDate(payload.data.meetingDate)) throw new Error("Le fichier doit contenir un point JSON avec une date valide.");
+      for (const key of ["dossiers", "operations", "simulations", "promotions", "tariffs", "jira"]) {
+        const rows = payload.data[key];
+        if (rows !== undefined && (!Array.isArray(rows) || rows.some((row) => !isRecord(row)))) throw new Error(`La liste « ${key} » est incorrecte. Le point actuel est conservé.`);
+      }
+      const importedMarketInfo = payload.marketId ? marketOptions.find((item) => item.id === payload.marketId) : market;
+      if (!importedMarketInfo) throw new Error("Le marché de ce fichier est absent de l’application. Ajoute-le avant d’importer ce point.");
+      if (session.user && isDirty && !await requestConfirmation({ title: "Importer ce point ?", detail: "Le fichier remplacera le point affiché. Enregistre d’abord tes modifications si tu souhaites les garder.", confirmLabel: "Importer le point", destructive: true })) return;
+      if (selection !== archiveRequest.current) return;
+      const importedData = normalizePointData(payload.data, importedMarketInfo.id, importedMarketInfo);
+      setMarketId(importedMarketInfo.id); setData(importedData); setCalendarMonth(monthStart(importedData.meetingDate)); setActiveRecordId(null); setSavedAt(null); setLastSavedSignature("");
+      writeLocalDraft({ scope: "market", ownerId: importedMarketInfo.id, data: importedData });
+      await loadMarket(importedMarketInfo.id, false, importedMarketInfo);
+      setToast("JSON importé comme nouveau brouillon.");
+    } catch (error) { setToast(error instanceof Error ? error.message : "Fichier non reconnu. Le point actuel est conservé."); }
+  };
+  const resetPoint = async () => { if (archiveLoading) return; if (!await requestConfirmation({ title: "Réinitialiser cette semaine ?", detail: "Le brouillon actuel sera remplacé. Les points déjà enregistrés resteront disponibles dans l’historique.", confirmLabel: "Créer un brouillon vide", destructive: true })) return; ++archiveRequest.current; const fresh = initialData(marketId, market); fresh.meetingDate = data.meetingDate; fresh.dossiers = []; fresh.operations = []; fresh.promotions = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail; fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; fresh.preferences = copyPreferences(data.preferences); setData(fresh); setCalendarMonth(monthStart(fresh.meetingDate)); setActiveRecordId(null); setSavedAt(null); setLastSavedSignature(""); setToast("Nouveau brouillon créé."); };
   const loadRecord = async (record: PointRecord, nextView: View = view, skipConfirm = false) => {
+    if (archiveLoading) return;
     if (!skipConfirm && session.user && isDirty && !await requestConfirmation({ title: "Charger ce point ?", detail: "Le brouillon non enregistré sera remplacé par le contenu sélectionné.", confirmLabel: "Charger le point", destructive: true })) return;
+    ++archiveRequest.current;
     const recordMarket = marketOptions.find((item) => item.id === record.marketId) ?? market;
     const nextData = normalizePointData(record.data, record.marketId, recordMarket);
     setMarketId(record.marketId); setData(nextData); setCalendarMonth(monthStart(nextData.meetingDate)); setActiveRecordId(record.id); setSavedAt(new Date(record.createdAt.replace(" ", "T") + (record.createdAt.includes("Z") ? "" : "Z"))); setLastSavedSignature(pointSignature(record.marketId, nextData)); setSection("general"); setView(nextView); setToast(`${record.year} · S${String(record.week).padStart(2, "0")} chargée.`);
   };
   const chooseWeek = async (value: string) => {
-    if (!/^\d{4}-W\d{2}$/.test(value)) return;
+    if (archiveLoading || !/^\d{4}-W\d{2}$/.test(value)) return;
     const meetingDate = dateFromWeekInput(value);
+    if (weekInputValue(meetingDate) !== value) return;
     const year = isoWeekYear(meetingDate); const week = isoWeek(meetingDate);
     if (year === currentWeekYear && week === currentWeek) { setCalendarMonth(monthStart(meetingDate)); setCalendarExpanded(false); return; }
-    if (!isLocalWorkspace() && session.user && isDirty && !await requestConfirmation({ title: "Changer de semaine ?", detail: "Les modifications du brouillon actuel ne seront pas enregistrées.", confirmLabel: "Changer de semaine", destructive: true })) return;
     if (session.user) writeLocalDraft({ scope: "market", ownerId: marketId, data });
     setCalendarMonth(monthStart(meetingDate));
     const latest = archive.find((record) => record.year === year && record.week === week);
     const draft = readLocalDraft("market", marketId, meetingDate);
     if (draft) {
-      const nextData = await applyJiraWeek(normalizePointData(draft.data, marketId, market), marketId);
+      ++archiveRequest.current;
+      const nextData = normalizePointData(draft.data, marketId, market);
       setData(nextData); setCalendarMonth(monthStart(nextData.meetingDate)); setCalendarExpanded(false);
       setActiveRecordId(latest?.id ?? null); setSavedAt(latest ? new Date(latest.createdAt) : null);
       setLastSavedSignature(latest ? pointSignature(marketId, latest.data) : "");
-      setToast(`${year} · S${String(week).padStart(2, "0")} · brouillon du classeur repris.`);
+      setToast(`${year} · S${String(week).padStart(2, "0")} · brouillon repris.`);
       return;
     }
     if (latest) { await loadRecord(latest, view, true); setCalendarExpanded(false); return; }
     const fresh = initialData(marketId, market);
     fresh.dossiers = []; fresh.operations = []; fresh.promotions = []; fresh.tariffs = []; fresh.jira = []; fresh.mail = data.mail;
     fresh.themeColor = data.themeColor; fresh.customColor = data.customColor; fresh.preferences = copyPreferences(data.preferences); fresh.meetingDate = meetingDate;
+    const selection = ++archiveRequest.current;
+    setArchiveLoading(true);
     const nextData = await applyJiraWeek(fresh, marketId);
+    if (selection !== archiveRequest.current) return;
+    setArchiveLoading(false);
     setData(nextData); setCalendarMonth(monthStart(nextData.meetingDate)); setCalendarExpanded(false); setActiveRecordId(null); setSavedAt(null); setLastSavedSignature(""); setToast(`${year} · S${String(week).padStart(2, "0")} ouverte comme nouveau brouillon.`);
   };
   const chooseCurrentWeek = async () => {
@@ -1342,21 +1412,28 @@ function MarketPulseWorkspace() {
     if (latest) { await loadRecord(latest, view); setCalendarExpanded(false); }
   };
   const savePoint = async () => {
-    if (saving || !ready) return;
+    if (saving || !ready || archiveLoading) return;
     if (!session.user) { openLogin(); return; }
     if (data.customColor && !validHex(data.customColor)) { setToast("La couleur personnalisée doit suivre le format #RRGGBB."); return; }
     setSaving(true);
+    const selection = archiveRequest.current, context = comparisonContext.current;
+    writeLocalDraft({ scope: "market", ownerId: marketId, data });
     try {
       const response = await fetch("/api/points", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ marketId, marketName: market.name, data: preparedData }) });
       const payload = await response.json() as { point?: PointRecord; error?: string };
       if (!response.ok || !payload.point) throw new Error(payload.error || "Échec de la sauvegarde.");
       const savedData = normalizePointData(payload.point.data, marketId, market); const saved = { ...payload.point, data: savedData };
-      setData(savedData); setArchive((current) => [saved, ...current.filter((item) => !(item.year === saved.year && item.week === saved.week))].sort((a, b) => b.year - a.year || b.week - a.week)); setActiveRecordId(saved.id); setSavedAt(new Date()); setLastSavedSignature(pointSignature(marketId, savedData)); setArchiveError("");
+      markPointSaved({ scope: "market", ownerId: marketId, data: savedData });
+      if ((selection !== archiveRequest.current || context !== comparisonContext.current)) { setToast(`Point ${market.name} · S${String(saved.week).padStart(2, "0")} enregistré.`); return; }
+      const latestDraft = readLocalDraft("market", marketId, data.meetingDate);
+      const newerEdits = latestDraft && pointSignature(marketId, latestDraft.data as PointData) !== pointSignature(marketId, data);
+      setData((current) => current === data ? savedData : current);
+      if (!newerEdits) writeLocalDraft({ scope: "market", ownerId: marketId, data: savedData });
+      setArchive((current) => [saved, ...current.filter((item) => !(item.year === saved.year && item.week === saved.week))].sort((a, b) => b.year - a.year || b.week - a.week)); setActiveRecordId(saved.id); setSavedAt(new Date()); setLastSavedSignature(pointSignature(marketId, savedData)); setArchiveError("");
       if (isLocalWorkspace()) {
-        writeLocalDraft({ scope: "market", ownerId: marketId, data: savedData });
         const onDisk = await saveLocalFile();
         setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} ${onDisk ? "enregistrée dans le fichier." : "conservée dans la session. Le fichier reste à enregistrer."}`);
-      } else setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} enregistrée en ligne.`);
+      } else setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} enregistrée en ligne.${newerEdits ? " Les nouvelles modifications restent à enregistrer." : ""}`);
     } catch (error) { setToast(error instanceof Error ? error.message : "Échec de la sauvegarde."); }
     finally { setSaving(false); }
   };
@@ -1364,10 +1441,10 @@ function MarketPulseWorkspace() {
     const handleSaveShortcut = (event: KeyboardEvent) => {
       const command = event.ctrlKey || event.metaKey;
       const key = event.key.toLocaleLowerCase("fr-FR");
-      if (command && event.shiftKey && key === "e" && session.user) {
+      if (command && event.shiftKey && key === "e" && session.user && (view === "read" || view === "edit")) {
         event.preventDefault(); setView("read"); setMeetingEditing((current) => !current); return;
       }
-      if (command && meetingEditing && (key === "z" || key === "y")) {
+      if (command && meetingEditing && (key === "z" || key === "y") && !(event.target instanceof HTMLElement && event.target.closest("input, textarea, [contenteditable=true]"))) {
         event.preventDefault();
         if (key === "y" || (key === "z" && event.shiftKey)) redoPoint(); else undoPoint();
         return;
@@ -1488,7 +1565,7 @@ function MarketPulseWorkspace() {
   const setCarryoverPreset = (preset: "unfinished" | "all" | "none") => {
     if (!previousPoint) return;
     const dossierSources = new Set(data.dossiers.map((item) => item.sourceId ?? item.id));
-    const operationSources = new Set(data.operations.map((item) => item.sourceId ?? item.id));
+    const operationSources = new Set(data.operations.map(operationIdentity));
     const promotionSources = new Set(data.promotions.map((item) => item.sourceId ?? item.id));
     const selection: Record<string, boolean> = {};
     previousPoint.data.dossiers.forEach((item) => {
@@ -1496,7 +1573,7 @@ function MarketPulseWorkspace() {
       selection[`dossier:${item.id}`] = available && preset !== "none" && (preset === "all" || !isClosed(item.status));
     });
     previousPoint.data.operations.forEach((item) => {
-      const available = !operationSources.has(item.sourceId ?? item.id);
+      const available = !operationSources.has(operationIdentity(item));
       selection[`operation:${item.id}`] = available && preset !== "none" && (preset === "all" || !isOperationClosed(item));
     });
     previousPoint.data.promotions.forEach((item) => {
@@ -1513,10 +1590,10 @@ function MarketPulseWorkspace() {
   const applyCarryover = () => {
     if (!previousPoint) return;
     const dossierSources = new Set(data.dossiers.map((item) => item.sourceId ?? item.id));
-    const operationSources = new Set(data.operations.map((item) => item.sourceId ?? item.id));
+    const operationSources = new Set(data.operations.map(operationIdentity));
     const promotionSources = new Set(data.promotions.map((item) => item.sourceId ?? item.id));
     const dossiers = previousPoint.data.dossiers.filter((item) => carryoverSelection[`dossier:${item.id}`] && !dossierSources.has(item.sourceId ?? item.id)).map((item) => ({ ...item, id: uid(), sourceId: item.sourceId ?? item.id, carriedFromYear: previousPoint.year, carriedFromWeek: previousPoint.week }));
-    const operations = previousPoint.data.operations.filter((item) => carryoverSelection[`operation:${item.id}`] && !operationSources.has(item.sourceId ?? item.id)).map((item) => ({ ...item, id: uid(), sourceId: item.sourceId ?? item.id, carriedFromYear: previousPoint.year, carriedFromWeek: previousPoint.week, steps: item.steps.map(([label, state]) => [label, state] as [string, string]) }));
+    const operations = previousPoint.data.operations.filter((item) => carryoverSelection[`operation:${item.id}`] && !operationSources.has(operationIdentity(item))).map((item) => ({ ...item, id: uid(), sourceId: item.sourceId ?? item.id, carriedFromYear: previousPoint.year, carriedFromWeek: previousPoint.week, steps: item.steps.map(([label, state]) => [label, state] as [string, string]) }));
     const promotions = previousPoint.data.promotions.filter((item) => carryoverSelection[`promotion:${item.id}`] && !promotionSources.has(item.sourceId ?? item.id)).map((item) => ({ ...item, id: uid(), sourceId: item.sourceId ?? item.id, carriedFromYear: previousPoint.year, carriedFromWeek: previousPoint.week }));
     setData((current) => ({ ...current, dossiers: [...current.dossiers, ...dossiers], operations: [...current.operations, ...operations], promotions: [...current.promotions, ...promotions] }));
     setCarryoverOpen(false);
@@ -1702,22 +1779,24 @@ function MarketPulseWorkspace() {
         <AppearanceControl/>
         <input ref={fileInput} className="sr-only" type="file" accept="application/json" onChange={importJson}/>
         {session.user && (view === "read" || view === "edit" || view === "settings") && <>
-          {view === "read" && <label className={`point-edit-toggle ${meetingEditing ? "is-on" : ""}`}><input type="checkbox" checked={meetingEditing} onChange={() => editDuringMeeting()}/><span><i/><b>{meetingEditing ? "Modification active" : "Modifier le point"}</b></span></label>}
+          {view === "read" && <label className={`point-edit-toggle ${meetingEditing ? "is-on" : ""}`}><input type="checkbox" checked={meetingEditing} disabled={archiveLoading} aria-label="Modifier le point" onChange={() => editDuringMeeting()}/><span><i/><b>{meetingEditing ? "Modification active" : "Modifier le point"}</b></span></label>}
           <ActionMenu><button type="button" onClick={() => fileInput.current?.click()}><Icon name="upload"/> Importer un JSON</button><button type="button" onClick={() => exportJson()}><Icon name="download"/> Exporter le brouillon</button><button type="button" className="danger" onClick={() => { void resetPoint(); }}><Icon name="plus"/> Réinitialiser la semaine</button></ActionMenu>
-          <button className={`primary-button save-point ${isDirty ? "has-changes" : ""}`} disabled={saving || !ready || (!isDirty && Boolean(activeRecordId))} onClick={savePoint}><Icon name="check"/><span>{saving ? "Enregistrement…" : isDirty ? "Sauvegarder" : activeRecordId ? "Enregistré" : "Créer le point"}</span></button>
+          <button className={`primary-button save-point ${isDirty ? "has-changes" : ""}`} disabled={saving || archiveLoading || !ready || (!isDirty && Boolean(activeRecordId))} onClick={savePoint}><Icon name="check"/><span>{saving ? "Enregistrement…" : isDirty ? "Sauvegarder" : activeRecordId ? "Enregistré" : "Créer le point"}</span></button>
         </>}
         {!session.user && <button className="login-button" disabled={!sessionReady} onClick={() => { setLoginDestination("edit"); openLogin(); }}><Icon name="lock"/><span>{sessionReady ? "Connexion GLOBAL" : "Vérification…"}</span></button>}
       </div>
     </header>
-    <div id="workspace-content" className="workspace-content" tabIndex={-1}>
+    {archiveLoading && <div className="point-loading-status" role="status">Chargement du point…</div>}
+    <div id="workspace-content" className="workspace-content" tabIndex={-1} inert={archiveLoading} aria-busy={archiveLoading}>
     <div id="top" className="workspace-context">
       <span>{view === "read" || view === "edit" || view === "mail" ? market.name : view === "analyst" ? "Jira · Simulations · Dossiers" : view === "stats" ? "Activité analystes et variations fournisseurs" : view === "imports" ? "Registres Jira et Planner" : "Application et points"}</span>
       {(view === "read" || view === "edit" || view === "mail") && <span className="workspace-week">S{String(currentWeek).padStart(2, "0")} · {currentWeekYear}</span>}
       {session.user && (view === "read" || view === "edit" || view === "mail") && <span className={`workspace-draft ${isDirty ? "is-dirty" : ""}`}>{isDirty ? "Modifications non enregistrées" : activeRecordId ? "Point enregistré" : "Nouveau point"}</span>}
     </div>
+    {archiveError && <div className="archive-message error" role="alert"><span>{archiveError}</span><button type="button" className="secondary-button" onClick={() => { void loadMarket(marketId, true, market); }}>Réessayer</button></div>}
     {view === "read" && periodNavigator}
     {view === "settings" && session.user && renderEditor()}
-    {view === "read" && <main className="preview-page"><div className={`preview-toolbar ${meetingEditing ? "editing" : ""}`}><div><span>{meetingEditing ? "Modification directe" : "Point marché"}</span><strong>{meetingEditing ? "Clique directement dans les cartes. Les corrections importées restent propres à ce point." : "Choisis le marché et la semaine dans le calendrier ci-dessus."}</strong></div><div className="meeting-toolbar-actions">{session.user && <><button type="button" className="secondary-button" disabled={!previousPoint} onClick={openCarryover}><Icon name="copy"/> Reprendre le point précédent</button><button type="button" className="secondary-button" onClick={() => { synchronizePlannerPoint(); void refreshJiraFromRegistry(); }}><Icon name="spark"/> Actualiser les imports</button><button type="button" className="secondary-button" onClick={() => setComparisonOpen(true)}><Icon name="trend"/> Comparer les marchés</button></>}{!session.user && <button type="button" className="secondary-button" onClick={() => editDuringMeeting()}><Icon name="lock"/> Connexion GLOBAL pour modifier</button>}</div></div>{meetingEditing && session.user && <div className="point-layout-toolbar" role="toolbar" aria-label="Mise en page du point"><div className="layout-history"><button type="button" disabled={!historyAvailability.undo} onClick={undoPoint} title="Annuler (Ctrl+Z)">↶</button><button type="button" disabled={!historyAvailability.redo} onClick={redoPoint} title="Rétablir (Ctrl+Y)">↷</button></div><div className="layout-font"><span>Texte</span><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent - 5)}>A−</button><input type="range" min="85" max="130" step="5" value={data.preferences.fontScalePercent} aria-label="Taille du texte du point" onChange={(event) => updateFontScalePercent(Number(event.target.value))}/><output>{data.preferences.fontScalePercent}%</output><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent + 5)}>A+</button><button type="button" onClick={() => updateFontScalePercent(100)}>Réinit.</button></div><div className="layout-density" aria-label="Densité">{(["compact", "comfortable", "airy"] as Density[]).map((density) => <button type="button" key={density} className={data.preferences.density === density ? "active" : ""} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, density } }))}>{density === "compact" ? "Compacte" : density === "airy" ? "Aérée" : "Normale"}</button>)}</div><label className="layout-color" title="Couleur du point"><input type="color" value={accent} aria-label="Couleur du point" onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/></label><button type="button" onClick={() => { updateFontScalePercent(90); setData((current) => ({ ...current, preferences: { ...current.preferences, density: "compact" } })); }}>Ajuster</button><button type="button" onClick={resetCanvasLayout}>Structure initiale</button><button type="button" onClick={() => { void openPresentation(); }}>Présentation</button><button type="button" className="primary" onClick={() => { void savePoint(); }}>Enregistrer</button><button type="button" onClick={() => setMeetingEditing(false)}>Terminer</button></div>}{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Ce canevas est prêt à être complété puis sauvegardé." : "Aucun brouillon n’est affiché publiquement. Connecte-toi pour préparer cette semaine."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard data={preparedData} market={market} archive={archive} editing={meetingEditing && Boolean(session.user)} actions={session.user ? canvasActions : undefined}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou connecte-toi pour la préparer.</p></div>}</main>}
+    {view === "read" && <main className="preview-page"><div className={`preview-toolbar ${meetingEditing ? "editing" : ""}`}><div><span>{meetingEditing ? "Modification directe" : "Point marché"}</span><strong>{meetingEditing ? "Clique directement dans les cartes. Les corrections importées restent propres à ce point." : "Choisis le marché et la semaine dans le calendrier ci-dessus."}</strong></div><div className="meeting-toolbar-actions">{session.user && <><button type="button" className="secondary-button" disabled={!previousPoint} onClick={openCarryover}><Icon name="copy"/> Reprendre le point précédent</button><button type="button" className="secondary-button" disabled={refreshingImports} onClick={() => { void refreshImports(); }}><Icon name="spark"/> {refreshingImports ? "Actualisation…" : "Actualiser les imports"}</button><button type="button" className="secondary-button" onClick={() => setComparisonOpen(true)}><Icon name="trend"/> Comparer les marchés</button></>}{!session.user && <button type="button" className="secondary-button" onClick={() => editDuringMeeting()}><Icon name="lock"/> Connexion GLOBAL pour modifier</button>}</div></div>{meetingEditing && session.user && <div className="point-layout-toolbar" role="toolbar" aria-label="Mise en page du point"><div className="layout-history"><button type="button" disabled={!historyAvailability.undo} onClick={undoPoint} title="Annuler (Ctrl+Z)">↶</button><button type="button" disabled={!historyAvailability.redo} onClick={redoPoint} title="Rétablir (Ctrl+Y)">↷</button></div><div className="layout-font"><span>Texte</span><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent - 5)}>A−</button><input type="range" min="85" max="130" step="5" value={data.preferences.fontScalePercent} aria-label="Taille du texte du point" onChange={(event) => updateFontScalePercent(Number(event.target.value))}/><output>{data.preferences.fontScalePercent}%</output><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent + 5)}>A+</button><button type="button" onClick={() => updateFontScalePercent(100)}>Réinit.</button></div><div className="layout-density" aria-label="Densité">{(["compact", "comfortable", "airy"] as Density[]).map((density) => <button type="button" key={density} className={data.preferences.density === density ? "active" : ""} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, density } }))}>{density === "compact" ? "Compacte" : density === "airy" ? "Aérée" : "Normale"}</button>)}</div><label className="layout-color" title="Couleur du point"><input type="color" value={accent} aria-label="Couleur du point" onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/></label><button type="button" onClick={() => { updateFontScalePercent(90); setData((current) => ({ ...current, preferences: { ...current.preferences, density: "compact" } })); }}>Ajuster</button><button type="button" onClick={resetCanvasLayout}>Structure initiale</button><button type="button" onClick={() => { void openPresentation(); }}>Présentation</button><button type="button" className="primary" disabled={saving || archiveLoading} onClick={() => { void savePoint(); }}>Enregistrer</button><button type="button" onClick={() => setMeetingEditing(false)}>Terminer</button></div>}{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Ce canevas est prêt à être complété puis sauvegardé." : "Aucun brouillon n’est affiché publiquement. Connecte-toi pour préparer cette semaine."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard data={preparedData} market={market} archive={archive} editing={meetingEditing && Boolean(session.user)} actions={session.user ? canvasActions : undefined}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou connecte-toi pour la préparer.</p></div>}</main>}
     {view === "stats" && session.user && (plannerReady && directoryReady ? <AnalystStatsDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} registry={plannerRegistry} updatedAt={plannerUpdatedAt} onImport={importPlannerData}/> : <main className="analyst-stats-page"><div className="surface stats-loading"><span>Chargement de la source Planner et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "analyst" && session.user && (plannerReady && directoryReady ? <AnalystPointDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData}/> : <main className="analyst-point-page"><div className="surface stats-loading"><span>Chargement du point analyste, de Planner et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "imports" && session.user && (plannerReady && directoryReady ? <ImportCenter users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerTasks={plannerTasks} plannerRegistry={plannerRegistry} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData} onJiraImported={refreshJiraFromRegistry} onManual={useManualImport}/> : <main className="import-center-page"><div className="surface stats-loading"><span>Chargement des registres et de l’annuaire GLOBAL…</span></div></main>)}
@@ -1745,7 +1824,7 @@ function MarketPulseWorkspace() {
       <div className="carryover-presets"><button type="button" onClick={() => setCarryoverPreset("unfinished")}><Icon name="alert" size={14}/> Non terminés</button><button type="button" onClick={() => setCarryoverPreset("all")}>Tout sélectionner</button><button type="button" onClick={() => setCarryoverPreset("none")}>Tout retirer</button></div>
       <div className="carryover-content">
         <div className="carryover-group"><div className="carryover-group-title"><span>Dossiers</span><b>{previousPoint.data.dossiers.length}</b></div>{previousPoint.data.dossiers.length ? previousPoint.data.dossiers.map((item) => { const alreadyCarried = data.dossiers.some((current) => (current.sourceId ?? current.id) === (item.sourceId ?? item.id)); return <label className={`carryover-row ${alreadyCarried ? "is-disabled" : ""}`} key={`dossier:${item.id}`}><input type="checkbox" disabled={alreadyCarried} checked={!alreadyCarried && Boolean(carryoverSelection[`dossier:${item.id}`])} onChange={(event) => setCarryoverSelection((current) => ({ ...current, [`dossier:${item.id}`]: event.target.checked }))}/><span><strong>{item.title || "Dossier sans titre"}</strong><small>{[item.universe, item.reference, item.owner].filter(Boolean).join(" · ") || "Contexte à compléter"}</small></span><b className={`tone-text-${toneForStatus(item.status)}`}>{alreadyCarried ? "Déjà reporté" : item.status}</b></label>; }) : <div className="carryover-empty">Aucun dossier dans ce point.</div>}</div>
-        <div className="carryover-group"><div className="carryover-group-title"><span>Simulations</span><b>{previousPoint.data.operations.length}</b></div>{previousPoint.data.operations.length ? previousPoint.data.operations.map((item) => { const alreadyCarried = data.operations.some((current) => (current.sourceId ?? current.id) === (item.sourceId ?? item.id)); return <label className={`carryover-row ${alreadyCarried ? "is-disabled" : ""}`} key={`operation:${item.id}`}><input type="checkbox" disabled={alreadyCarried} checked={!alreadyCarried && Boolean(carryoverSelection[`operation:${item.id}`])} onChange={(event) => setCarryoverSelection((current) => ({ ...current, [`operation:${item.id}`]: event.target.checked }))}/><span><strong>{item.name || "Simulation sans titre"}</strong><small>{item.month || "Mois à définir"}</small></span><b className={`tone-text-${toneForStatus(item.state)}`}>{alreadyCarried ? "Déjà reportée" : item.state}</b></label>; }) : <div className="carryover-empty">Aucune simulation dans ce point.</div>}</div>
+        <div className="carryover-group"><div className="carryover-group-title"><span>Simulations</span><b>{previousPoint.data.operations.length}</b></div>{previousPoint.data.operations.length ? previousPoint.data.operations.map((item) => { const alreadyCarried = data.operations.some((current) => operationIdentity(current) === operationIdentity(item)); return <label className={`carryover-row ${alreadyCarried ? "is-disabled" : ""}`} key={`operation:${item.id}`}><input type="checkbox" disabled={alreadyCarried} checked={!alreadyCarried && Boolean(carryoverSelection[`operation:${item.id}`])} onChange={(event) => setCarryoverSelection((current) => ({ ...current, [`operation:${item.id}`]: event.target.checked }))}/><span><strong>{item.name || "Simulation sans titre"}</strong><small>{item.month || "Mois à définir"}</small></span><b className={`tone-text-${toneForStatus(item.state)}`}>{alreadyCarried ? "Déjà reportée" : item.state}</b></label>; }) : <div className="carryover-empty">Aucune simulation dans ce point.</div>}</div>
         <div className="carryover-group"><div className="carryover-group-title"><span>Promotions</span><b>{previousPoint.data.promotions.length}</b></div>{previousPoint.data.promotions.length ? previousPoint.data.promotions.map((item) => { const alreadyCarried = data.promotions.some((current) => (current.sourceId ?? current.id) === (item.sourceId ?? item.id)); return <label className={`carryover-row ${alreadyCarried ? "is-disabled" : ""}`} key={`promotion:${item.id}`}><input type="checkbox" disabled={alreadyCarried} checked={!alreadyCarried && Boolean(carryoverSelection[`promotion:${item.id}`])} onChange={(event) => setCarryoverSelection((current) => ({ ...current, [`promotion:${item.id}`]: event.target.checked }))}/><span><strong>{item.name || "Promotion sans titre"}</strong><small>{item.period || "Période à définir"}</small></span><b className={`tone-text-${toneForStatus(item.salesState)}`}>{alreadyCarried ? "Déjà reportée" : item.salesState}</b></label>; }) : <div className="carryover-empty">Aucune promotion dans ce point.</div>}</div>
       </div>
       <div className="carryover-footer"><span>Le point précédent reste intact. Chaque élément repris garde son origine.</span><button className="primary-button" type="button" disabled={!carryoverSelectedCount} onClick={applyCarryover}><Icon name="copy"/> Reporter {carryoverSelectedCount || ""} élément{carryoverSelectedCount > 1 ? "s" : ""}</button></div>

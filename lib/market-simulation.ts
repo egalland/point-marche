@@ -32,8 +32,8 @@ function stateFromText(value: string): MarketSimulationState | null {
     if (code === 1) return "À faire";
     if (code === 2) return "En cours";
     if (code === 4 || code === 5) return "En attente du marché";
-    if (code === 6 || code === 7) return "En attente de contrôle";
-    if (code >= 8) return "Faite";
+    if (code === 6) return "En attente de contrôle";
+    if (code >= 7) return "Faite";
   }
   if (/controle.*(fait|termine|ok)|ctrl.*(fait|termine|ok)/.test(text)) return "Faite";
   if (/attente.*(controle|ctrl)|controle.*attente|ctrl.*attente/.test(text)) return "En attente de contrôle";
@@ -48,9 +48,9 @@ function stateFromText(value: string): MarketSimulationState | null {
 export function marketSimulationState(task: PlannerTask): MarketSimulationState {
   const categoryCode = Number.parseInt(/^\s*(\d+)/.exec(normalized(task.category))?.[1] ?? "", 10);
   if (categoryCode === 11) return "Non finalisée";
-  if (Number.isFinite(categoryCode) && categoryCode >= 8) return "Faite";
-  if (task.workflowState === "stopped") return "Non finalisée";
+  if (Number.isFinite(categoryCode) && categoryCode >= 7) return "Faite";
   if (task.workflowState === "completed" || task.checklist.some((item) => item.kind === "control" && Boolean(item.date))) return "Faite";
+  if (task.workflowState === "stopped") return "Non finalisée";
   const categoryState = stateFromText(task.category);
   if (categoryState) return categoryState;
   const described = stateFromText([task.plannerStatus, task.goal].filter(Boolean).join(" · "));
