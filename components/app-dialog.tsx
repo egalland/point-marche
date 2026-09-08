@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type PointerEvent, type ReactNode } from "react";
 import { activateDialog, isTopDialog } from "@/lib/dialog-controller";
+import { createPortal } from "react-dom";
 
 type AppDialogProps = {
   open: boolean;
@@ -34,10 +35,11 @@ export function AppDialog({ open, onClose, labelledBy, children, className = "",
     backdropPointerRef.current = null;
   };
 
-  return <div className={`app-dialog-backdrop ${backdropClassName}`.trim()} onPointerDown={(event) => { backdropPointerRef.current = event.target === event.currentTarget ? event.pointerId : null; }} onPointerUp={closeFromBackdrop} onPointerCancel={() => { backdropPointerRef.current = null; }}>
+  const dialog = <div className={`app-dialog-backdrop ${backdropClassName}`.trim()} onPointerDown={(event) => { backdropPointerRef.current = event.target === event.currentTarget ? event.pointerId : null; }} onPointerUp={closeFromBackdrop} onPointerCancel={() => { backdropPointerRef.current = null; }}>
     <section ref={panelRef} className={`app-dialog ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={labelledBy} tabIndex={-1}>
       <button className="app-dialog-close" type="button" aria-label={closeLabel} title={closeLabel} disabled={busy} onClick={onClose}>×</button>
       {children}
     </section>
   </div>;
+  return typeof document !== "undefined" && document.body ? createPortal(dialog, document.querySelector(".app-shell") ?? document.body) : dialog;
 }

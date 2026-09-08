@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { analystWeeklyPoints, globalUsers } from "../../../db/schema";
-import { isoWeekParts } from "../../../lib/analyst-point";
+import { isIsoDate, isoWeekParts } from "../../../lib/iso-week";
 import { getEditorUser } from "../../simple-auth";
 
 function serialize(row: typeof analystWeeklyPoints.$inferSelect) {
@@ -33,12 +33,12 @@ export async function POST(request: Request) {
     const editor = await getEditorUser();
     if (!editor) return Response.json({ error: "Connecte-toi pour enregistrer le point analyste." }, { status: 401 });
     const body = await request.json() as { analystId?: unknown; data?: Record<string, unknown> };
-    const analystId = typeof body.analystId === "string" ? body.analystId.trim() : "";
-    const data = body.data;
+    const analystId = typeof body?.analystId === "string" ? body.analystId.trim() : "";
+    const data = body?.data;
     const meetingDate = typeof data?.meetingDate === "string" ? data.meetingDate : "";
     const periodFrom = typeof data?.periodFrom === "string" ? data.periodFrom : "";
     const periodTo = typeof data?.periodTo === "string" ? data.periodTo : "";
-    if (!analystId || !/^\d{4}-\d{2}-\d{2}$/.test(meetingDate) || !/^\d{4}-\d{2}-\d{2}$/.test(periodFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(periodTo) || !data) return Response.json({ error: "Analyste, semaine et contenu sont requis." }, { status: 400 });
+    if (!analystId || !isIsoDate(meetingDate) || !isIsoDate(periodFrom) || !isIsoDate(periodTo) || periodFrom > periodTo || !data) return Response.json({ error: "Analyste, semaine et contenu sont requis." }, { status: 400 });
     const payload = JSON.stringify(data);
     if (payload.length > 1_500_000) return Response.json({ error: "Le point analyste est trop volumineux." }, { status: 413 });
     const db = getDb();

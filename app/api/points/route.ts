@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { weeklyPoints } from "../../../db/schema";
+import { isIsoDate, isoWeekParts } from "../../../lib/iso-week";
 import { getEditorUser } from "../../simple-auth";
 
 type SavePointRequest = {
@@ -13,18 +14,6 @@ type SavePointRequest = {
     [key: string]: unknown;
   };
 };
-
-function isoWeekParts(dateString: string) {
-  const date = new Date(`${dateString}T12:00:00Z`);
-  const target = new Date(date.valueOf());
-  const day = (target.getUTCDay() + 6) % 7;
-  target.setUTCDate(target.getUTCDate() - day + 3);
-  const year = target.getUTCFullYear();
-  const firstThursday = new Date(Date.UTC(year, 0, 4, 12));
-  const firstDay = (firstThursday.getUTCDay() + 6) % 7;
-  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDay + 3);
-  return { year, week: 1 + Math.round((target.valueOf() - firstThursday.valueOf()) / 604800000) };
-}
 
 function serializePoint(row: typeof weeklyPoints.$inferSelect) {
   return {
@@ -75,13 +64,13 @@ export async function POST(request: Request) {
     const user = await getEditorUser();
     if (!user) return Response.json({ error: "Connecte-toi pour enregistrer le point." }, { status: 401 });
     const body = await request.json() as SavePointRequest;
-    const marketId = body.marketId?.trim() ?? "";
-    const data = body.data;
-    const meetingDate = data?.meetingDate?.trim() ?? "";
-    const pointName = body.marketName?.trim() || "Marché";
-    const themeColor = data?.themeColor?.trim() || "mint";
+    const marketId = typeof body?.marketId === "string" ? body.marketId.trim() : "";
+    const data = body?.data;
+    const meetingDate = typeof data?.meetingDate === "string" ? data.meetingDate.trim() : "";
+    const pointName = typeof body?.marketName === "string" ? body.marketName.trim() || "Marché" : "Marché";
+    const themeColor = typeof data?.themeColor === "string" ? data.themeColor.trim() || "mint" : "mint";
 
-    if (!marketId || !data || !/^\d{4}-\d{2}-\d{2}$/.test(meetingDate)) {
+    if (!marketId || !data || !isIsoDate(meetingDate)) {
       return Response.json({ error: "Marché, date et contenu du point sont requis." }, { status: 400 });
     }
 

@@ -1,3 +1,5 @@
+import { SessionDrafts } from "./session-drafts";
+
 export type AppTransport = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 export type LocalDraft = { scope: "market" | "analyst"; ownerId: string; data: Record<string, unknown> };
 export type LocalDraftBridge = {
@@ -12,6 +14,7 @@ export type LocalDraftBridge = {
 
 let transport: AppTransport | null = null;
 let drafts: LocalDraftBridge | null = null;
+const sessionDrafts = new SessionDrafts();
 
 export function installLocalTransport(next: AppTransport, bridge: LocalDraftBridge) {
   transport = next;
@@ -27,12 +30,17 @@ export function appFetch(input: RequestInfo | URL, init?: RequestInit) {
 }
 
 export function readLocalDraft(scope: LocalDraft["scope"], ownerId: string, meetingDate?: string) {
-  return drafts?.read(scope, ownerId, meetingDate) ?? null;
+  return drafts ? drafts.read(scope, ownerId, meetingDate) : sessionDrafts.read(scope, ownerId, meetingDate);
 }
 
 export function writeLocalDraft(draft: LocalDraft) {
-  drafts?.write(draft);
+  if (drafts) drafts.write(draft);
+  else sessionDrafts.write(draft);
 }
+
+export function markPointSaved(draft: LocalDraft) { sessionDrafts.markSaved(draft); }
+export function hasUnsavedSessionDrafts() { return sessionDrafts.hasUnsaved(); }
+export function clearSessionDrafts() { sessionDrafts.clear(); }
 
 export function markLocalFormPending(key: string, pending: boolean) {
   drafts?.pending?.(key, pending);

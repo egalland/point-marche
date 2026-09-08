@@ -1,6 +1,6 @@
 import { moduleUrl } from "./module-url.mjs";
 
-export const reactImports = { react: import.meta.resolve("react"), "react/jsx-runtime": import.meta.resolve("react/jsx-runtime") };
+export const reactImports = { react: import.meta.resolve("react"), "react-dom": import.meta.resolve("react-dom"), "react/jsx-runtime": import.meta.resolve("react/jsx-runtime") };
 export const isoUrl = moduleUrl("../../lib/iso-week.ts");
 export const dialogUrl = moduleUrl("../../components/app-dialog.tsx", { ...reactImports, "@/lib/dialog-controller": moduleUrl("../../lib/dialog-controller.ts") });
 export const paginationUrl = moduleUrl("../../components/table-pagination.tsx", { ...reactImports, "@/lib/table-page": moduleUrl("../../lib/table-page.ts") });

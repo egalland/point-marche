@@ -26,11 +26,17 @@ test("a completed control makes the simulation done", () => {
 });
 
 test("a business category above control wins over a missing optional trame", () => {
+  assert.equal(simulation.marketSimulationState(task("7-Contrôle ERP terminé", [{ kind: "trame", date: "", nonApplicable: false }], "stopped")), "Faite");
   assert.equal(simulation.marketSimulationState(task("9-Tarif Vente terminé - Attente Ctrl Marge", [
       { kind: "simulation", date: "2026-08-10", nonApplicable: false },
       { kind: "control", date: "2026-08-12", nonApplicable: false },
       { kind: "trame", date: "", nonApplicable: false },
     ], "stopped")), "Faite");
+});
+
+test("a dated control survives a stopped workflow caused by an optional missing step", () => {
+  assert.equal(simulation.marketSimulationState(task("6-Attente contrôle", [{ kind: "control", date: "2026-09-04" }, { kind: "trame", date: "" }], "stopped")), "Faite");
+  assert.equal(simulation.marketSimulationState(task("11-Evolution non finalisée", [{ kind: "control", date: "2026-09-04" }], "stopped")), "Non finalisée");
 });
 
 test("an early closed card remains non finalized", () => {

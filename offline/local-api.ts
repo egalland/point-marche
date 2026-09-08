@@ -6,7 +6,6 @@ import { jiraCompletionWeeks, validateJiraHistoryRange } from "../lib/analyst-ji
 import { isIsoDate, isoWeekForDate, isoWeekParts } from "../lib/iso-week";
 import { parsePlannerTasks } from "../lib/planner-import";
 import { recoverPlannerTasksFromPoints, mergePlannerTaskRegistry } from "../lib/planner-registry";
-import { enrichMarketPointFromPlanner } from "../lib/point-planner-enrichment";
 import type { JiraCsvTicket } from "../lib/jira-csv";
 import type { AnalystPointData, AnalystPointRecord } from "../lib/analyst-point";
 import type { LocalJiraBatch, LocalMarket, LocalPoint, WorkspaceData } from "./workspace-data";
@@ -144,8 +143,7 @@ export function createLocalApi(store: WorkspaceStore): AppTransport {
         const market = data.markets.find((item) => item.id === marketId);
         if (!market) throw new LocalApiError("Marché introuvable.", 404);
         if (method === "GET") {
-          const registry = plannerRegistry(data);
-          return json({ points: data.points.filter((point) => point.marketId === marketId).sort(pointOrder).map((point) => ({ ...point, data: enrichMarketPointFromPlanner(point.data, registry.tasks, market.plannerTags) })) });
+          return json({ points: data.points.filter((point) => point.marketId === marketId).sort(pointOrder) });
         }
         if (method === "POST") {
           const payload = body.data as Record<string, unknown>;
@@ -209,6 +207,8 @@ export function createLocalApi(store: WorkspaceStore): AppTransport {
             return json({ accepted: chunk.length });
           }
           if (body.action === "finish") {
+            const integrityError = jiraImportCountError({ tickets: body.expectedTicketCount, participants: body.expectedParticipantCount }, { tickets: tickets.size, participants: Array.from(tickets.values()).reduce((sum, ticket) => sum + ticket.participants.length, 0) });
+            if (integrityError) throw new LocalApiError(integrityError, 409);
             const registry = new Map(data.jiraTickets.map((ticket) => [ticket.key, ticket]));
             tickets.forEach((ticket, key) => registry.set(key, ticket));
             const updatedAt = now();
@@ -272,3 +272,4 @@ export function createLocalApi(store: WorkspaceStore): AppTransport {
     }
   };
 }
+import { jiraImportCountError } from "../lib/jira-import-integrity";

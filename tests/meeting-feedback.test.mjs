@@ -33,6 +33,49 @@ const snapshot = { metric: "open-jira", year: 2026, week: 36, measuredAt: "2026-
 const analyst = { id: "analyst", name: "Jane DOE", email: "jane@example.test", role: "analyste-tarif-referentiel", marketIds: [] };
 const stats = { contributions: [], simulations: 0, controls: 0, totalActivities: 0, distinctTasks: 0 };
 
+test("empty points contain no sample tickets, dossiers or promotions", () => {
+  for (const market of app.defaultMarkets) {
+    const data = app.initialData(market.id);
+    assert.deepEqual([data.jira, data.dossiers, data.operations, data.promotions], [[], [], [], []]);
+  }
+});
+
+test("damaged legacy fields cannot crash point rendering or duplicate modules", () => {
+  const market = app.defaultMarkets[0];
+  const damaged = { meetingDate: "2026-02-31", dossiers: [null, 3, { title: 42, owner: null, progress: 200 }], jira: [null, { summary: 42, assignee: 17, link: "javascript:alert(1)" }], promotions: [null, "wrong"], mail: { to: 42, autoTo: [null, 12] }, preferences: { moduleOrder: ["dossiers", "dossiers", "invalid", "jira"] } };
+  const normalized = app.normalizePointData(damaged, market.id);
+  assert.equal(new Set(normalized.preferences.moduleOrder).size, normalized.preferences.moduleOrder.length);
+  assert.notEqual(normalized.meetingDate, "2026-02-31");
+  assert.equal(normalized.dossiers[0].progress, 100);
+  assert.equal(normalized.jira[0].link, "");
+  assert.equal(normalized.mail.to, "");
+  assert.doesNotThrow(() => renderToStaticMarkup(createElement(app.PreviewDashboard, { data: normalized, market, archive: [] })));
+  const analystData = point.normalizeAnalystPoint({ ...damaged, jiraResolved: damaged.jira, preferences: { order: ["dossiers", "dossiers"] } }, analyst);
+  assert.equal(new Set(analystData.preferences.order).size, analystData.preferences.order.length);
+  assert.doesNotThrow(() => analystExport.analystInteractiveHtml(analystData, analyst, stats, null));
+});
+
+test("standalone market and analyst pages respect saved block order and widths", () => {
+  const market = app.defaultMarkets[0];
+  const data = app.initialData(market.id);
+  data.preferences.moduleOrder = ["promotions", "alerts", "operations", "dossiers", "jira", "comparison"];
+  data.preferences.moduleWidths.promotions = "half";
+  data.preferences.fontScalePercent = 125;
+  data.preferences.density = "airy";
+  data.preferences.htmlModules.comparison = true;
+  const html = app.buildInteractiveHtml(data, market, []);
+  assert.deepEqual([...html.matchAll(/data-module="([a-z]+)"/g)].map((match) => match[1]), data.preferences.moduleOrder);
+  assert.match(html, /data-module="promotions" style="--columns:3"/);
+  assert.match(html, /--point-scale:1\.25;--space:24px/);
+  assert.match(html, /height:0%/);
+  const analystData = point.initialAnalystPoint(analyst);
+  analystData.preferences.order = ["dossiers", "overview", "planner", "jira", "cycle20"];
+  analystData.preferences.widths.dossiers = "two-thirds";
+  const analystHtml = analystExport.analystInteractiveHtml(analystData, analyst, stats, null);
+  assert.deepEqual([...analystHtml.matchAll(/data-module="([a-z0-9]+)"/g)].map((match) => match[1]), ["dossiers", "overview", "planner", "jira"]);
+  assert.match(analystHtml, /data-module="dossiers" style="--columns:4"/);
+});
+
 test("market comparison distinguishes unknown markets from zero and weights manual summaries", () => {
   assert.equal(comparison.openTicketCount([{ status: "En cours", count: 5 }, { status: "En attente" }, { status: "Fini" }, { status: "Abandonné" }]), 6);
   assert.deepEqual(comparison.comparisonTotals(rows), { total: 8, available: 3, missing: 1 });
