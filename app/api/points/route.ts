@@ -1,126 +1,38 @@
-import { and, desc, eq, sql } from "drizzle-orm";
-import { getDb } from "../../../db";
-import { weeklyPoints } from "../../../db/schema";
-import { isIsoDate, isoWeekParts } from "../../../lib/iso-week";
+import { listPoints, ownerExists, publishPoint } from "../../../db/point-store";
+import { isIsoDate } from "../../../lib/iso-week";
+import { pointVersion } from "../../../lib/point-persistence";
 import { getEditorUser } from "../../simple-auth";
 
-type SavePointRequest = {
-  marketId?: string;
-  marketName?: string;
-  data?: {
-    meetingDate?: string;
-    pointName?: string;
-    themeColor?: string;
-    [key: string]: unknown;
-  };
-};
-
-function serializePoint(row: typeof weeklyPoints.$inferSelect) {
-  return {
-    id: row.id,
-    marketId: row.marketId,
-    year: row.year,
-    week: row.week,
-    meetingDate: row.meetingDate,
-    pointName: row.pointName,
-    themeColor: row.themeColor,
-    data: JSON.parse(row.payload),
-    createdAt: row.createdAt,
-  };
-}
-
-function routeError(error: unknown) {
-  const message = error instanceof Error ? error.message : "Erreur inattendue";
-  if (/no such table|weekly_points/i.test(message)) {
-    return "Le registre des points n’est pas encore disponible.";
-  }
-  return message;
-}
-
+const headers = { "Cache-Control": "no-store" };
 export async function GET(request: Request) {
   try {
     const marketId = new URL(request.url).searchParams.get("marketId")?.trim();
-    if (!marketId) return Response.json({ error: "marketId est requis" }, { status: 400 });
-
-    const db = getDb();
-    const rows = await db.select().from(weeklyPoints)
-      .where(eq(weeklyPoints.marketId, marketId))
-      .orderBy(desc(weeklyPoints.year), desc(weeklyPoints.week), desc(weeklyPoints.version))
-      .limit(200);
-
-    const latestByWeek = new Map<string, typeof weeklyPoints.$inferSelect>();
-    rows.forEach((row) => {
-      const key = `${row.year}-${row.week}`;
-      if (!latestByWeek.has(key)) latestByWeek.set(key, row);
-    });
-    return Response.json({ points: Array.from(latestByWeek.values(), (row) => serializePoint(row)) });
+    if (!marketId) return Response.json({ error: "marketId est requis" }, { status: 400, headers });
+    return Response.json({ points: await listPoints("market", marketId) }, { headers });
   } catch (error) {
-    return Response.json({ error: routeError(error) }, { status: 500 });
+    console.error("Market points read failed", error);
+    return Response.json({ error: "Le registre des points n’est pas disponible. Réessaie dans un instant." }, { status: 503, headers });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const user = await getEditorUser();
-    if (!user) return Response.json({ error: "Connecte-toi pour enregistrer le point." }, { status: 401 });
-    const body = await request.json() as SavePointRequest;
+    if (!user) return Response.json({ error: "Connecte-toi pour enregistrer le point." }, { status: 401, headers });
+    const body = await request.json();
     const marketId = typeof body?.marketId === "string" ? body.marketId.trim() : "";
     const data = body?.data;
-    const meetingDate = typeof data?.meetingDate === "string" ? data.meetingDate.trim() : "";
-    const pointName = typeof body?.marketName === "string" ? body.marketName.trim() || "Marché" : "Marché";
-    const themeColor = typeof data?.themeColor === "string" ? data.themeColor.trim() || "mint" : "mint";
-
-    if (!marketId || !data || !isIsoDate(meetingDate)) {
-      return Response.json({ error: "Marché, date et contenu du point sont requis." }, { status: 400 });
-    }
-
-    const payload = JSON.stringify({ ...data, pointName: "Point marché", themeColor });
-    if (payload.length > 1_500_000) {
-      return Response.json({ error: "Le point est trop volumineux pour être enregistré." }, { status: 413 });
-    }
-
-    const { year, week } = isoWeekParts(meetingDate);
-    const db = getDb();
-
-    const [existing] = await db.select().from(weeklyPoints)
-      .where(and(eq(weeklyPoints.marketId, marketId), eq(weeklyPoints.year, year), eq(weeklyPoints.week, week)))
-      .orderBy(desc(weeklyPoints.version)).limit(1);
-
-    if (existing) {
-      const [saved] = await db.update(weeklyPoints).set({
-        meetingDate,
-        pointName,
-        themeColor,
-        payload,
-        createdAt: sql`CURRENT_TIMESTAMP`,
-      }).where(eq(weeklyPoints.id, existing.id)).returning();
-      return Response.json({ point: serializePoint(saved) });
-    }
-
-    try {
-      const [saved] = await db.insert(weeklyPoints).values({
-        id: crypto.randomUUID(),
-        marketId,
-        year,
-        week,
-        version: 1,
-        meetingDate,
-        pointName,
-        themeColor,
-        payload,
-      }).returning();
-      return Response.json({ point: serializePoint(saved) }, { status: 201 });
-    } catch (error) {
-      if (!/unique|constraint/i.test(error instanceof Error ? error.message : "")) throw error;
-      const [concurrent] = await db.select().from(weeklyPoints)
-        .where(and(eq(weeklyPoints.marketId, marketId), eq(weeklyPoints.year, year), eq(weeklyPoints.week, week)))
-        .orderBy(desc(weeklyPoints.version)).limit(1);
-      if (!concurrent) throw error;
-      const [saved] = await db.update(weeklyPoints).set({ meetingDate, pointName, themeColor, payload, createdAt: sql`CURRENT_TIMESTAMP` })
-        .where(eq(weeklyPoints.id, concurrent.id)).returning();
-      return Response.json({ point: serializePoint(saved) });
-    }
+    if (!marketId || !data || Array.isArray(data) || typeof data !== "object" || !isIsoDate(data.meetingDate)) return Response.json({ error: "Marché, date et contenu du point sont requis." }, { status: 400, headers });
+    const expectedPoint = pointVersion(body.expectedPoint);
+    if (expectedPoint === undefined || typeof body.draftRevision !== "string" || !body.draftRevision) return Response.json({ error: "Cette page utilise une ancienne sauvegarde. Recharge le site après avoir conservé tes modifications." }, { status: 428, headers });
+    const normalized = { ...data, pointName: "Point marché", themeColor: typeof data.themeColor === "string" ? data.themeColor.trim() || "mint" : "mint" };
+    if (JSON.stringify(normalized).length > 1_500_000) return Response.json({ error: "Le point est trop volumineux pour être enregistré." }, { status: 413, headers });
+    if (!await ownerExists("market", marketId)) return Response.json({ error: "Marché introuvable." }, { status: 404, headers });
+    const name = typeof body.marketName === "string" ? body.marketName.trim() || "Marché" : "Marché";
+    const saved = await publishPoint(user.username, "market", marketId, normalized, expectedPoint, body.draftRevision, name);
+    return saved ? Response.json(saved, { headers }) : Response.json({ error: "Une autre copie a été enregistrée. Tes saisies sont conservées : compare les copies avant de sauvegarder.", conflict: true }, { status: 409, headers });
   } catch (error) {
-    return Response.json({ error: routeError(error) }, { status: 500 });
+    console.error("Market point save failed", error);
+    return Response.json({ error: "Enregistrement indisponible. Tes saisies restent dans cette page." }, { status: 503, headers });
   }
 }

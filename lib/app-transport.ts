@@ -1,4 +1,6 @@
 import { SessionDrafts } from "./session-drafts";
+import { HostedPointDrafts } from "./hosted-point-drafts";
+import type { PublishedPoint, StoredPointDraft } from "./point-persistence";
 
 export type AppTransport = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 export type LocalDraft = { scope: "market" | "analyst"; ownerId: string; data: Record<string, unknown> };
@@ -15,6 +17,11 @@ export type LocalDraftBridge = {
 let transport: AppTransport | null = null;
 let drafts: LocalDraftBridge | null = null;
 const sessionDrafts = new SessionDrafts();
+export const hostedPointDrafts = new HostedPointDrafts((input, init) => fetch(input, init));
+
+export function configureHostedDrafts(editor: string | null) {
+  hostedPointDrafts.configure(isLocalWorkspace() ? null : editor);
+}
 
 export function installLocalTransport(next: AppTransport, bridge: LocalDraftBridge) {
   transport = next;
@@ -30,17 +37,30 @@ export function appFetch(input: RequestInfo | URL, init?: RequestInit) {
 }
 
 export function readLocalDraft(scope: LocalDraft["scope"], ownerId: string, meetingDate?: string) {
-  return drafts ? drafts.read(scope, ownerId, meetingDate) : sessionDrafts.read(scope, ownerId, meetingDate);
+  return drafts ? drafts.read(scope, ownerId, meetingDate) : hostedPointDrafts.enabled ? hostedPointDrafts.read(scope, ownerId, meetingDate) : sessionDrafts.read(scope, ownerId, meetingDate);
 }
 
 export function writeLocalDraft(draft: LocalDraft) {
   if (drafts) drafts.write(draft);
+  else if (hostedPointDrafts.enabled) hostedPointDrafts.write(draft);
   else sessionDrafts.write(draft);
 }
 
-export function markPointSaved(draft: LocalDraft) { sessionDrafts.markSaved(draft); }
-export function hasUnsavedSessionDrafts() { return sessionDrafts.hasUnsaved(); }
-export function clearSessionDrafts() { sessionDrafts.clear(); }
+export function markPointSaved(draft: LocalDraft, point?: PublishedPoint) {
+  sessionDrafts.markSaved(draft);
+  if (point && hostedPointDrafts.enabled) hostedPointDrafts.observe(draft.scope, draft.ownerId, point);
+}
+export function hasUnsavedSessionDrafts() { return hostedPointDrafts.enabled ? hostedPointDrafts.hasUnsaved() : sessionDrafts.hasUnsaved(); }
+export function clearSessionDrafts() { sessionDrafts.clear(); hostedPointDrafts.configure(null); }
+export function loadPointDraft(scope: LocalDraft["scope"], ownerId: string, date?: string) {
+  return hostedPointDrafts.enabled ? hostedPointDrafts.load(scope, ownerId, date) : Promise.resolve(readLocalDraft(scope, ownerId, date));
+}
+export function preparePointSave(draft: LocalDraft) {
+  return hostedPointDrafts.enabled ? hostedPointDrafts.beginPublish(draft) : Promise.resolve({});
+}
+export function finishPointSave(draft: LocalDraft, saved?: { point: PublishedPoint; draft?: StoredPointDraft }, conflict = false) {
+  if (hostedPointDrafts.enabled) hostedPointDrafts.finishPublish(draft, saved, conflict);
+}
 
 export function markLocalFormPending(key: string, pending: boolean) {
   drafts?.pending?.(key, pending);

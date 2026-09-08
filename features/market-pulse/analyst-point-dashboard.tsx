@@ -1,7 +1,10 @@
 "use client";
 
-import { appFetch as fetch, readLocalDraft, writeLocalDraft, isLocalWorkspace, readLocalPreference, writeLocalPreference, saveLocalFile, markPointSaved } from "@/lib/app-transport";
+import { appFetch as fetch, readLocalDraft, writeLocalDraft, isLocalWorkspace, readLocalPreference, writeLocalPreference, saveLocalFile, markPointSaved, loadPointDraft, preparePointSave, finishPointSave } from "@/lib/app-transport";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { PointSyncStatus } from "./point-sync-status";
+import { PointSourceStatus } from "./point-source-status";
+import type { PointDraft, DraftSnapshot, StoredPointDraft } from "@/lib/point-persistence";
 import { SafeDateInput } from "@/components/safe-date-input";
 import { SupplierTurnover } from "@/components/supplier-turnover";
 import { AnalystWeekPicker } from "./analyst-week-picker";
@@ -26,6 +29,7 @@ import type { PointSourceMode } from "@/lib/point-source-mode";
 
 type Mode = "read" | "edit" | "mail";
 type Props = {
+  onReconnect?: () => void;
   users: GlobalDirectoryUser[];
   tasks: PlannerTask[];
   markets: AnalystStatsMarket[];
@@ -68,7 +72,7 @@ function dossierCard(item: AnalystDossier, edit: boolean, update: (patch: Partia
   return <article className="analyst-dossier-card" key={item.id}><span className={`analyst-status-dot status-${item.status === "Fait" ? "done" : item.status === "En attente" ? "waiting" : item.status === "À faire" ? "todo" : "active"}`}/><div><strong>{item.title || "Dossier sans titre"}</strong><small>{item.action || item.comment || "Action à compléter"}</small>{item.showProgress && <div className="analyst-progress"><span><i style={{ width: `${Math.max(0, Math.min(100, item.progress))}%` }}/></span><b>{item.progress}%</b></div>}</div><span>{item.status}</span></article>;
 }
 
-export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt, onPlannerImport }: Props) {
+export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt, onPlannerImport, onReconnect }: Props) {
   const analysts = useMemo(() => users.filter((user) => user.role === "analyste-tarif-referentiel").sort((left, right) => left.name.localeCompare(right.name, "fr")), [users]);
   const manager = users.find((user) => user.role === "manager-tarif");
   const [analystId, setAnalystId] = useState(() => {
@@ -113,12 +117,13 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
       if (!response.ok) throw new Error(payload.error || "Chargement impossible.");
       if (!active) return;
       const normalized = (payload.points ?? []).map((record) => ({ ...record, data: automaticRecipients(normalizeAnalystPoint(record.data, analyst, manager), analyst, manager) }));
-      normalized.forEach((record) => markPointSaved({ scope: "analyst", ownerId: analyst.id, data: record.data }));
+      normalized.forEach((record) => markPointSaved({ scope: "analyst", ownerId: analyst.id, data: record.data }, record));
       setRecords(normalized);
       const previous = previousWeekRange();
       const period = isoWeekParts(previous.to);
       const matching = normalized.find((record) => record.year === period.year && record.week === period.week);
-      const localDraft = readLocalDraft("analyst", analyst.id);
+      const localDraft = await loadPointDraft("analyst", analyst.id);
+      if (!active) return;
       const next = localDraft ? normalizeAnalystPoint(localDraft.data, analyst, manager) : matching?.data ?? initialAnalystPoint(analyst, manager);
       setData(automaticRecipients(next, analyst, manager));
       const nextPeriod = isoWeekParts(next.meetingDate);
@@ -140,7 +145,7 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
     void fetchAnalystJiraSnapshot(jiraAnalystId, isoWeekParts(jiraPointDate), controller.signal).then((snapshot) => {
       if (!active) return;
       if (snapshot) setData((current) => current?.analystId === jiraAnalystId && current.meetingDate === jiraPointDate && current.jiraMode !== "manual"
-        ? { ...current, jira: snapshot.tickets, jiraResolved: snapshot.resolvedTickets ?? [] } : current);
+        ? { ...current, sourceFreshness: { ...current.sourceFreshness, jira: snapshot.updatedAt }, jira: snapshot.tickets, jiraResolved: snapshot.resolvedTickets ?? [] } : current);
       setJiraLoad({ key: jiraKey, error: "" });
     }).catch((error) => {
       if (active) setJiraLoad({ key: jiraKey, error: error instanceof Error ? error.message : "Chargement Jira impossible." });
@@ -179,12 +184,15 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
     if (data.periodFrom > data.periodTo) { setToast("La fin de période doit suivre le début."); return; }
     setSaving(true);
     writeLocalDraft({ scope: "analyst", ownerId: analyst.id, data });
+    const submittedDraft = { scope: "analyst" as const, ownerId: analyst.id, data };
     try {
-      const response = await fetch("/api/analyst-points", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ analystId: analyst.id, data }) });
-      const payload = await response.json() as { point?: AnalystPointRecord; error?: string };
-      if (!response.ok || !payload.point) throw new Error(payload.error || "Sauvegarde impossible.");
+      const concurrency = await preparePointSave(submittedDraft);
+      const response = await fetch("/api/analyst-points", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ analystId: analyst.id, data, ...concurrency }) });
+      const payload = await response.json() as { point?: AnalystPointRecord; draft?: StoredPointDraft; error?: string };
+      if (!response.ok || !payload.point) { finishPointSave(submittedDraft, undefined, response.status === 409); throw new Error(payload.error || "Sauvegarde impossible."); }
+      finishPointSave(submittedDraft, { point: payload.point, draft: payload.draft });
       const saved = { ...payload.point, data: normalizeAnalystPoint(payload.point.data, analyst, manager) };
-      markPointSaved({ scope: "analyst", ownerId: analyst.id, data: saved.data });
+      markPointSaved({ scope: "analyst", ownerId: analyst.id, data: saved.data }, saved);
       if (request === selection.current) {
         setRecords((current) => [saved, ...current.filter((record) => !(record.year === saved.year && record.week === saved.week))].sort((left, right) => right.year - left.year || right.week - left.week));
         setActiveRecordId(saved.id);
@@ -199,7 +207,7 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
         setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} enregistrée.${newerEdits ? " Les nouvelles modifications restent à enregistrer." : ""}`);
       }
     } catch (error) { setToast(error instanceof Error ? error.message : "Sauvegarde impossible."); }
-    finally { setSaving(false); }
+    finally { finishPointSave(submittedDraft); setSaving(false); }
   };
   useEffect(() => { saveAction.current = save; });
 
@@ -216,20 +224,26 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
     try {
       const snapshot = await fetchAnalystJiraSnapshot(analyst.id, period);
       if (!snapshot) throw new Error("Aucun import Jira disponible. Les totaux manuels sont conservés.");
-      setData((current) => current?.analystId === analyst.id && current.meetingDate === data.meetingDate ? { ...current, jiraMode: "automatic", jira: snapshot.tickets, jiraResolved: snapshot.resolvedTickets ?? [] } : current);
+      setData((current) => current?.analystId === analyst.id && current.meetingDate === data.meetingDate ? { ...current, jiraMode: "automatic", sourceFreshness: { ...current.sourceFreshness, jira: snapshot.updatedAt }, jira: snapshot.tickets, jiraResolved: snapshot.resolvedTickets ?? [] } : current);
       refreshJira();
     } catch (error) { setToast(error instanceof Error ? error.message : "Import indisponible."); }
     finally { setSourceChanging(false); }
   };
   const updateDossier = (id: string, patch: Partial<AnalystDossier>) => updateData({ dossiers: data.dossiers.map((item) => item.id === id ? { ...item, ...patch } : item) });
-  const choosePointWeek = (nextParts: { year: number; week: number }, keepChartRange = false) => {
+  const choosePointWeek = async (nextParts: { year: number; week: number }, keepChartRange = false) => {
     if (loading || saving || nextParts.year < 2020 || nextParts.year > 2200) return;
     if (nextParts.year === period.year && nextParts.week === period.week) return;
     ++selection.current;
     writeLocalDraft({ scope: "analyst", ownerId: analyst.id, data });
     const nextRange = isoWeekRange(nextParts.year, nextParts.week);
     const saved = records.find((record) => record.year === nextParts.year && record.week === nextParts.week);
-    const localDraft = readLocalDraft("analyst", analyst.id, nextRange.to);
+    const request = selection.current;
+    setLoading(true);
+    let localDraft;
+    try { localDraft = await loadPointDraft("analyst", analyst.id, nextRange.to); }
+    catch (error) { if (request === selection.current) { setLoading(false); setToast(error instanceof Error ? error.message : "Brouillon indisponible."); } return; }
+    if (request !== selection.current) return;
+    setLoading(false);
     const base = localDraft ? normalizeAnalystPoint(localDraft.data, analyst, manager) : saved?.data;
     const next = base ?? {
       ...initialAnalystPoint(analyst, manager),
@@ -283,10 +297,24 @@ export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt,
       <section className="analyst-history"><div className="section-title"><div><span>Historique</span><h2>Semaines sauvegardées</h2><p>Recharge une semaine pour la lire ou la mettre à jour.</p></div></div>{records.length ? <div>{records.map((record) => <button type="button" key={record.id} className={record.id === activeRecordId ? "active" : ""} onClick={() => choosePointWeek(record)}><span>{record.year}</span><strong>S{String(record.week).padStart(2, "0")}</strong><small>{dateLabel(record.periodFrom)} → {dateLabel(record.periodTo)}</small><b>{analystJiraCounts(record.data).resolved} terminés · {record.data.dossiers.length} dossiers</b></button>)}</div> : <div className="analyst-module-empty">Aucune semaine sauvegardée.</div>}</section>
     </div></fieldset>;
 
+  const restoreConflict = (draft: PointDraft, snapshot: DraftSnapshot) => {
+    ++selection.current;
+    const next = automaticRecipients(normalizeAnalystPoint(draft.data, analyst, manager), analyst, manager);
+    setData(next); setChartReferenceDate(next.meetingDate); setActiveRecordId(snapshot.point?.id ?? "");
+    if (snapshot.point) {
+      const shared = normalizeAnalystPoint(snapshot.point.data, analyst, manager), sharedPeriod = isoWeekParts(shared.meetingDate);
+      const record: AnalystPointRecord = { ...snapshot.point, analystId: analyst.id, ...sharedPeriod, meetingDate: shared.meetingDate, periodFrom: shared.periodFrom, periodTo: shared.periodTo, updatedAt: snapshot.point.updatedAt ?? snapshot.point.createdAt, data: shared };
+      setRecords((current) => [record, ...current.filter((row) => row.year !== sharedPeriod.year || row.week !== sharedPeriod.week)].sort((a, b) => b.year - a.year || b.week - a.week));
+    }
+    setToast("Brouillon sauvegardé. Tu peux poursuivre le point.");
+  };
+
   return <main className="analyst-point-page">
     <header className="analyst-point-hero"><div><span>Point analyste</span><h1>{analyst.name}</h1><p>Suivi descriptif de l’activité et des dossiers, sans objectif individuel.</p></div><div className="analyst-point-controls"><label><span>Analyste</span><select value={analyst.id} onChange={(event) => { setLoading(true); setRecords([]); setActiveRecordId(""); ++selection.current; writeLocalDraft({ scope: "analyst", ownerId: analyst.id, data }); setAnalystId(event.target.value); }}>{analysts.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><AnalystWeekPicker value={data.meetingDate} savedWeeks={records} disabled={loading || saving} onSelect={choosePointWeek}/></div></header>
-    <div className="analyst-point-toolbar"><div className="segmented-control"><button type="button" className={mode === "read" ? "active" : ""} onClick={() => { setMeetingEditing(false); setMode("read"); }}>Lecture</button><button type="button" className={mode === "edit" ? "active" : ""} onClick={() => { setMeetingEditing(false); setMode("edit"); }}>Réglages</button><button type="button" className={mode === "mail" ? "active" : ""} onClick={() => { setMeetingEditing(false); setMode("mail"); }}>Mail</button></div><div><span className={activeRecordId ? "analyst-saved-state saved" : "analyst-saved-state"}>{loading ? "Chargement…" : activeRecordId ? JSON.stringify(records.find((record) => record.id === activeRecordId)?.data) === JSON.stringify(data) ? "Semaine enregistrée" : "Modifications à enregistrer" : "Nouveau brouillon"}</span>{mode === "read" && <label className={`point-edit-toggle ${meetingEditing ? "is-on" : ""}`}><input type="checkbox" aria-label="Modifier le point analyste" checked={meetingEditing} disabled={loading} onChange={(event) => setMeetingEditing(event.target.checked)}/><span><i/><b>{meetingEditing ? "Modification active" : "Modifier le point"}</b></span></label>}<button type="button" className="primary-button" disabled={saving || jiraUnavailable} onClick={save}>{saving ? "Enregistrement…" : "Sauvegarder la semaine"}</button></div></div>
+    <div className="analyst-point-toolbar"><div className="segmented-control"><button type="button" className={mode === "read" ? "active" : ""} onClick={() => { setMeetingEditing(false); setMode("read"); }}>Lecture</button><button type="button" className={mode === "edit" ? "active" : ""} onClick={() => { setMeetingEditing(false); setMode("edit"); }}>Réglages</button><button type="button" className={mode === "mail" ? "active" : ""} onClick={() => { setMeetingEditing(false); setMode("mail"); }}>Mail</button></div><div><span className={activeRecordId ? "analyst-saved-state saved" : "analyst-saved-state"}>{loading ? "Chargement…" : activeRecordId ? JSON.stringify(records.find((record) => record.id === activeRecordId)?.data) === JSON.stringify(data) ? "Semaine enregistrée" : "Modifications à partager" : "Nouveau brouillon"}</span>{mode === "read" && <label className={`point-edit-toggle ${meetingEditing ? "is-on" : ""}`}><input type="checkbox" aria-label="Modifier le point analyste" checked={meetingEditing} disabled={loading} onChange={(event) => setMeetingEditing(event.target.checked)}/><span><i/><b>{meetingEditing ? "Modification active" : "Modifier le point"}</b></span></label>}<button type="button" className="primary-button" disabled={saving || jiraUnavailable} onClick={save}>{saving ? "Enregistrement…" : "Sauvegarder la semaine"}</button></div></div>
 
+    {!loading && <PointSyncStatus key={`${analyst.id}:${data.meetingDate}`} scope="analyst" ownerId={analyst.id} date={data.meetingDate} onRestore={restoreConflict} onReconnect={onReconnect}/>}
+    <PointSourceStatus sources={{ ...data.sourceFreshness, planner: plannerUpdatedAt }} jiraMode={data.jiraMode}/>
     {jiraUnavailable && <section className={`analyst-jira-load-state${jiraError ? " error" : ""}`} role={jiraError ? "alert" : "status"}><div><strong>{jiraLoading ? "Chargement des tickets Jira…" : "Tickets Jira non chargés"}</strong><span>{jiraLoading ? "Rapprochement avec le registre global pour la semaine sélectionnée." : jiraError}</span>{jiraError && <small>Réessaie le chargement ou passe en saisie manuelle pour continuer le point.</small>}</div>{jiraError && <div className="title-actions"><button type="button" className="secondary-button" onClick={refreshJira}>Réessayer</button><button type="button" className="primary-button" onClick={() => { void changeJiraMode("manual"); setMeetingEditing(true); }}>Passer en manuel</button></div>}</section>}
 
     {mode === "read" && meetingEditing && <SourceModeControl label="Tickets Jira" mode={data.jiraMode} busy={sourceChanging} onChange={(next) => { void changeJiraMode(next); }}/>}

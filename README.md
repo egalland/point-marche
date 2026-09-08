@@ -11,13 +11,17 @@ Application de préparation, présentation et diffusion des points hebdomadaires
 
 Les corrections apportées aux données importées restent dans le point. Une nouvelle semaine utilise les sources importées ; la reprise du point précédent reste une action explicite. La trame facultative ne bloque pas une simulation dont le contrôle est fait ou dont la catégorie dépasse l’étape 6 ; la catégorie d’abandon 11 reste non finalisée.
 
-Sur le site, les brouillons suivent la navigation dans l’onglet. « Enregistrer » les conserve sur le serveur. Dans l’application locale, les commandes de sauvegarde écrivent un fichier `.marketpulse.json` ; une copie de récupération locale protège aussi le travail en cours.
+Sur le site, les brouillons marché et analyste se sauvegardent automatiquement sur le serveur après une seconde sans saisie. Ils sont repris après réouverture et restent distincts du point partagé, mis à jour avec « Enregistrer ». Les copies concurrentes sont comparées avant tout remplacement. Un état persistant signale les erreurs de connexion et les conflits ; quitter la page avertit si des saisies restent à synchroniser.
+
+Le compte GLOBAL est commun : les personnes connectées partagent les brouillons du compte. Les brouillons ne sont jamais affichés dans la lecture publique. Les dates du bandeau indiquent les imports effectivement utilisés dans le point ; une date historique inconnue reste inconnue.
+
+L’export autonome reste à la livraison du 8 septembre antérieure à cette évolution du site. Il n’est pas recompilé pendant cette phase. Les fichiers `.marketpulse.json` et la récupération locale conservent leur fonctionnement.
 
 ## Structure
 
 - `features/market-pulse/` : points marché et analystes, imports, statistiques, graphiques.
 - `components/` : contrôles partagés, fenêtres, thèmes, disposition.
-- `lib/` : règles métier, normalisation, exports, transport et brouillons de session.
+- `lib/` : règles métier, normalisation, exports, transport, file de sauvegarde automatique et comparaison des copies.
 - `app/api/`, `db/`, `drizzle/` : API du site, base D1 et migrations.
 - `offline/` : application autonome, fichier de données et adaptateur des mêmes API.
 - `tests/` : tests métier, sauvegardes et scénarios de navigation asynchrone.
@@ -38,3 +42,5 @@ node scripts/verify-offline.mjs MARKET_PULSE_LOCAL.html VERIFICATION.json
 L’export sans données initiales ouvre une application vide, prête pour les imports ou l’ouverture d’un fichier existant. Aucun CSV historique n’est nécessaire. Le script de vérification contrôle le JavaScript, les styles, les polices intégrées et les composants communs ; il ne prétend pas effectuer une comparaison visuelle dans un navigateur ni une ouverture dans Outlook.
 
 Voir `docs/review-20260908.md` pour les corrections de la revue complète.
+
+Voir `docs/site-drafts-20260908.md` pour le fonctionnement des brouillons persistants et des conflits.

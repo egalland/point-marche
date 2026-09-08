@@ -166,7 +166,7 @@ export function createLocalApi(store: WorkspaceStore): AppTransport {
           if (!payload || ![payload.meetingDate, payload.periodFrom, payload.periodTo].every(isIsoDate) || payload.periodFrom > payload.periodTo) throw new LocalApiError("Choisis des dates complètes et une période valide.");
           const period = isoWeekParts(payload.meetingDate);
           const existing = data.analystPoints.find((point) => point.analystId === analystId && point.year === period.year && point.week === period.week);
-          const point: AnalystPointRecord = { id: existing?.id ?? id(), analystId, ...period, meetingDate: payload.meetingDate, periodFrom: payload.periodFrom, periodTo: payload.periodTo, data: structuredClone(payload), createdAt: existing?.createdAt ?? now(), updatedAt: now() };
+          const point: AnalystPointRecord = { id: existing?.id ?? id(), revision: id(), analystId, ...period, meetingDate: payload.meetingDate, periodFrom: payload.periodFrom, periodTo: payload.periodTo, data: structuredClone(payload), createdAt: existing?.createdAt ?? now(), updatedAt: now() };
           store.update((current) => ({ ...current, analystPoints: [...current.analystPoints.filter((item) => item.id !== point.id), point] }));
           return json({ point }, 201);
         }

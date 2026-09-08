@@ -9,7 +9,7 @@ import { setImmediate } from "node:timers/promises";
 const require = createRequire(import.meta.url);
 const sourcefile = resolve("features/market-pulse/market-pulse-app.tsx");
 const bundled = await build({
-  stdin: { contents: await readFile(sourcefile, "utf8") + '\nexport { MarketPulseWorkspace, AnalystPointDashboard, initialData, defaultMarkets };\nexport { initialAnalystPoint } from "@/lib/analyst-point";\nexport { clearSessionDrafts, readLocalDraft, hasUnsavedSessionDrafts } from "@/lib/app-transport";', sourcefile, resolveDir: resolve("features/market-pulse"), loader: "tsx" },
+  stdin: { contents: await readFile(sourcefile, "utf8") + '\nexport { MarketPulseWorkspace, AnalystPointDashboard, initialData, defaultMarkets };\nexport { initialAnalystPoint } from "@/lib/analyst-point";\nexport { clearSessionDrafts, readLocalDraft, hasUnsavedSessionDrafts, hostedPointDrafts } from "@/lib/app-transport";', sourcefile, resolveDir: resolve("features/market-pulse"), loader: "tsx" },
   tsconfig: resolve("tsconfig.json"), bundle: true, packages: "external", format: "cjs", platform: "node", write: false, logLevel: "silent",
 });
 const exportsHolder = { exports: {} };
@@ -27,7 +27,7 @@ new Function("require", "module", "exports", bundled.outputFiles[0].text)((id) =
 const app = exportsHolder.exports;
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
-let timers, tree, records, post, failedMarket, renderComponent;
+let timers, tree, records, post, failedMarket, renderComponent, draftRecords;
 const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
 function nodes(value) { if (Array.isArray(value)) return value.flatMap(nodes); if (!value || typeof value !== "object") return []; return [value, ...nodes(value.props?.children)]; }
@@ -40,15 +40,30 @@ async function settle() { for (let i = 0; i < 5; i++) { render(); const pending 
 
 function pointRecord(marketId, date = "2026-09-03", priority = "Priorité enregistrée") {
   const data = { ...app.initialData(marketId), meetingDate: date, priority, jiraMode: "manual", plannerMode: "manual" };
-  return { id: `${marketId}:36`, marketId, year: 2026, week: 36, meetingDate: date, createdAt: "2026-09-03T10:00:00Z", data };
+  return { id: `${marketId}:36`, revision: "initial", marketId, year: 2026, week: 36, meetingDate: date, createdAt: "2026-09-03T10:00:00Z", data };
 }
 
 test.beforeEach(async () => {
   app.clearSessionDrafts(); renderComponent = app.MarketPulseWorkspace; hooks = { slots: [], effects: [], cursor: 0 }; timers = new Map(); let timerId = 0; post = null; failedMarket = "";
+  draftRecords = new Map();
   records = new Map(app.defaultMarkets.map((market) => [market.id, [pointRecord(market.id)]]));
   globalThis.window = { location: { search: "" }, scrollTo() {}, addEventListener() {}, removeEventListener() {}, setTimeout(callback, delay) { const id = ++timerId; if (!delay) timers.set(id, callback); return id; }, clearTimeout(id) { timers.delete(id); } };
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input), "https://test.invalid");
+    if (url.pathname === "/api/point-drafts") {
+      if (init?.method === "PUT") {
+        const value = JSON.parse(init.body), key = `${value.scope}:${value.ownerId}:${value.data.meetingDate}`;
+        const existing = draftRecords.get(key);
+        if ((existing?.revision ?? null) !== value.expectedRevision) return response({ conflict: true, error: "Copie concurrente" }, 409);
+        const draft = { scope: value.scope, ownerId: value.ownerId, data: value.data, basePoint: value.basePoint, revision: crypto.randomUUID(), updatedAt: new Date().toISOString() };
+        draftRecords.set(key, draft);
+        return response({ draft });
+      }
+      const scope = url.searchParams.get("scope"), owner = url.searchParams.get("ownerId"), date = url.searchParams.get("meetingDate");
+      const draft = [...draftRecords.values()].filter((row) => row.scope === scope && row.ownerId === owner && (!date || row.data.meetingDate === date)).at(-1) ?? null;
+      const point = scope === "market" && date ? records.get(owner)?.find((row) => row.meetingDate === date) ?? null : null;
+      return response({ draft, point });
+    }
     if (url.pathname === "/api/session") return response({ user: { displayName: "GLOBAL", username: "test" } });
     if (url.pathname === "/api/markets") return response({ markets: app.defaultMarkets.map((market) => ({ ...market, shortCode: market.short })) });
     if (url.pathname === "/api/global-users") return response({ users: [] });
@@ -69,7 +84,11 @@ async function resolveSave() {
   assert.ok(post);
   const saved = { ...pointRecord(post.body.marketId), data: post.body.data };
   records.set(post.body.marketId, [saved]);
-  post.deferred.resolve(response({ point: saved }));
+  saved.revision = crypto.randomUUID();
+  const key = `market:${post.body.marketId}:${saved.data.meetingDate}`;
+  const draft = { ...draftRecords.get(key), data: saved.data, revision: crypto.randomUUID(), basePoint: { id: saved.id, revision: saved.revision } };
+  draftRecords.set(key, draft);
+  post.deferred.resolve(response({ point: saved, draft }));
   await settle();
 }
 
@@ -87,6 +106,7 @@ test("a late save preserves newer text and leaves it unsaved", async () => {
 test("changing markets during a save never applies the old point to the new market", async () => {
   preview().actions.updatePriority("Modification marché A"); await settle();
   const pendingSave = saveButton().onClick();
+  await settle();
   const next = app.defaultMarkets.find((market) => market.id !== post.body.marketId);
   const select = find((node) => node.type === "select" && node.props.value === post.body.marketId && nodes(node.props.children).some((option) => option.props?.value === next.id));
   await select.props.onChange({ target: { value: next.id } }); await settle();
@@ -138,7 +158,7 @@ test("analyst drafts survive changing analysts and a late save preserves newer n
   const save = find((node) => node.type === "button" && node.props.children === "Sauvegarder la semaine").props.onClick();
   await editAnalystNote("Ajout pendant la sauvegarde");
   const savedData = post.body.data;
-  post.deferred.resolve(response({ point: { id: "a-week", analystId: "a", year: 2026, week: 36, meetingDate: savedData.meetingDate, periodFrom: savedData.periodFrom, periodTo: savedData.periodTo, createdAt: "2026-09-08T10:00:00Z", updatedAt: "2026-09-08T10:00:00Z", data: savedData } }));
+  post.deferred.resolve(response({ point: { id: "a-week", revision: "saved-revision", analystId: "a", year: 2026, week: 36, meetingDate: savedData.meetingDate, periodFrom: savedData.periodFrom, periodTo: savedData.periodTo, createdAt: "2026-09-08T10:00:00Z", updatedAt: "2026-09-08T10:00:00Z", data: savedData } }));
   await save; await settle();
   assert.equal(app.readLocalDraft("analyst", "a").data.note, "Ajout pendant la sauvegarde");
   find((node) => node.type === "select" && node.props.value === "a").props.onChange({ target: { value: "b" } }); await settle();
@@ -146,4 +166,17 @@ test("analyst drafts survive changing analysts and a late save preserves newer n
   find((node) => node.type === "select" && node.props.value === "b").props.onChange({ target: { value: "a" } }); await settle();
   assert.equal(find((node) => node.type === "textarea" && node.props["aria-label"] === "Message de synthèse").props.value, "Ajout pendant la sauvegarde");
   assert.equal(app.readLocalDraft("analyst", "b").data.note, "Note analyste B");
+});
+
+
+test("the actual market view restores its server draft after reloading the page", async () => {
+  preview().actions.updatePriority("Décision conservée sur le site"); await settle();
+  assert.equal(await app.hostedPointDrafts.flushAll(), true);
+  const marketId = preview().market.id;
+  assert.equal(records.get(marketId)[0].data.priority, "Priorité enregistrée");
+  hooks.slots.forEach((slot) => slot?.cleanup?.()); app.clearSessionDrafts();
+  hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
+  await settle();
+  assert.equal(preview().data.priority, "Décision conservée sur le site");
+  assert.equal(preview().market.id, marketId);
 });

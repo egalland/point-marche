@@ -21,6 +21,7 @@ export type AnalystPointPreferences = {
   jiraChart: JiraChartSettings;
 };
 export type AnalystPointData = {
+  sourceFreshness?: { jira?: string; planner?: string };
   analystId: string;
   meetingDate: string;
   periodFrom: string;
@@ -37,7 +38,7 @@ export type AnalystPointData = {
   preferences: AnalystPointPreferences;
   mail: { to: string; cc: string; subject: string; intro: string; autoTo: string[] };
 };
-export type AnalystPointRecord = { id: string; analystId: string; year: number; week: number; meetingDate: string; periodFrom: string; periodTo: string; data: AnalystPointData; createdAt: string; updatedAt: string };
+export type AnalystPointRecord = { revision: string; id: string; analystId: string; year: number; week: number; meetingDate: string; periodFrom: string; periodTo: string; data: AnalystPointData; createdAt: string; updatedAt: string };
 export type AnalystJiraStatusCount = { status: string; count: number };
 
 export const analystPointModules: { id: AnalystPointModule; label: string; detail: string }[] = [
@@ -130,6 +131,7 @@ export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUs
     ...fallback,
     ...source,
     analystId: analyst.id,
+    sourceFreshness: source.sourceFreshness && typeof source.sourceFreshness === "object" ? { jira: typeof source.sourceFreshness.jira === "string" ? source.sourceFreshness.jira : "", planner: typeof source.sourceFreshness.planner === "string" ? source.sourceFreshness.planner : "" } : {},
     meetingDate: date(source.meetingDate, fallback.meetingDate),
     periodFrom: date(source.periodFrom, fallback.periodFrom),
     periodTo: date(source.periodTo, fallback.periodTo),

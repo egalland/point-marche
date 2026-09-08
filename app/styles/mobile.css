@@ -848,3 +848,33 @@ iframe {
   .canvas-jira-edit :is(input, select), .field :is(input, select, textarea) { font-size: 16px !important; }
   .comparison-tooltip { left: 50%; max-width: calc(100% - 16px); transform: translate(-50%, 12px); }
 }
+
+/* Point drafts and source context stay compact above the meeting canvas. */
+.point-sync-status, .point-source-status { display:flex; align-items:center; flex-wrap:wrap; gap:.5rem 1rem; padding:.55rem 0; font-size:.875rem; line-height:1.5; min-width:0; }
+.point-sync-status > div { display:flex; align-items:baseline; flex-wrap:wrap; gap:.25rem .75rem; flex:1; min-width:0; }
+.point-sync-status strong { font-size:.875rem; font-weight:600; }
+.point-sync-status span, .point-source-status span { overflow-wrap:anywhere; }
+.point-sync-status.saved { color:var(--muted, #859993); }
+.point-sync-status.error, .point-sync-status.conflict { border:1px solid var(--line-strong); border-radius:12px; padding:.8rem 1rem; margin:.5rem 0; background:var(--surface, #152823); }
+.point-sync-status.error strong, .point-sync-status.conflict strong { color:var(--text, #f0f6f3); }
+.point-source-status { color:var(--muted, #859993); border-bottom:1px solid var(--line); margin-bottom:.65rem; }
+.point-source-status b { color:var(--text, #f0f6f3); margin-right:.3rem; font-weight:600; }
+.point-source-status .has-corrections { color:var(--text, #f0f6f3); }
+.draft-queue-state { font-size:.875rem; color:var(--muted, #859993); }
+.point-conflict-dialog { width:min(960px, calc(100vw - 32px)); max-width:960px; }
+.point-conflict-dialog header p { max-width:72ch; line-height:1.6; }
+.point-conflict-table { overflow:auto; max-height:50dvh; margin:1rem 0; border:1px solid var(--line); border-radius:8px; }
+.point-conflict-table table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:1rem; }
+.point-conflict-table th, .point-conflict-table td { vertical-align:top; text-align:left; padding:.75rem; border-bottom:1px solid var(--line); overflow-wrap:anywhere; white-space:pre-wrap; }
+.point-conflict-table th { font-weight:600; }
+.point-conflict-table thead th { position:sticky; top:0; background:var(--surface, #152823); }
+.point-conflict-dialog footer { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:.6rem; }
+@media (max-width:760px) {
+  .point-sync-status > div { flex-basis:100%; }
+  .point-source-status { align-items:flex-start; gap:.35rem 1rem; }
+  .point-source-status > span { flex:1 1 220px; }
+  .point-sync-status button { min-height:44px; }
+  .point-conflict-table table { min-width:520px; }
+  .point-conflict-dialog footer button { flex:1 1 100%; min-height:44px; }
+  .draft-queue-state { flex-basis:100%; }
+}
