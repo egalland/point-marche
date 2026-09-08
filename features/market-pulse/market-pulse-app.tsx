@@ -1,7 +1,10 @@
 "use client";
 
-import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft, saveLocalFile, markPointSaved, hasUnsavedSessionDrafts, clearSessionDrafts } from "@/lib/app-transport";
+import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft, saveLocalFile, markPointSaved, hasUnsavedSessionDrafts, clearSessionDrafts, configureHostedDrafts, loadPointDraft, preparePointSave, finishPointSave, hostedPointDrafts } from "@/lib/app-transport";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type FormEvent, type ReactNode } from "react";
+import { PointSyncStatus, DraftQueueStatus } from "./point-sync-status";
+import { PointSourceStatus, type PointSourceFreshness } from "./point-source-status";
+import type { DraftSnapshot, PointDraft, StoredPointDraft } from "@/lib/point-persistence";
 import { AppDialog } from "@/components/app-dialog";
 import { AppIcon as Icon } from "@/components/app-icon";
 import { AppearanceProvider } from "@/components/appearance-provider";
@@ -44,11 +47,11 @@ type Tariff = { id: string; code: string; supplier: string; month: string; state
 type JiraPointFields = { summary: string; status: string; priority: string; assignee: string; lastActivity: string; comment: string; count?: number };
 type JiraPointOverride = Partial<JiraPointFields> & { updatedAt?: string };
 type JiraTicket = { id: string; key: string; internalId?: string; summary: string; status: string; priority: string; assignee: string; assigneeUserCode?: string; createdAt?: string; lastActivity: string; link: string; comment: string; count?: number; importedBase?: JiraPointFields; pointOverride?: JiraPointOverride };
-type PointData = { pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; promotions: Promotion[]; tariffs: Tariff[]; jira: JiraTicket[]; jiraMode: PointSourceMode; plannerMode: PointSourceMode; marketComparison: MarketComparison | null; preferences: PointPreferences; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
+type PointData = { sourceFreshness?: PointSourceFreshness; pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; promotions: Promotion[]; tariffs: Tariff[]; jira: JiraTicket[]; jiraMode: PointSourceMode; plannerMode: PointSourceMode; marketComparison: MarketComparison | null; preferences: PointPreferences; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
 type AlertItem = { title: string; detail: string; severity: "warning" | "danger"; targetId?: string; link?: string; category: "Jira" | "Dossier" };
 type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
 type Market = { id: string; name: string; short: string; tone: ThemeKey; colorHex: string; plannerTags: string[]; position: number; jiraWarningDays: number; jiraCriticalDays: number };
-type PointRecord = { id: string; marketId: string; year: number; week: number; meetingDate: string; pointName: string; themeColor: ThemeKey; data: PointData; createdAt: string };
+type PointRecord = { revision: string; id: string; marketId: string; year: number; week: number; meetingDate: string; pointName: string; themeColor: ThemeKey; data: PointData; createdAt: string };
 type JiraPersonGroup = { assignee: string; items: JiraTicket[]; total: number };
 type JiraAttentionLevel = "fresh" | "warning" | "critical" | "undated";
 type JiraDashboardScope = "all" | "attention" | "critical";
@@ -180,6 +183,7 @@ function normalizePointData(value: unknown, marketId: string, marketOverride?: M
   const fontScale: FontScale = fontScalePercent < 98 ? "compact" : fontScalePercent > 107 ? "large" : "standard";
   return {
     pointName: "Point marché",
+    sourceFreshness: isRecord(source.sourceFreshness) ? Object.fromEntries(["jira", "planner"].filter((key) => typeof source.sourceFreshness?.[key as keyof PointSourceFreshness] === "string").map((key) => [key, source.sourceFreshness![key as keyof PointSourceFreshness]])) : {},
     themeColor,
     customColor: normalizeHex(source.customColor) || fallback.customColor,
     meetingDate: typeof source.meetingDate === "string" ? safeIsoDate(source.meetingDate) : fallback.meetingDate,
@@ -469,7 +473,7 @@ async function applyJiraWeek(data: PointData, marketId: string, replaceCentral =
   try {
     const payload = await fetchJiraWeek(isoWeekYear(data.meetingDate), isoWeek(data.meetingDate), marketId, replaceCentral);
     if (!payload.snapshot) return data;
-    return { ...data, jira: jiraTicketsFromSummary(payload.snapshot.summary, payload.assignments[marketId] ?? [], marketId, data.jira) };
+    return { ...data, sourceFreshness: { ...data.sourceFreshness, jira: payload.snapshot.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot.summary, payload.assignments[marketId] ?? [], marketId, data.jira) };
   } catch {
     return data;
   }
@@ -828,6 +832,7 @@ function MarketPulseWorkspace() {
   const [directorySort, setDirectorySort] = useState<{ key: "name" | "role" | "market"; direction: "asc" | "desc" }>({ key: "name", direction: "asc" });
   const fileInput = useRef<HTMLInputElement>(null);
   const archiveRequest = useRef(0);
+  const resumedDrafts = useRef(new Set<string>());
   const confirmResolver = useRef<((confirmed: boolean) => void) | null>(null);
   const comparisonRequest = useRef(0);
   const comparisonContext = useRef("");
@@ -883,11 +888,14 @@ function MarketPulseWorkspace() {
     try {
       const points = await fetchPointRecords(nextMarket, marketOverride);
       if (requestId !== archiveRequest.current) return;
+      points.forEach((point) => markPointSaved({ scope: "market", ownerId: nextMarket, data: point.data }, point));
       if (loadLatest) {
-        const draft = readLocalDraft("market", nextMarket);
+        const draft = await loadPointDraft("market", nextMarket);
+        if (requestId !== archiveRequest.current) return;
         const latest = points[0];
         if (draft) {
           const draftData = normalizePointData(draft.data, nextMarket, marketOverride);
+          resumedDrafts.current.add(`${nextMarket}:${isoWeekYear(draftData.meetingDate)}:${isoWeek(draftData.meetingDate)}`);
           const saved = points.find((point) => point.year === isoWeekYear(draftData.meetingDate) && point.week === isoWeek(draftData.meetingDate));
           const nextData = draftData;
           setData(nextData);
@@ -914,7 +922,6 @@ function MarketPulseWorkspace() {
       }
       setMarketId(nextMarket);
       setArchive(points);
-      points.forEach((point) => markPointSaved({ scope: "market", ownerId: nextMarket, data: point.data }));
     } catch (error) {
       if (requestId !== archiveRequest.current) return;
       setArchiveError(error instanceof Error ? error.message : "Impossible de charger les sauvegardes.");
@@ -929,7 +936,14 @@ function MarketPulseWorkspace() {
 
   const bootstrap = useCallback(async () => {
     try {
-      const loadedMarkets = await fetchMarkets();
+      const [loadedMarkets, currentSession] = await Promise.all([fetchMarkets(), fetch("/api/session", { cache: "no-store" }).then((response) => response.json() as Promise<SessionPayload>).catch(() => ({ user: null }))]);
+      configureHostedDrafts(currentSession.user?.username ?? null);
+      setSession(currentSession);
+      if (currentSession.user) {
+        const requestedMode = new URLSearchParams(window.location.search).get("mode");
+        if (requestedMode === "edit") { setView("read"); setMeetingEditing(true); }
+        else if (requestedMode === "analyst" || requestedMode === "stats" || requestedMode === "imports" || requestedMode === "settings") setView(requestedMode);
+      }
       const options = loadedMarkets.length ? loadedMarkets : defaultMarkets;
       setMarketOptions(options);
       const firstMarket = options.find((item) => item.id === "revetements-menuiserie") ?? options[0];
@@ -938,7 +952,7 @@ function MarketPulseWorkspace() {
       setMarketOptions(defaultMarkets);
       await loadMarket(defaultMarkets[0].id, true, defaultMarkets[0]);
       setToast(error instanceof Error ? error.message : "Impossible de charger les marchés.");
-    }
+    } finally { setSessionReady(true); }
   }, [loadMarket]);
 
   const loadDirectory = useCallback(async () => {
@@ -972,19 +986,10 @@ function MarketPulseWorkspace() {
   useEffect(() => { const timer = window.setTimeout(() => { void bootstrap(); }, 0); return () => window.clearTimeout(timer); }, [bootstrap]);
   useEffect(() => { comparisonContext.current = comparisonContextValue; }, [comparisonContextValue]);
   useEffect(() => {
-    let active = true;
-    void fetch("/api/session", { cache: "no-store" }).then((response) => response.json()).then((payload: SessionPayload) => {
-      if (!active) return;
-      setSession(payload);
-      if (payload.user) {
-        void Promise.all([loadDirectory(), loadPlanner()]);
-        const requestedMode = new URLSearchParams(window.location.search).get("mode");
-        if (requestedMode === "edit") { setView("read"); setMeetingEditing(true); }
-        else if (requestedMode === "analyst" || requestedMode === "stats" || requestedMode === "imports" || requestedMode === "settings") setView(requestedMode);
-      }
-    }).catch(() => { /* La lecture publique reste disponible. */ }).finally(() => { if (active) setSessionReady(true); });
-    return () => { active = false; };
-  }, [loadDirectory, loadPlanner]);
+    if (!session.user) return;
+    const timer = window.setTimeout(() => { void Promise.all([loadDirectory(), loadPlanner()]); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [session.user, loadDirectory, loadPlanner]);
   useEffect(() => {
     if (!session.user || !directoryReady || archiveLoading) return;
     const timer = window.setTimeout(() => setData((current) => applyDirectoryMail(current, marketId, directoryUsers)), 0);
@@ -992,9 +997,10 @@ function MarketPulseWorkspace() {
   }, [archiveLoading, data, directoryReady, directoryUsers, marketId, session.user]);
   useEffect(() => {
     if (!session.user || !ready || archiveLoading || !plannerReady || !plannerTasks.length || data.plannerMode === "manual" || activeRecordId) return;
-    const timer = window.setTimeout(() => setData((current) => current.plannerMode === "manual" ? current : ({ ...current, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate), plannerTasks) })), 0);
+    if (resumedDrafts.current.has(`${marketId}:${isoWeekYear(data.meetingDate)}:${isoWeek(data.meetingDate)}`)) return;
+    const timer = window.setTimeout(() => setData((current) => current.plannerMode === "manual" ? current : ({ ...current, sourceFreshness: { ...current.sourceFreshness, planner: plannerUpdatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate), plannerTasks) })), 0);
     return () => window.clearTimeout(timer);
-  }, [activeRecordId, archiveLoading, data.meetingDate, data.plannerMode, market, marketPlannerTagsKey, plannerReady, plannerTasks, ready, session.user]);
+  }, [activeRecordId, archiveLoading, data.meetingDate, data.plannerMode, market, marketId, marketPlannerTagsKey, plannerReady, plannerTasks, plannerUpdatedAt, ready, session.user]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(timer); }, [toast]);
   useEffect(() => {
     if (!ready || archiveLoading || !session.user) return;
@@ -1011,8 +1017,12 @@ function MarketPulseWorkspace() {
       if (!hasUnsavedSessionDrafts()) return;
       event.preventDefault(); event.returnValue = "";
     };
+    const synchronize = () => { void hostedPointDrafts.flushAll(); };
+    const onHidden = () => { if (document.visibilityState === "hidden") void hostedPointDrafts.flushAll(true); };
     window.addEventListener("beforeunload", protectDraft);
-    return () => window.removeEventListener("beforeunload", protectDraft);
+    window.addEventListener("online", synchronize);
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onHidden);
+    return () => { window.removeEventListener("beforeunload", protectDraft); window.removeEventListener("online", synchronize); if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onHidden); };
   }, [session.user]);
   useEffect(() => {
     const previous = previousData.current;
@@ -1085,12 +1095,14 @@ function MarketPulseWorkspace() {
       const response = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: loginUsername, password: loginPassword }) });
       const payload = await response.json() as { user?: SessionPayload["user"]; error?: string };
       if (!response.ok || !payload.user) throw new Error(payload.error || "Connexion impossible.");
+      setArchiveLoading(true);
+      configureHostedDrafts(payload.user.username);
       setSession({ user: payload.user });
       setLoginPassword("");
       setLoginOpen(false);
       setView(loginDestination === "edit" ? "read" : loginDestination);
       setMeetingEditing(loginDestination === "edit");
-      await Promise.all([loadDirectory(), loadPlanner()]);
+      await loadMarket(marketId, true, market);
       setToast(loginDestination === "stats" ? "Connexion réussie. Statistiques ouvertes." : loginDestination === "analyst" ? "Connexion réussie. Point analyste ouvert." : loginDestination === "imports" ? "Connexion réussie. Centre d’import ouvert." : loginDestination === "settings" ? "Connexion réussie. Paramètres ouverts." : "Connexion réussie. Mode édition ouvert.");
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "Connexion impossible.");
@@ -1099,7 +1111,8 @@ function MarketPulseWorkspace() {
     }
   };
   const logout = async () => {
-    if (!isLocalWorkspace() && hasUnsavedSessionDrafts() && !await requestConfirmation({ title: "Se déconnecter ?", detail: "Des brouillons ne sont pas enregistrés. La déconnexion les fermera.", confirmLabel: "Se déconnecter", destructive: true })) return;
+    if (!isLocalWorkspace()) await hostedPointDrafts.flushAll();
+    if (!isLocalWorkspace() && hasUnsavedSessionDrafts() && !await requestConfirmation({ title: "Se déconnecter ?", detail: "Certaines saisies n’ont pas pu être sauvegardées en ligne. La déconnexion les fermera. Les brouillons déjà sauvegardés seront repris à la prochaine connexion.", confirmLabel: "Se déconnecter", destructive: true })) return;
     try {
       const response = await fetch("/api/logout", { method: "POST" });
       if (!response.ok) throw new Error();
@@ -1217,7 +1230,7 @@ function MarketPulseWorkspace() {
   const synchronizePlannerPoint = (tasks = plannerTasks) => {
     if (data.plannerMode === "manual") { setToast("Le point est en saisie manuelle. Repasse en import automatique pour le synchroniser."); return 0; }
     const relevant = plannerTasksForPoint(tasks, market, data.meetingDate);
-    setData((current) => ({ ...current, operations: mergePlannerOperations(current.operations, relevant, tasks) }));
+    setData((current) => ({ ...current, sourceFreshness: { ...current.sourceFreshness, planner: plannerUpdatedAt }, operations: mergePlannerOperations(current.operations, relevant, tasks) }));
     setToast(relevant.length ? `${relevant.length} simulation${relevant.length > 1 ? "s" : ""} Planner synchronisée${relevant.length > 1 ? "s" : ""}.` : "Aucune simulation Planner pour ce marché et cette période.");
     return relevant.length;
   };
@@ -1232,7 +1245,7 @@ function MarketPulseWorkspace() {
     setPlannerUpdatedAt(refreshed.updatedAt);
     setPlannerReady(true);
     const relevant = plannerTasksForPoint(refreshed.tasks, market, data.meetingDate);
-    if (selection === archiveRequest.current && context === comparisonContext.current) setData((current) => current.plannerMode === "manual" ? current : ({ ...current, operations: mergePlannerOperations(current.operations, relevant, refreshed.tasks) }));
+    if (selection === archiveRequest.current && context === comparisonContext.current) setData((current) => current.plannerMode === "manual" ? current : ({ ...current, sourceFreshness: { ...current.sourceFreshness, planner: refreshed.updatedAt }, operations: mergePlannerOperations(current.operations, relevant, refreshed.tasks) }));
     return {
       imported: payload.imported ?? 0,
       message: `${payload.imported ?? 0} tâche${(payload.imported ?? 0) > 1 ? "s" : ""} enregistrée${(payload.imported ?? 0) > 1 ? "s" : ""} · ${relevant.length} liée${relevant.length > 1 ? "s" : ""} au point actif.`,
@@ -1245,7 +1258,7 @@ function MarketPulseWorkspace() {
       const payload = await fetchJiraWeek(currentWeekYear, currentWeek, marketId, true);
       if ((selection !== archiveRequest.current || context !== comparisonContext.current)) return;
       if (!payload.snapshot) throw new Error("Aucun import Jira disponible pour cette semaine. Les données du point sont conservées.");
-      setData((current) => current.jiraMode === "manual" ? current : ({ ...current, jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
+      setData((current) => current.jiraMode === "manual" ? current : ({ ...current, sourceFreshness: { ...current.sourceFreshness, jira: payload.snapshot!.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
       setToast("Registre Jira actualisé. Les corrections du point sont conservées.");
     } catch (error) {
       if (selection === archiveRequest.current && context === comparisonContext.current) setToast(error instanceof Error ? error.message : "Actualisation Jira impossible. Les données sont conservées.");
@@ -1265,12 +1278,12 @@ function MarketPulseWorkspace() {
       if (planner.status === "fulfilled" && planner.value) {
         const source = planner.value;
         setPlannerTasks(source.tasks); setPlannerRegistry(source.registry); setPlannerUpdatedAt(source.updatedAt);
-        if (source.updatedAt || source.tasks.length) setData((current) => current.plannerMode === "manual" ? current : { ...current, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(source.tasks, market, current.meetingDate), source.tasks) });
+        if (source.updatedAt || source.tasks.length) setData((current) => current.plannerMode === "manual" ? current : { ...current, sourceFreshness: { ...current.sourceFreshness, planner: source.updatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(source.tasks, market, current.meetingDate), source.tasks) });
         else errors.push("Aucun import Planner disponible.");
       } else if (planner.status === "rejected") errors.push(planner.reason instanceof Error ? planner.reason.message : "Planner indisponible.");
       if (jira.status === "fulfilled" && jira.value) {
         const source = jira.value;
-        if (source.snapshot) setData((current) => current.jiraMode === "manual" ? current : { ...current, jira: jiraTicketsFromSummary(source.snapshot!.summary, source.assignments[marketId] ?? [], marketId, current.jira) });
+        if (source.snapshot) setData((current) => current.jiraMode === "manual" ? current : { ...current, sourceFreshness: { ...current.sourceFreshness, jira: source.snapshot!.updatedAt }, jira: jiraTicketsFromSummary(source.snapshot!.summary, source.assignments[marketId] ?? [], marketId, current.jira) });
         else errors.push("Aucun import Jira disponible.");
       } else if (jira.status === "rejected") errors.push(jira.reason instanceof Error ? jira.reason.message : "Jira indisponible.");
       setToast(errors.length ? `${errors.join(" ")} Les données concernées sont conservées.` : "Imports actualisés. Les saisies manuelles et corrections du point sont conservées.");
@@ -1288,10 +1301,10 @@ function MarketPulseWorkspace() {
       if (source === "jira") {
         const payload = await fetchJiraWeek(currentWeekYear, currentWeek, marketId, true);
         if (!payload.snapshot) throw new Error("Aucun import Jira disponible. La saisie manuelle est conservée.");
-        if (selection === archiveRequest.current && comparisonContext.current === context) setData((current) => ({ ...current, jiraMode: "automatic", jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
+        if (selection === archiveRequest.current && comparisonContext.current === context) setData((current) => ({ ...current, jiraMode: "automatic", sourceFreshness: { ...current.sourceFreshness, jira: payload.snapshot!.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
       } else {
         if (!plannerReady || (!plannerUpdatedAt && !plannerTasks.length)) throw new Error("Aucun import Planner disponible. La saisie manuelle est conservée.");
-        setData((current) => ({ ...current, plannerMode: "automatic", operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate), plannerTasks) }));
+        setData((current) => ({ ...current, plannerMode: "automatic", sourceFreshness: { ...current.sourceFreshness, planner: plannerUpdatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate), plannerTasks) }));
       }
     } catch (error) { setToast(error instanceof Error ? error.message : "Actualisation impossible."); }
     finally { setSourceChanging(null); }
@@ -1381,10 +1394,17 @@ function MarketPulseWorkspace() {
     if (session.user) writeLocalDraft({ scope: "market", ownerId: marketId, data });
     setCalendarMonth(monthStart(meetingDate));
     const latest = archive.find((record) => record.year === year && record.week === week);
-    const draft = readLocalDraft("market", marketId, meetingDate);
+    const draftRequest = ++archiveRequest.current;
+    setArchiveLoading(true);
+    let draft;
+    try { draft = await loadPointDraft("market", marketId, meetingDate); }
+    catch (error) { if (draftRequest === archiveRequest.current) { setArchiveLoading(false); setToast(error instanceof Error ? error.message : "Brouillon indisponible."); } return; }
+    if (draftRequest !== archiveRequest.current) return;
+    setArchiveLoading(false);
     if (draft) {
       ++archiveRequest.current;
       const nextData = normalizePointData(draft.data, marketId, market);
+      resumedDrafts.current.add(`${marketId}:${year}:${week}`);
       setData(nextData); setCalendarMonth(monthStart(nextData.meetingDate)); setCalendarExpanded(false);
       setActiveRecordId(latest?.id ?? null); setSavedAt(latest ? new Date(latest.createdAt) : null);
       setLastSavedSignature(latest ? pointSignature(marketId, latest.data) : "");
@@ -1418,15 +1438,18 @@ function MarketPulseWorkspace() {
     setSaving(true);
     const selection = archiveRequest.current, context = comparisonContext.current;
     writeLocalDraft({ scope: "market", ownerId: marketId, data });
+    const submittedDraft = { scope: "market" as const, ownerId: marketId, data: preparedData };
     try {
-      const response = await fetch("/api/points", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ marketId, marketName: market.name, data: preparedData }) });
-      const payload = await response.json() as { point?: PointRecord; error?: string };
-      if (!response.ok || !payload.point) throw new Error(payload.error || "Échec de la sauvegarde.");
-      const savedData = normalizePointData(payload.point.data, marketId, market); const saved = { ...payload.point, data: savedData };
-      markPointSaved({ scope: "market", ownerId: marketId, data: savedData });
-      if ((selection !== archiveRequest.current || context !== comparisonContext.current)) { setToast(`Point ${market.name} · S${String(saved.week).padStart(2, "0")} enregistré.`); return; }
+      const concurrency = await preparePointSave(submittedDraft);
+      const response = await fetch("/api/points", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ marketId, marketName: market.name, data: preparedData, ...concurrency }) });
+      const payload = await response.json() as { point?: PointRecord; draft?: StoredPointDraft; error?: string };
+      if (!response.ok || !payload.point) { finishPointSave(submittedDraft, undefined, response.status === 409); throw new Error(payload.error || "Échec de la sauvegarde."); }
       const latestDraft = readLocalDraft("market", marketId, data.meetingDate);
-      const newerEdits = latestDraft && pointSignature(marketId, latestDraft.data as PointData) !== pointSignature(marketId, data);
+      const newerEdits = latestDraft && pointSignature(marketId, latestDraft.data as PointData) !== pointSignature(marketId, preparedData);
+      finishPointSave(submittedDraft, { point: payload.point, draft: payload.draft });
+      const savedData = normalizePointData(payload.point.data, marketId, market); const saved = { ...payload.point, data: savedData };
+      markPointSaved({ scope: "market", ownerId: marketId, data: savedData }, saved);
+      if ((selection !== archiveRequest.current || context !== comparisonContext.current)) { setToast(`Point ${market.name} · S${String(saved.week).padStart(2, "0")} enregistré.`); return; }
       setData((current) => current === data ? savedData : current);
       if (!newerEdits) writeLocalDraft({ scope: "market", ownerId: marketId, data: savedData });
       setArchive((current) => [saved, ...current.filter((item) => !(item.year === saved.year && item.week === saved.week))].sort((a, b) => b.year - a.year || b.week - a.week)); setActiveRecordId(saved.id); setSavedAt(new Date()); setLastSavedSignature(pointSignature(marketId, savedData)); setArchiveError("");
@@ -1435,7 +1458,7 @@ function MarketPulseWorkspace() {
         setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} ${onDisk ? "enregistrée dans le fichier." : "conservée dans la session. Le fichier reste à enregistrer."}`);
       } else setToast(`${saved.year} · S${String(saved.week).padStart(2, "0")} enregistrée en ligne.${newerEdits ? " Les nouvelles modifications restent à enregistrer." : ""}`);
     } catch (error) { setToast(error instanceof Error ? error.message : "Échec de la sauvegarde."); }
-    finally { setSaving(false); }
+    finally { finishPointSave(submittedDraft); setSaving(false); }
   };
   useEffect(() => {
     const handleSaveShortcut = (event: KeyboardEvent) => {
@@ -1653,7 +1676,7 @@ function MarketPulseWorkspace() {
     </div>}
   </section>;
 
-  const renderEditor = () => <div className={`editor-layout ${view === "settings" ? "settings-layout" : ""}`}><aside className="editor-nav"><div className="editor-nav-title"><span>{view === "settings" ? "Paramètres" : "Préparation"}</span><small>{view === "settings" ? "Réglages durables et affichage du point" : "Complète puis vérifie ton point"}</small></div>{(meetingEditing ? navGroups.slice(0, 1) : navGroups).map((group) => <div className="editor-nav-group" key={group.label}><span>{group.label}</span>{group.items.map((item) => <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => setSection(item.id)}><Icon name={item.icon}/><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}<Icon name="chevron" size={15}/></button>)}</div>)}<div className={`autosave-card ${isDirty ? "is-dirty" : ""}`}><span><Icon name={isDirty ? "edit" : "check"} size={14}/> {isDirty ? "Modifications non enregistrées" : activeRecordId ? "Point enregistré" : "Brouillon prêt"}</span><small>{archiveLoading ? "Chargement de l’historique…" : activeRecordId ? `Dernière sauvegarde${savedAt ? ` · ${savedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}` : "La première sauvegarde créera ce point"}</small></div></aside><main className="editor-content">
+  const renderEditor = () => <div className={`editor-layout ${view === "settings" ? "settings-layout" : ""}`}><aside className="editor-nav"><div className="editor-nav-title"><span>{view === "settings" ? "Paramètres" : "Préparation"}</span><small>{view === "settings" ? "Réglages durables et affichage du point" : "Complète puis vérifie ton point"}</small></div>{(meetingEditing ? navGroups.slice(0, 1) : navGroups).map((group) => <div className="editor-nav-group" key={group.label}><span>{group.label}</span>{group.items.map((item) => <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => setSection(item.id)}><Icon name={item.icon}/><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}<Icon name="chevron" size={15}/></button>)}</div>)}<div className={`autosave-card ${isDirty ? "is-dirty" : ""}`}><span><Icon name={isDirty ? "edit" : "check"} size={14}/> {isDirty ? "Modifications à partager" : activeRecordId ? "Point enregistré" : "Brouillon prêt"}</span><small>{archiveLoading ? "Chargement de l’historique…" : activeRecordId ? `Dernière sauvegarde${savedAt ? ` · ${savedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}` : "La première sauvegarde créera ce point"}</small></div></aside><main className="editor-content">
     {section === "general" && <section className="editor-section">
       <SectionTitle eyebrow="Cadre" title="Préparer le point" detail="Le marché et la semaine se choisissent dans le calendrier général ci-dessus."/>
       <div className="surface form-grid general-grid">
@@ -1770,12 +1793,24 @@ function MarketPulseWorkspace() {
     resetLayout: resetCanvasLayout,
   };
 
+  const restoreConflict = (draft: PointDraft, snapshot: DraftSnapshot) => {
+    ++archiveRequest.current;
+    const next = normalizePointData(draft.data, marketId, market);
+    setData(next); setCalendarMonth(monthStart(next.meetingDate));
+    const shared = snapshot.point;
+    setActiveRecordId(shared?.id ?? null);
+    setLastSavedSignature(shared ? pointSignature(marketId, normalizePointData(shared.data, marketId, market)) : "");
+    if (shared) setArchive((current) => [{ ...shared, marketId, year: isoWeekYear(next.meetingDate), week: isoWeek(next.meetingDate), meetingDate: String(shared.data.meetingDate), pointName: "Point marché", themeColor: next.themeColor, data: normalizePointData(shared.data, marketId, market) }, ...current.filter((row) => row.year !== isoWeekYear(next.meetingDate) || row.week !== isoWeek(next.meetingDate))].sort((a, b) => b.year - a.year || b.week - a.week));
+    setToast("Brouillon sauvegardé. Tu peux poursuivre le point.");
+  };
+
   return <div className={`app-shell font-${data.preferences.fontScale} density-${data.preferences.density}`} style={themeStyle}>
     <a className="skip-link" href="#workspace-content">Aller au contenu</a>
     <WorkspaceNavigation view={view} userName={session.user?.displayName ?? null} onSelect={chooseView} onLogin={() => { setLoginDestination("edit"); openLogin(); }} onLogout={logout}/>
     <header className="app-header">
       <div className="workspace-location"><span>Espace de travail</span><strong>{workspaceTitles[view]}</strong></div>
       <div className="header-actions">
+        {session.user && <DraftQueueStatus/>}
         <AppearanceControl/>
         <input ref={fileInput} className="sr-only" type="file" accept="application/json" onChange={importJson}/>
         {session.user && (view === "read" || view === "edit" || view === "settings") && <>
@@ -1791,14 +1826,16 @@ function MarketPulseWorkspace() {
     <div id="top" className="workspace-context">
       <span>{view === "read" || view === "edit" || view === "mail" ? market.name : view === "analyst" ? "Jira · Simulations · Dossiers" : view === "stats" ? "Activité analystes et variations fournisseurs" : view === "imports" ? "Registres Jira et Planner" : "Application et points"}</span>
       {(view === "read" || view === "edit" || view === "mail") && <span className="workspace-week">S{String(currentWeek).padStart(2, "0")} · {currentWeekYear}</span>}
-      {session.user && (view === "read" || view === "edit" || view === "mail") && <span className={`workspace-draft ${isDirty ? "is-dirty" : ""}`}>{isDirty ? "Modifications non enregistrées" : activeRecordId ? "Point enregistré" : "Nouveau point"}</span>}
+      {session.user && (view === "read" || view === "edit" || view === "mail") && <span className={`workspace-draft ${isDirty ? "is-dirty" : ""}`}>{isDirty ? "Modifications à partager" : activeRecordId ? "Point enregistré" : "Nouveau point"}</span>}
     </div>
+    {session.user && (view === "read" || view === "edit" || view === "mail") && <PointSyncStatus key={comparisonContextValue} scope="market" ownerId={marketId} date={data.meetingDate} onRestore={restoreConflict} onReconnect={openLogin}/>}
+    {(view === "read" || view === "edit" || view === "mail") && (activeRecordId || session.user) && <PointSourceStatus sources={data.sourceFreshness} jiraMode={data.jiraMode} plannerMode={data.plannerMode} corrections={data.jira.filter((item) => hasJiraOverride(item.pointOverride)).length + data.operations.filter((item) => hasMarketSimulationOverride(item.plannerOverride)).length} additions={data.jira.filter((item) => !item.importedBase).length + data.operations.filter((item) => !item.plannerSource).length}/>}
     {archiveError && <div className="archive-message error" role="alert"><span>{archiveError}</span><button type="button" className="secondary-button" onClick={() => { void loadMarket(marketId, true, market); }}>Réessayer</button></div>}
     {view === "read" && periodNavigator}
     {view === "settings" && session.user && renderEditor()}
     {view === "read" && <main className="preview-page"><div className={`preview-toolbar ${meetingEditing ? "editing" : ""}`}><div><span>{meetingEditing ? "Modification directe" : "Point marché"}</span><strong>{meetingEditing ? "Clique directement dans les cartes. Les corrections importées restent propres à ce point." : "Choisis le marché et la semaine dans le calendrier ci-dessus."}</strong></div><div className="meeting-toolbar-actions">{session.user && <><button type="button" className="secondary-button" disabled={!previousPoint} onClick={openCarryover}><Icon name="copy"/> Reprendre le point précédent</button><button type="button" className="secondary-button" disabled={refreshingImports} onClick={() => { void refreshImports(); }}><Icon name="spark"/> {refreshingImports ? "Actualisation…" : "Actualiser les imports"}</button><button type="button" className="secondary-button" onClick={() => setComparisonOpen(true)}><Icon name="trend"/> Comparer les marchés</button></>}{!session.user && <button type="button" className="secondary-button" onClick={() => editDuringMeeting()}><Icon name="lock"/> Connexion GLOBAL pour modifier</button>}</div></div>{meetingEditing && session.user && <div className="point-layout-toolbar" role="toolbar" aria-label="Mise en page du point"><div className="layout-history"><button type="button" disabled={!historyAvailability.undo} onClick={undoPoint} title="Annuler (Ctrl+Z)">↶</button><button type="button" disabled={!historyAvailability.redo} onClick={redoPoint} title="Rétablir (Ctrl+Y)">↷</button></div><div className="layout-font"><span>Texte</span><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent - 5)}>A−</button><input type="range" min="85" max="130" step="5" value={data.preferences.fontScalePercent} aria-label="Taille du texte du point" onChange={(event) => updateFontScalePercent(Number(event.target.value))}/><output>{data.preferences.fontScalePercent}%</output><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent + 5)}>A+</button><button type="button" onClick={() => updateFontScalePercent(100)}>Réinit.</button></div><div className="layout-density" aria-label="Densité">{(["compact", "comfortable", "airy"] as Density[]).map((density) => <button type="button" key={density} className={data.preferences.density === density ? "active" : ""} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, density } }))}>{density === "compact" ? "Compacte" : density === "airy" ? "Aérée" : "Normale"}</button>)}</div><label className="layout-color" title="Couleur du point"><input type="color" value={accent} aria-label="Couleur du point" onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/></label><button type="button" onClick={() => { updateFontScalePercent(90); setData((current) => ({ ...current, preferences: { ...current.preferences, density: "compact" } })); }}>Ajuster</button><button type="button" onClick={resetCanvasLayout}>Structure initiale</button><button type="button" onClick={() => { void openPresentation(); }}>Présentation</button><button type="button" className="primary" disabled={saving || archiveLoading} onClick={() => { void savePoint(); }}>Enregistrer</button><button type="button" onClick={() => setMeetingEditing(false)}>Terminer</button></div>}{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Ce canevas est prêt à être complété puis sauvegardé." : "Aucun brouillon n’est affiché publiquement. Connecte-toi pour préparer cette semaine."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard data={preparedData} market={market} archive={archive} editing={meetingEditing && Boolean(session.user)} actions={session.user ? canvasActions : undefined}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou connecte-toi pour la préparer.</p></div>}</main>}
     {view === "stats" && session.user && (plannerReady && directoryReady ? <AnalystStatsDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} registry={plannerRegistry} updatedAt={plannerUpdatedAt} onImport={importPlannerData}/> : <main className="analyst-stats-page"><div className="surface stats-loading"><span>Chargement de la source Planner et de l’annuaire GLOBAL…</span></div></main>)}
-    {view === "analyst" && session.user && (plannerReady && directoryReady ? <AnalystPointDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData}/> : <main className="analyst-point-page"><div className="surface stats-loading"><span>Chargement du point analyste, de Planner et de l’annuaire GLOBAL…</span></div></main>)}
+    {view === "analyst" && session.user && (plannerReady && directoryReady ? <AnalystPointDashboard onReconnect={openLogin} tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData}/> : <main className="analyst-point-page"><div className="surface stats-loading"><span>Chargement du point analyste, de Planner et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "imports" && session.user && (plannerReady && directoryReady ? <ImportCenter users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerTasks={plannerTasks} plannerRegistry={plannerRegistry} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData} onJiraImported={refreshJiraFromRegistry} onManual={useManualImport}/> : <main className="import-center-page"><div className="surface stats-loading"><span>Chargement des registres et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "mail" && <main className="mail-page">
       <div className="mail-toolbar"><div><span>Kit Outlook</span><strong>Le mail reste lisible seul, la pièce jointe conserve les interactions.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { if (!session.user) { setLoginDestination("settings"); openLogin(); } else { setSection("mail"); setView("settings"); } }}><Icon name={session.user ? "edit" : "lock"}/> Paramètres</button><button className="secondary-button" onClick={copyMail}><Icon name="copy"/> Copier le corps du mail</button><button className="primary-button" onClick={downloadMailDraft}><Icon name="mail"/> Préparer le mail + la page</button></div></div>

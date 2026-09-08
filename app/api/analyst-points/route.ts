@@ -1,54 +1,37 @@
-import { and, desc, eq, sql } from "drizzle-orm";
-import { getDb } from "../../../db";
-import { analystWeeklyPoints, globalUsers } from "../../../db/schema";
-import { isIsoDate, isoWeekParts } from "../../../lib/iso-week";
+import { listPoints, ownerExists, publishPoint } from "../../../db/point-store";
+import { isIsoDate } from "../../../lib/iso-week";
+import { pointVersion } from "../../../lib/point-persistence";
 import { getEditorUser } from "../../simple-auth";
 
-function serialize(row: typeof analystWeeklyPoints.$inferSelect) {
-  return { id: row.id, analystId: row.analystId, year: row.year, week: row.week, meetingDate: row.meetingDate, periodFrom: row.periodFrom, periodTo: row.periodTo, data: JSON.parse(row.payload), createdAt: row.createdAt, updatedAt: row.updatedAt };
-}
-
-function routeError(error: unknown) {
-  const message = error instanceof Error ? error.message : "Erreur inattendue";
-  if (/no such table|analyst_weekly_points/i.test(message)) return "Le registre des points analystes n’est pas encore disponible.";
-  return message;
-}
-
+const headers = { "Cache-Control": "no-store" };
 export async function GET(request: Request) {
   try {
-    const editor = await getEditorUser();
-    if (!editor) return Response.json({ error: "Connecte-toi pour consulter les points analystes." }, { status: 401 });
+    if (!await getEditorUser()) return Response.json({ error: "Connecte-toi pour consulter les points analystes." }, { status: 401, headers });
     const analystId = new URL(request.url).searchParams.get("analystId")?.trim() ?? "";
-    if (!analystId) return Response.json({ error: "analystId est requis" }, { status: 400 });
-    const db = getDb();
-    const rows = await db.select().from(analystWeeklyPoints).where(eq(analystWeeklyPoints.analystId, analystId)).orderBy(desc(analystWeeklyPoints.year), desc(analystWeeklyPoints.week)).limit(260);
-    return Response.json({ points: rows.map(serialize) }, { headers: { "Cache-Control": "no-store" } });
+    if (!analystId) return Response.json({ error: "analystId est requis" }, { status: 400, headers });
+    return Response.json({ points: await listPoints("analyst", analystId) }, { headers });
   } catch (error) {
-    return Response.json({ error: routeError(error) }, { status: 500 });
+    console.error("Analyst points read failed", error);
+    return Response.json({ error: "Le registre des points analystes n’est pas disponible. Réessaie dans un instant." }, { status: 503, headers });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const editor = await getEditorUser();
-    if (!editor) return Response.json({ error: "Connecte-toi pour enregistrer le point analyste." }, { status: 401 });
-    const body = await request.json() as { analystId?: unknown; data?: Record<string, unknown> };
+    if (!editor) return Response.json({ error: "Connecte-toi pour enregistrer le point analyste." }, { status: 401, headers });
+    const body = await request.json();
     const analystId = typeof body?.analystId === "string" ? body.analystId.trim() : "";
     const data = body?.data;
-    const meetingDate = typeof data?.meetingDate === "string" ? data.meetingDate : "";
-    const periodFrom = typeof data?.periodFrom === "string" ? data.periodFrom : "";
-    const periodTo = typeof data?.periodTo === "string" ? data.periodTo : "";
-    if (!analystId || !isIsoDate(meetingDate) || !isIsoDate(periodFrom) || !isIsoDate(periodTo) || periodFrom > periodTo || !data) return Response.json({ error: "Analyste, semaine et contenu sont requis." }, { status: 400 });
-    const payload = JSON.stringify(data);
-    if (payload.length > 1_500_000) return Response.json({ error: "Le point analyste est trop volumineux." }, { status: 413 });
-    const db = getDb();
-    const [analyst] = await db.select({ id: globalUsers.id }).from(globalUsers).where(and(eq(globalUsers.id, analystId), eq(globalUsers.role, "analyste-tarif-referentiel"), eq(globalUsers.isActive, true))).limit(1);
-    if (!analyst) return Response.json({ error: "Analyste actif introuvable dans l’annuaire GLOBAL." }, { status: 404 });
-    const { year, week } = isoWeekParts(meetingDate);
-    const [saved] = await db.insert(analystWeeklyPoints).values({ id: crypto.randomUUID(), analystId, year, week, meetingDate, periodFrom, periodTo, payload })
-      .onConflictDoUpdate({ target: [analystWeeklyPoints.analystId, analystWeeklyPoints.year, analystWeeklyPoints.week], set: { meetingDate, periodFrom, periodTo, payload, updatedAt: sql`CURRENT_TIMESTAMP` } }).returning();
-    return Response.json({ point: serialize(saved) }, { status: 201 });
+    if (!analystId || !data || Array.isArray(data) || typeof data !== "object" || !isIsoDate(data.meetingDate) || !isIsoDate(data.periodFrom) || !isIsoDate(data.periodTo) || data.periodFrom > data.periodTo) return Response.json({ error: "Analyste, semaine et contenu sont requis." }, { status: 400, headers });
+    const expectedPoint = pointVersion(body.expectedPoint);
+    if (expectedPoint === undefined || typeof body.draftRevision !== "string" || !body.draftRevision) return Response.json({ error: "Cette page utilise une ancienne sauvegarde. Recharge le site après avoir conservé tes modifications." }, { status: 428, headers });
+    if (JSON.stringify(data).length > 1_500_000) return Response.json({ error: "Le point analyste est trop volumineux." }, { status: 413, headers });
+    if (!await ownerExists("analyst", analystId)) return Response.json({ error: "Analyste actif introuvable dans l’annuaire GLOBAL." }, { status: 404, headers });
+    const saved = await publishPoint(editor.username, "analyst", analystId, data, expectedPoint, body.draftRevision);
+    return saved ? Response.json(saved, { headers }) : Response.json({ error: "Une autre copie a été enregistrée. Tes saisies sont conservées : compare les copies avant de sauvegarder.", conflict: true }, { status: 409, headers });
   } catch (error) {
-    return Response.json({ error: routeError(error) }, { status: 500 });
+    console.error("Analyst point save failed", error);
+    return Response.json({ error: "Enregistrement indisponible. Tes saisies restent dans cette page." }, { status: 503, headers });
   }
 }

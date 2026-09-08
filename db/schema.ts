@@ -25,6 +25,7 @@ export const weeklyPoints = sqliteTable("weekly_points", {
   year: integer("year").notNull(),
   week: integer("week").notNull(),
   version: integer("version").notNull(),
+  revision: text("revision").notNull().default("initial"),
   meetingDate: text("meeting_date").notNull(),
   pointName: text("point_name").notNull(),
   themeColor: text("theme_color").notNull(),
@@ -37,6 +38,7 @@ export const weeklyPoints = sqliteTable("weekly_points", {
 
 export const analystWeeklyPoints = sqliteTable("analyst_weekly_points", {
   id: text("id").primaryKey(),
+  revision: text("revision").notNull().default("initial"),
   analystId: text("analyst_id").notNull(),
   year: integer("year").notNull(),
   week: integer("week").notNull(),
@@ -49,6 +51,24 @@ export const analystWeeklyPoints = sqliteTable("analyst_weekly_points", {
 }, (table) => [
   uniqueIndex("analyst_weekly_points_analyst_period_idx").on(table.analystId, table.year, table.week),
   index("analyst_weekly_points_analyst_updated_idx").on(table.analystId, table.updatedAt),
+]);
+
+// Editing drafts remain separate from shared weekly points.
+export const pointDrafts = sqliteTable("point_drafts", {
+  editor: text("editor").notNull(),
+  scope: text("scope").notNull(),
+  ownerId: text("owner_id").notNull(),
+  year: integer("year").notNull(),
+  week: integer("week").notNull(),
+  meetingDate: text("meeting_date").notNull(),
+  payload: text("payload").notNull(),
+  revision: text("revision").notNull(),
+  basePointId: text("base_point_id"),
+  basePointRevision: text("base_point_revision"),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("point_drafts_editor_owner_week_idx").on(table.editor, table.scope, table.ownerId, table.year, table.week),
+  index("point_drafts_editor_owner_updated_idx").on(table.editor, table.scope, table.ownerId, table.updatedAt),
 ]);
 
 export const jiraWeeklySnapshots = sqliteTable("jira_weekly_snapshots", {
