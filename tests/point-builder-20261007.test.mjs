@@ -101,7 +101,12 @@ test('context actions work without a global edit toggle and drop snaps before or
     const event = { preventDefault(){},stopPropagation(){}, target:{closest(){return null;}},clientX:200,clientY:200 };
     nodes.find(n => n.props?.['data-point-module'] === 'operations').props.onContextMenu(event);
     nodes = render(); nodes.find(n => n.type === 'button' && n.props.children === 'Modifier le bloc').props.onClick();
-    nodes = render(); assert.ok(nodes.some(n => n.type === 'input' && n.props['aria-label'] === 'Nom de la simulation'));
+    nodes = render();
+    const inlineModule = nodes.find(n => n.props?.['data-point-module'] === 'operations');
+    assert.ok(treeNodes(inlineModule).some(n => n.type === 'input' && n.props['aria-label'] === 'Nom de la simulation'));
+    assert.ok(!nodes.some(n => n.type?.name === 'AppDialog'));
+    nodes.find(n => n.props?.className === 'canvas-edit-done').props.onClick();
+    nodes = render(); assert.ok(!nodes.some(n => n.type === 'input' && n.props['aria-label'] === 'Nom de la simulation'));
     nodes.find(n => n.props?.['aria-label'] === 'Déplacer Simulations').props.onDragStart({dataTransfer:{setData(){}}});
     nodes = render();
     nodes.find(n => n.props?.['data-point-module'] === 'jira').props.onDragOver({...event,clientY:180,currentTarget:{getBoundingClientRect(){return {top:0,height:200};}}});
@@ -112,4 +117,20 @@ test('context actions work without a global edit toggle and drop snaps before or
     const publicTree = treeNodes(interactiveCanvas.PreviewDashboard({...props,actions:undefined}));
     assert.ok(!publicTree.some(n => n.props?.className === 'canvas-module-options'));
   } finally {globalThis.window = previousWindow;}
+});
+
+const dossierUi = await bundled('features/market-pulse/dossier-board.tsx', '\nexport { DossierEditor };', [], interactiveReact);
+test('editing a dossier keeps the rich editor inside its publication card', () => {
+  canvasHooks = {cursor:0,slots:[]};
+  const row = {id:'inline',title:'Dossier',status:'En cours',universe:'',reference:'',owner:'',action:'Texte',comment:'',deadline:'',progress:0};
+  const props = {items:[row],editing:true,onUpdate(){}};
+  const render = () => {canvasHooks.cursor = 0;return treeNodes(dossierUi.DossierBoard(props));};
+  let nodes = render(); nodes.find(n => n.props?.['aria-label'] === 'Modifier Dossier').props.onClick();
+  nodes = render(); const card = nodes.find(n => n.props?.id === 'dossier-inline');
+  const editor = treeNodes(card).find(n => n.type?.name === 'DossierEditor');
+  assert.ok(editor); assert.ok(!nodes.some(n => n.type?.name === 'AppDialog'));
+  canvasHooks = {cursor:0,slots:[]}; const editing = dossierUi.DossierEditor(editor.props);
+  assert.equal(editing.type,'section');
+  assert.ok(treeNodes(editing).some(n => n.props?.role === 'toolbar'));
+  assert.ok(treeNodes(editing).some(n => n.props?.contentEditable));
 });
