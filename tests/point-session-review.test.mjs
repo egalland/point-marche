@@ -27,14 +27,14 @@ new Function("require", "module", "exports", bundled.outputFiles[0].text)((id) =
 const app = exportsHolder.exports;
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
-let timers, tree, records, post, failedMarket, renderComponent, draftRecords;
+let autoTimers, timers, tree, records, post, failedMarket, renderComponent, draftRecords;
 const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
 function nodes(value) { if (Array.isArray(value)) return value.flatMap(nodes); if (!value || typeof value !== "object") return []; return [value, ...nodes(value.props?.children)]; }
 function find(predicate) { const found = nodes(tree).find(predicate); assert.ok(found, "Expected control is available"); return found; }
 const preview = () => find((node) => node.type?.name === "PreviewDashboard").props;
 const navigation = () => find((node) => node.type?.name === "WorkspaceNavigation").props;
-const saveButton = () => find((node) => node.type === "button" && node.props.className?.includes("save-point")).props;
+async function triggerAutoSave() { assert.ok(autoTimers.size, "Automatic save is scheduled"); const pending = [...autoTimers.values()]; autoTimers.clear(); pending.forEach(callback => callback()); await settle(); }
 function render() { hooks.cursor = 0; tree = renderComponent(); const effects = hooks.effects.splice(0); effects.forEach((effect) => effect()); return tree; }
 async function settle() { for (let i = 0; i < 5; i++) { render(); const pending = [...timers]; timers.clear(); pending.forEach(([, callback]) => callback()); await setImmediate(); } render(); }
 
@@ -44,10 +44,10 @@ function pointRecord(marketId, date = "2026-09-03", priority = "Priorité enregi
 }
 
 test.beforeEach(async () => {
-  app.clearSessionDrafts(); renderComponent = app.MarketPulseWorkspace; hooks = { slots: [], effects: [], cursor: 0 }; timers = new Map(); let timerId = 0; post = null; failedMarket = "";
+  app.clearSessionDrafts(); renderComponent = app.MarketPulseWorkspace; hooks = { slots: [], effects: [], cursor: 0 }; timers = new Map(); autoTimers = new Map(); let timerId = 0; post = null; failedMarket = "";
   draftRecords = new Map();
   records = new Map(app.defaultMarkets.map((market) => [market.id, [pointRecord(market.id)]]));
-  globalThis.window = { location: { search: "" }, scrollTo() {}, addEventListener() {}, removeEventListener() {}, setTimeout(callback, delay) { const id = ++timerId; if (!delay) timers.set(id, callback); return id; }, clearTimeout(id) { timers.delete(id); } };
+  globalThis.window = { location: { search: "" }, scrollTo() {}, addEventListener() {}, removeEventListener() {}, setTimeout(callback, delay) { const id = ++timerId; if (!delay) timers.set(id, callback); else if (delay === 1200) autoTimers.set(id, callback); return id; }, clearTimeout(id) { timers.delete(id); autoTimers.delete(id); } };
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input), "https://test.invalid");
     if (url.pathname === "/api/point-drafts") {
@@ -94,23 +94,24 @@ async function resolveSave() {
 
 test("a late save preserves newer text and leaves it unsaved", async () => {
   preview().actions.updatePriority("Version envoyée"); await settle();
-  const pendingSave = saveButton().onClick();
+  await triggerAutoSave();
   preview().actions.updatePriority("Texte ajouté pendant la sauvegarde"); await settle();
-  await resolveSave(); await pendingSave;
+  await resolveSave();
   assert.equal(preview().data.priority, "Texte ajouté pendant la sauvegarde");
   assert.equal(app.readLocalDraft("market", post.body.marketId).data.priority, "Texte ajouté pendant la sauvegarde");
   assert.equal(app.hasUnsavedSessionDrafts(), true);
-  assert.match(saveButton().className, /has-changes/);
+  assert.equal(nodes(tree).some(node => node.props?.className?.includes("save-point")), false);
+  assert.ok(autoTimers.size, "Newer edits schedule another automatic save");
 });
 
 test("changing markets during a save never applies the old point to the new market", async () => {
   preview().actions.updatePriority("Modification marché A"); await settle();
-  const pendingSave = saveButton().onClick();
+  await triggerAutoSave();
   await settle();
   const next = app.defaultMarkets.find((market) => market.id !== post.body.marketId);
   const select = find((node) => node.type === "select" && node.props.value === post.body.marketId && nodes(node.props.children).some((option) => option.props?.value === next.id));
   await select.props.onChange({ target: { value: next.id } }); await settle();
-  await resolveSave(); await pendingSave;
+  await resolveSave();
   assert.equal(preview().market.id, next.id);
   assert.equal(preview().data.priority, "Priorité enregistrée");
 });
@@ -179,4 +180,23 @@ test("the actual market view restores its server draft after reloading the page"
   await settle();
   assert.equal(preview().data.priority, "Décision conservée sur le site");
   assert.equal(preview().market.id, marketId);
+});
+
+test("automatic save publishes a changed week and returns it after reload", async () => {
+  preview().actions.updatePriority("Note sauvegardée automatiquement"); await settle();
+  await triggerAutoSave(); await resolveSave();
+  const marketId = preview().market.id;
+  assert.equal(records.get(marketId)[0].data.priority, "Note sauvegardée automatiquement");
+  assert.equal(nodes(tree).find(node => node.props?.className === "point-autosave-indicator").props.children, "À jour");
+  hooks.slots.forEach(slot => slot?.cleanup?.()); app.clearSessionDrafts();
+  hooks = {slots: [], effects: [], cursor: 0}; timers.clear(); autoTimers.clear();
+  await settle(); assert.equal(preview().data.priority, "Note sauvegardée automatiquement");
+});
+
+test("a failed automatic save keeps edits and exposes retry", async () => {
+  preview().actions.updatePriority("Ne pas perdre cette saisie"); await settle();
+  await triggerAutoSave(); post.deferred.resolve(response({error:"Connexion interrompue"},503)); await settle();
+  assert.equal(preview().data.priority,"Ne pas perdre cette saisie");
+  assert.ok(nodes(tree).some(node => node.type === "button" && node.props.children === "Réessayer"));
+  assert.equal(autoTimers.size,0,"A failed save must not loop endlessly");
 });

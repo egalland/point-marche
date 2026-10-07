@@ -15,7 +15,8 @@ const rich = await bundled('lib/point-rich-content.ts');
 const comparison = await bundled('lib/simulation-comparison.ts');
 const rules = await bundled('lib/jira-alert-rules.ts');
 const csv = await bundled('lib/jira-csv.ts');
-const app = await bundled('features/market-pulse/market-pulse-app.tsx', '\nexport { initialData, normalizePointData, buildMailHtml, buildInteractiveHtml, buildAlerts, jiraAttention, defaultMarkets, PreviewDashboard };');
+const app = await bundled('features/market-pulse/market-pulse-app.tsx', '\nexport { initialData, normalizePointData, buildMailHtml, buildInteractiveHtml, defaultMarkets, PreviewDashboard };');
+const { jiraAttention, buildAlerts } = await bundled("features/market-pulse/point-model.ts");
 const market = app.defaultMarkets[0];
 const config = { fromA:'2025-05',toA:'2025-05',fromB:'2026-05',toB:'2026-05',marketId:market.id,supplierKey:'all',metric:'count' };
 const mkTask = (id, month, variation = null, extra = {}) => ({ externalId:id,taskName:`${month}-Fournisseur test`,effectiveMonth:month,labels:['REV-PB'],workflowState:'completed',metrics:{supplierCode:'F1',globalVariation:variation,weightedVariation:variation},...extra });
@@ -54,11 +55,11 @@ test('Jira CSV categories and custom subcategories survive decoding', () => {
 test('specific Jira rules override general thresholds and use last activity, without alerting closed tickets', () => {
   const r = rules.normalizeJiraRules([{id:'flow',category:'Appro',subcategory:'Validation flux',warningDays:2,criticalDays:5,priority:'high'}]);
   const ticket = {id:'x',key:'GLOBAL-1',summary:'Flux',status:'En cours',category:'Appro',subcategory:'Validation flux',assignee:'Chef marché',lastActivity:'2026-10-04'};
-  assert.equal(app.jiraAttention(ticket,'2026-10-07',market,r).level,'warning');
+  assert.equal(jiraAttention(ticket,'2026-10-07',market,r).level,'warning');
   const data = {...app.initialData(),meetingDate:'2026-10-07',jira:[ticket],jiraAlertRules:r};
-  assert.equal(app.buildAlerts(data,market)[0].severity,'warning'); assert.match(app.buildAlerts(data,market)[0].detail,/Validation flux/);
-  assert.equal(app.buildAlerts({...data,jira:[{...ticket,status:'Terminé'}]},market).length,0);
-  assert.equal(app.jiraAttention({...ticket,lastActivity:''},data.meetingDate,market,r).level,'undated');
+  assert.equal(buildAlerts(data,market)[0].severity,'warning'); assert.match(buildAlerts(data,market)[0].detail,/Validation flux/);
+  assert.equal(buildAlerts({...data,jira:[{...ticket,status:'Terminé'}]},market).length,0);
+  assert.equal(jiraAttention({...ticket,lastActivity:''},data.meetingDate,market,r).level,'undated');
 });
 test('rich dossiers, comparative snapshot and rules survive point normalization and exports follow visible block order', () => {
   const base = app.initialData(); const snapshot = comparison.buildSimulationComparison([mkTask('a','2025-05')],[market],config);
@@ -148,4 +149,22 @@ test('formatted dossier titles persist in normalization, mail and page exports',
   const data = app.normalizePointData({ ...app.initialData(market.id), dossiers:[{id:'title',title:'Titre',status:'En cours',titleHtml:'<span style="font-size:24px;color:#123456">Titre</span>',richHtml:'<p>Texte</p>'}] },market.id,market);
   assert.match(data.dossiers[0].titleHtml, /font-size:24px/);
   for (const html of [app.buildMailHtml(data,market,[]), app.buildInteractiveHtml(data,market,[])]) assert.match(html, /font-size:24px;color:#123456/);
+});
+
+test('a resize that displaces another block waits for explicit reorganization', () => {
+  canvasHooks = {cursor:0,slots:[]};
+  const previousWindow = globalThis.window; globalThis.window = {innerWidth:1400,innerHeight:1000};
+  try {
+    const data = app.initialData(market.id);
+    data.preferences.moduleOrder = ['operations','jira','dossiers','promotions','alerts','comparison','simulationComparison'];
+    data.preferences.moduleWidths.operations = 'half'; data.preferences.moduleWidths.jira = 'half';
+    const changes = [], props = {data,market,archive:[],actions:{updateModuleWidth:(...args)=>changes.push(args)}};
+    const render = () => {canvasHooks.cursor=0;return treeNodes(interactiveCanvas.PreviewDashboard(props));};
+    let nodes = render();
+    nodes.find(n=>n.props?.['data-point-module']==='operations').props.onContextMenu({preventDefault(){},stopPropagation(){},target:{closest(){return null;}},clientX:100,clientY:100});
+    nodes=render(); nodes.find(n=>n.type==='button'&&n.props.children==='3/4').props.onClick();
+    assert.deepEqual(changes,[]);
+    nodes=render();nodes.find(n=>n.type==='button'&&n.props.children==='Appliquer et réorganiser').props.onClick();
+    assert.deepEqual(changes,[['operations','three-quarters']]);
+  } finally {globalThis.window=previousWindow;}
 });

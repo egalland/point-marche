@@ -5,7 +5,7 @@ import postcss from "postcss";
 
 const globals = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const mobileSource = readFileSync(new URL("../app/styles/mobile.css", import.meta.url), "utf8");
-const appSource = readFileSync(new URL("../features/market-pulse/market-pulse-app.tsx", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("../features/market-pulse/point-preview.tsx", import.meta.url), "utf8");
 
 test("loads the shared mobile layer last and keeps every responsive selector valid", () => {
   const imports = [...globals.matchAll(/@import\s+["']([^"']+)["']/g)].map((match) => match[1]);

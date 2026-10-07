@@ -65,7 +65,7 @@ test("standalone market and analyst pages respect saved block order and widths",
   data.preferences.readModules.comparison = true;
   const html = app.buildInteractiveHtml(data, market, []);
   assert.deepEqual([...html.matchAll(/data-module="([a-z]+)"/g)].map((match) => match[1]), data.preferences.moduleOrder);
-  assert.match(html, /data-module="promotions" style="--columns:3"/);
+  assert.match(html, /data-module="promotions" style="--columns:2"/);
   assert.match(html, /--point-scale:1\.25;--space:24px/);
   assert.match(html, /height:0%/);
   const analystData = point.initialAnalystPoint(analyst);
@@ -134,7 +134,7 @@ test("mail and standalone comparison visibility follow the point despite legacy 
   assert.doesNotMatch(app.buildInteractiveHtml(data, market, []), /Marché A/);
   const actions = { updatePriority() {}, updateDossier() {}, addDossier() {}, removeDossier() {}, updateOperation() {}, resetOperation() {}, addOperation() {}, removeOperation() {}, updatePromotion() {}, addPromotion() {}, removePromotion() {}, updateJira() {}, resetJira() {}, addJira() {}, setSourceMode() {}, insertModule() {}, hideModule() {}, moveModule() {}, updateModuleWidth() {}, resetLayout() {} };
   const read = renderToStaticMarkup(createElement(app.PreviewDashboard, { data, market, archive: [], editing: true, actions }));
-  assert.match(read, /Bibliothèque de blocs|Ajouter un bloc/);
+  assert.match(read, /Structure du point/);
   assert.doesNotMatch(read, /Modifier pendant le point/);
   assert.doesNotMatch(read, /Marché A/);
   data.preferences.readModules.comparison = true;
@@ -162,13 +162,13 @@ test("separates legacy promotions from simulations and never exposes the Planner
   }
 });
 
-test("normalizes free font scale, airy density and three block widths", () => {
+test("normalizes free font scale, airy density and migrates legacy widths to four columns", () => {
   const market = app.defaultMarkets[0];
   const normalized = app.normalizePointData({ preferences: { fontScalePercent: 127, density: "airy", moduleWidths: { promotions: "two-thirds" } } }, market.id);
   assert.equal(normalized.preferences.fontScalePercent, 127);
   assert.equal(normalized.preferences.fontScale, "large");
   assert.equal(normalized.preferences.density, "airy");
-  assert.equal(normalized.preferences.moduleWidths.promotions, "two-thirds");
+  assert.equal(normalized.preferences.moduleWidths.promotions, "three-quarters");
 });
 
 test("manual analyst totals, including zero, replace imported counts only in this point", () => {
