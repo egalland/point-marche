@@ -66,7 +66,7 @@ test('rich dossiers, comparative snapshot and rules survive point normalization 
   assert.match(data.dossiers[0].richHtml,/<strong>/); assert.equal(data.jiraAlertRules[0].warningDays,2); assert.equal(data.simulationComparisonSnapshot.totalA,1);
   for (const html of [app.buildMailHtml(data,market,[]),app.buildInteractiveHtml(data,market,[])]) { assert.match(html,/Texte enrichi/); assert.match(html,/Comparatif des simulations/); assert.doesNotMatch(html,/Tickets Jira ·/); assert.ok(html.indexOf('Décision') < html.indexOf('Comparatif des simulations')); }
   const ui = renderToStaticMarkup(createElement(app.PreviewDashboard,{data,market,archive:[],tasks:[],markets:[market],editing:true,actions:{}}));
-  assert.match(ui,/Bibliothèque de blocs/); assert.match(ui,/Modifier/);
+  assert.match(ui,/Structure du point/); assert.match(ui,/Modifier/);
 });
 const asset = await bundled('app/api/point-assets/route.ts', '\nexport { runWithRuntimeEnv } from "../../../lib/runtime-env";', [{ name:'auth-fixture', setup(build) { build.onLoad({filter:/app\/simple-auth\.ts$/},()=>({contents:'export async function getEditorUser(){return globalThis.assetEditor ?? null}',loader:'ts'})); } }]);
 test('uploaded attachments persist in object storage, require editor access and download as files', async () => {
@@ -125,7 +125,7 @@ test('editing a dossier keeps the rich editor inside its publication card', () =
   const row = {id:'inline',title:'Dossier',status:'En cours',universe:'',reference:'',owner:'',action:'Texte',comment:'',deadline:'',progress:0};
   const props = {items:[row],editing:true,onUpdate(){}};
   const render = () => {canvasHooks.cursor = 0;return treeNodes(dossierUi.DossierBoard(props));};
-  let nodes = render(); nodes.find(n => n.props?.['aria-label'] === 'Modifier Dossier').props.onClick();
+  let nodes = render(); nodes.find(n => n.props?.id === 'dossier-inline').props.onDoubleClick();
   nodes = render(); const card = nodes.find(n => n.props?.id === 'dossier-inline');
   const editor = treeNodes(card).find(n => n.type?.name === 'DossierEditor');
   assert.ok(editor); assert.ok(!nodes.some(n => n.type?.name === 'AppDialog'));
@@ -133,4 +133,19 @@ test('editing a dossier keeps the rich editor inside its publication card', () =
   assert.equal(editing.type,'section');
   assert.ok(treeNodes(editing).some(n => n.props?.role === 'toolbar'));
   assert.ok(treeNodes(editing).some(n => n.props?.contentEditable));
+});
+
+const sharedAuth = await bundled('app/simple-auth.ts', '\nexport { runWithRuntimeEnv } from "../lib/runtime-env";');
+test('V48 permits editing without a cookie and reuses the existing draft account', async () => {
+  const anonymous = await sharedAuth.runWithRuntimeEnv({}, () => sharedAuth.getEditorUser());
+  assert.equal(anonymous.displayName, 'Espace partagé');
+  assert.equal(anonymous.username, 'market-pulse-shared');
+  const configured = await sharedAuth.runWithRuntimeEnv({ MARKET_PULSE_USERNAME: 'existing-account' }, () => sharedAuth.getEditorUser());
+  assert.equal(configured.username, 'existing-account');
+});
+
+test('formatted dossier titles persist in normalization, mail and page exports', () => {
+  const data = app.normalizePointData({ ...app.initialData(market.id), dossiers:[{id:'title',title:'Titre',status:'En cours',titleHtml:'<span style="font-size:24px;color:#123456">Titre</span>',richHtml:'<p>Texte</p>'}] },market.id,market);
+  assert.match(data.dossiers[0].titleHtml, /font-size:24px/);
+  for (const html of [app.buildMailHtml(data,market,[]), app.buildInteractiveHtml(data,market,[])]) assert.match(html, /font-size:24px;color:#123456/);
 });
