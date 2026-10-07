@@ -1,6 +1,6 @@
 "use client";
-import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft, saveLocalFile, markPointSaved, hasUnsavedSessionDrafts, clearSessionDrafts, configureHostedDrafts, loadPointDraft, preparePointSave, finishPointSave, hostedPointDrafts } from "@/lib/app-transport";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type FormEvent, type ReactNode } from "react";
+import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft, saveLocalFile, markPointSaved, hasUnsavedSessionDrafts, configureHostedDrafts, loadPointDraft, preparePointSave, finishPointSave, hostedPointDrafts } from "@/lib/app-transport";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type ReactNode } from "react";
 import { normalizeJiraRules } from "@/lib/jira-alert-rules";
 import { PointSyncStatus, DraftQueueStatus } from "./point-sync-status";
 import { PointSourceStatus } from "./point-source-status";
@@ -74,12 +74,6 @@ function MarketPulseWorkspace() {
   const [calendarMonth, setCalendarMonth] = useState(() => monthStart(isoToday()));
   const [session, setSession] = useState<SessionPayload>({ user: null });
   const [sessionReady, setSessionReady] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [loginDestination, setLoginDestination] = useState<View>("edit");
-  const [loginUsername, setLoginUsername] = useState("GLOBAL");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [loginLoading, setLoginLoading] = useState(false);
   const [carryoverOpen, setCarryoverOpen] = useState(false);
   const [carryoverSelection, setCarryoverSelection] = useState<Record<string, boolean>>({});
   const [calendarExpanded, setCalendarExpanded] = useState(false);
@@ -196,7 +190,7 @@ function MarketPulseWorkspace() {
 
   const bootstrap = useCallback(async () => {
     try {
-      const [loadedMarkets, currentSession] = await Promise.all([fetchMarkets(), fetch("/api/session", { cache: "no-store" }).then((response) => response.json() as Promise<SessionPayload>).catch(() => ({ user: null }))]);
+      const [loadedMarkets, currentSession] = await Promise.all([fetchMarkets(), fetch("/api/session", { cache: "no-store" }).then(async (response) => { const payload = await response.json() as SessionPayload; if (!response.ok || !payload.user) throw new Error("L’espace partagé est indisponible. Réessaie sans fermer la page."); return payload; })]);
       configureHostedDrafts(currentSession.user?.username ?? null);
       setSession(currentSession);
       if (currentSession.user) {
@@ -342,67 +336,10 @@ function MarketPulseWorkspace() {
     setHistoryAvailability({ undo: undoStack.current.length > 0, redo: redoStack.current.length > 0 });
   };
 
-  const openLogin = () => {
-    setLoginError("");
-    setLoginOpen(true);
-  };
-  const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (loginLoading) return;
-    setLoginLoading(true);
-    setLoginError("");
-    try {
-      const response = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: loginUsername, password: loginPassword }) });
-      const payload = await response.json() as { user?: SessionPayload["user"]; error?: string };
-      if (!response.ok || !payload.user) throw new Error(payload.error || "Connexion impossible.");
-      setArchiveLoading(true);
-      configureHostedDrafts(payload.user.username);
-      setSession({ user: payload.user });
-      setLoginPassword("");
-      setLoginOpen(false);
-      setView(loginDestination === "edit" ? "read" : loginDestination);
-      setMeetingEditing(loginDestination === "edit");
-      await loadMarket(marketId, true, market);
-      setToast(loginDestination === "stats" ? "Connexion réussie. Statistiques ouvertes." : loginDestination === "analyst" ? "Connexion réussie. Point analyste ouvert." : loginDestination === "imports" ? "Connexion réussie. Centre d’import ouvert." : loginDestination === "settings" ? "Connexion réussie. Paramètres ouverts." : "Connexion réussie. Mode édition ouvert.");
-    } catch (error) {
-      setLoginError(error instanceof Error ? error.message : "Connexion impossible.");
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-  const logout = async () => {
-    if (!isLocalWorkspace()) await hostedPointDrafts.flushAll();
-    if (!isLocalWorkspace() && hasUnsavedSessionDrafts() && !await requestConfirmation({ title: "Se déconnecter ?", detail: "Certaines saisies n’ont pas pu être sauvegardées en ligne. La déconnexion les fermera. Les brouillons déjà sauvegardés seront repris à la prochaine connexion.", confirmLabel: "Se déconnecter", destructive: true })) return;
-    try {
-      const response = await fetch("/api/logout", { method: "POST" });
-      if (!response.ok) throw new Error();
-    } catch { setToast("Déconnexion impossible. Réessaie quand la connexion est rétablie."); return; }
-    setSession({ user: null });
-    setDirectoryUsers([]);
-    setDirectoryReady(false);
-    setPlannerTasks([]);
-    setPlannerReady(false);
-    setPlannerUpdatedAt("");
-    setPlannerRegistry(emptyPlannerRegistry());
-    setView("read");
-    setMeetingEditing(false);
-    setLoginPassword("");
-    clearSessionDrafts();
-    const published = archive[0];
-    setData(published?.data ?? initialData(marketId, market));
-    setActiveRecordId(published?.id ?? null);
-    setLastSavedSignature(published ? pointSignature(marketId, published.data) : "");
-    await loadMarket(marketId, true, market);
-    setToast("Déconnexion effectuée.");
-  };
+  const retryWorkspace = () => { void bootstrap(); };
 
   const chooseView = (nextView: View) => {
     setMeetingEditing(false);
-    if ((nextView === "edit" || nextView === "analyst" || nextView === "stats" || nextView === "imports" || nextView === "settings") && !session.user) {
-      setLoginDestination(nextView);
-      openLogin();
-      return;
-    }
     if (nextView === "settings") setSection("personalization");
     if (nextView === "edit") { setView("read"); setMeetingEditing(true); return; }
     setView(nextView);
@@ -697,7 +634,7 @@ function MarketPulseWorkspace() {
   const [autoSaveError, setAutoSaveError] = useState("");
   const savePoint = async (automatic = false) => {
     if (saving || !ready || archiveLoading) return;
-    if (!session.user) { openLogin(); return; }
+    if (!session.user) { setToast("L’espace partagé est en cours de chargement. Réessaie dans un instant."); return; }
     if (data.customColor && !validHex(data.customColor)) { setToast("La couleur personnalisée doit suivre le format #RRGGBB."); return; }
     setSaving(true); setAutoSaveError("");
     const selection = archiveRequest.current, context = comparisonContext.current;
@@ -954,7 +891,7 @@ function MarketPulseWorkspace() {
       <div className="period-title"><strong>Marché et semaine</strong></div>
       <div className="direct-week-navigation"><button type="button" aria-label="Semaine précédente" onClick={() => { const date = new Date(`${data.meetingDate}T12:00:00Z`); date.setUTCDate(date.getUTCDate() - 7); void chooseWeek(weekInputValue(date.toISOString().slice(0,10))); }}>‹</button><label><span className="sr-only">Semaine du point</span><input type="week" aria-label="Semaine du point" value={weekInputValue(data.meetingDate)} onChange={(event) => { void chooseWeek(event.target.value); }}/></label><button type="button" aria-label="Semaine suivante" onClick={() => { const date = new Date(`${data.meetingDate}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + 7); void chooseWeek(weekInputValue(date.toISOString().slice(0,10))); }}>›</button></div>
       <label className="period-market"><span>Marché</span><select value={marketId} onChange={(event) => { void chooseMarket(event.target.value); }}>{marketOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <div className="period-state"><span>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</span><strong>{isDirty ? "Synchronisation en cours" : activeRecordId ? "Point enregistré" : "Nouvelle semaine"}</strong><small>{currentWeekPoint ? `Point du ${dateLabel(currentWeekPoint.meetingDate)}` : "Aucun point enregistré"}</small></div>
+      <div className="period-state"><span>{currentWeekYear} · S{String(currentWeek).padStart(2, "0")}</span><strong>{autoSaveError ? "Sauvegarde interrompue" : isDirty ? "Synchronisation en cours" : activeRecordId ? "Point enregistré" : "Nouvelle semaine"}</strong><small>{currentWeekPoint ? `Point du ${dateLabel(currentWeekPoint.meetingDate)}` : "Aucun point enregistré"}</small></div>
       <button type="button" className={`period-calendar-toggle ${calendarExpanded ? "is-open" : ""}`} aria-expanded={calendarExpanded} onClick={() => setCalendarExpanded((current) => !current)}><Icon name="calendar" size={16}/><span>{calendarExpanded ? "Masquer le calendrier" : "Choisir une semaine"}</span><Icon name="chevron" size={15}/></button>
     </div>
     {calendarExpanded && <div className="visual-week-picker">
@@ -966,7 +903,7 @@ function MarketPulseWorkspace() {
     </div>}
   </section>;
 
-  const renderEditor = () => <div className={`editor-layout ${view === "settings" ? "settings-layout" : ""}`}><aside className="editor-nav"><div className="editor-nav-title"><span>{view === "settings" ? "Paramètres" : "Préparation"}</span><small>{view === "settings" ? "Réglages durables et affichage du point" : "Complète puis vérifie ton point"}</small></div>{(meetingEditing ? navGroups.slice(0, 1) : navGroups).map((group) => <div className="editor-nav-group" key={group.label}><span>{group.label}</span>{group.items.map((item) => <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => setSection(item.id)}><Icon name={item.icon}/><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}<Icon name="chevron" size={15}/></button>)}</div>)}<div className={`autosave-card ${isDirty ? "is-dirty" : ""}`}><span><Icon name={isDirty ? "edit" : "check"} size={14}/> {isDirty ? "Synchronisation en cours" : activeRecordId ? "Point enregistré" : "Brouillon prêt"}</span><small>{archiveLoading ? "Chargement de l’historique…" : activeRecordId ? `Dernière sauvegarde${savedAt ? ` · ${savedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}` : "Les modifications sont sauvegardées automatiquement"}</small></div></aside><main className="editor-content">
+  const renderEditor = () => <div className={`editor-layout ${view === "settings" ? "settings-layout" : ""}`}><aside className="editor-nav"><div className="editor-nav-title"><span>{view === "settings" ? "Paramètres" : "Préparation"}</span><small>{view === "settings" ? "Réglages durables et affichage du point" : "Complète puis vérifie ton point"}</small></div>{(meetingEditing ? navGroups.slice(0, 1) : navGroups).map((group) => <div className="editor-nav-group" key={group.label}><span>{group.label}</span>{group.items.map((item) => <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => setSection(item.id)}><Icon name={item.icon}/><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}<Icon name="chevron" size={15}/></button>)}</div>)}<div className={`autosave-card ${isDirty ? "is-dirty" : ""}`}><span><Icon name={isDirty ? "edit" : "check"} size={14}/> {autoSaveError ? "Sauvegarde interrompue" : isDirty ? "Synchronisation en cours" : activeRecordId ? "Point enregistré" : "Brouillon prêt"}</span><small>{archiveLoading ? "Chargement de l’historique…" : activeRecordId ? `Dernière sauvegarde${savedAt ? ` · ${savedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}` : "Les modifications sont sauvegardées automatiquement"}</small></div></aside><main className="editor-content">
     {section === "general" && <section className="editor-section">
       <SectionTitle eyebrow="Cadre" title="Préparer le point" detail="Le marché et la semaine se choisissent dans le calendrier général ci-dessus."/>
       <div className="surface form-grid general-grid">
@@ -1100,38 +1037,39 @@ function MarketPulseWorkspace() {
 
   return <div className={`app-shell font-${data.preferences.fontScale} density-${data.preferences.density}`} style={themeStyle}>
     <a className="skip-link" href="#workspace-content">Aller au contenu</a>
-    <WorkspaceNavigation view={view} userName={session.user?.displayName ?? null} onSelect={chooseView} onLogin={() => { setLoginDestination("edit"); openLogin(); }} onLogout={logout}/>
+    <WorkspaceNavigation view={view} userName={session.user?.displayName ?? null} onSelect={chooseView}/>
     <header className="app-header">
-      <div className="workspace-location"><span>Espace de travail</span><strong>{workspaceTitles[view]} <small className="app-version">V49</small></strong></div>
+      <div className="workspace-location"><span>Espace de travail</span><strong>{workspaceTitles[view]} <small className="app-version">V50</small></strong></div>
       <div className="header-actions">
         {session.user && <DraftQueueStatus/>}
         <AppearanceControl/>
         <input ref={fileInput} className="sr-only" type="file" accept="application/json" onChange={importJson}/>
         {session.user && (view === "read" || view === "edit" || view === "settings") && <>
           <div className="point-history-controls"><button type="button" disabled={!historyAvailability.undo} onClick={undoPoint} title="Annuler (Ctrl+Z)">↶</button><button type="button" disabled={!historyAvailability.redo} onClick={redoPoint} title="Rétablir (Ctrl+Y)">↷</button></div><ActionMenu><button type="button" onClick={() => fileInput.current?.click()}><Icon name="upload"/> Importer un JSON</button><button type="button" onClick={() => exportJson()}><Icon name="download"/> Exporter le brouillon</button><button type="button" className="danger" onClick={() => { void resetPoint(); }}><Icon name="plus"/> Réinitialiser la semaine</button></ActionMenu>
-          <span className="point-autosave-indicator" role="status">{saving ? "Sauvegarde…" : autoSaveError ? "Sauvegarde à reprendre" : isDirty ? "Synchronisation…" : "À jour"}</span>
+          <span className="point-autosave-indicator" role="status">{saving ? "Sauvegarde…" : autoSaveError ? "Sauvegarde interrompue" : isDirty ? "Synchronisation…" : "À jour"}</span>
           {autoSaveError && <button type="button" className="secondary-button" onClick={() => { failedAutoSave.current = ""; void savePoint(); }}>Réessayer</button>}
         </>}
       </div>
     </header>
+    {sessionReady && !session.user && <div className="archive-message error" role="alert"><span>L’espace partagé est indisponible. Les données affichées sont conservées.</span><button type="button" className="secondary-button" onClick={retryWorkspace}>Réessayer</button></div>}
     {archiveLoading && <div className="point-loading-status" role="status">Chargement du point…</div>}
     <div id="workspace-content" className="workspace-content" tabIndex={-1} inert={archiveLoading} aria-busy={archiveLoading}>
     <div id="top" className="workspace-context">
       <span>{view === "read" || view === "edit" || view === "mail" ? market.name : view === "analyst" ? "Jira · Simulations · Dossiers" : view === "stats" ? "Activité analystes et variations fournisseurs" : view === "imports" ? "Registres Jira et Planner" : "Application et points"}</span>
       {(view === "read" || view === "edit" || view === "mail") && <span className="workspace-week">S{String(currentWeek).padStart(2, "0")} · {currentWeekYear}</span>}
-      {session.user && (view === "read" || view === "edit" || view === "mail") && <span className={`workspace-draft ${isDirty ? "is-dirty" : ""}`}>{isDirty ? "Synchronisation en cours" : activeRecordId ? "Point enregistré" : "Nouveau point"}</span>}
+      {session.user && (view === "read" || view === "edit" || view === "mail") && <span className={`workspace-draft ${isDirty ? "is-dirty" : ""}`}>{autoSaveError ? "Sauvegarde interrompue" : isDirty ? "Synchronisation en cours" : activeRecordId ? "Point enregistré" : "Nouveau point"}</span>}
     </div>
-    {session.user && (view === "read" || view === "edit" || view === "mail") && <PointSyncStatus key={comparisonContextValue} scope="market" ownerId={marketId} date={data.meetingDate} onRestore={restoreConflict} onReconnect={openLogin}/>}
+    {session.user && (view === "read" || view === "edit" || view === "mail") && <PointSyncStatus key={comparisonContextValue} scope="market" ownerId={marketId} date={data.meetingDate} onRestore={restoreConflict} onReconnect={retryWorkspace}/>}
     {(view === "read" || view === "edit" || view === "mail") && (activeRecordId || session.user) && <PointSourceStatus sources={data.sourceFreshness} jiraMode={data.jiraMode} plannerMode={data.plannerMode} corrections={data.jira.filter((item) => hasJiraOverride(item.pointOverride)).length + data.operations.filter((item) => hasMarketSimulationOverride(item.plannerOverride)).length} additions={data.jira.filter((item) => !item.importedBase).length + data.operations.filter((item) => !item.plannerSource).length}/>}
     {archiveError && <div className="archive-message error" role="alert"><span>{archiveError}</span><button type="button" className="secondary-button" onClick={() => { void loadMarket(marketId, true, market); }}>Réessayer</button></div>}
     {view === "read" && periodNavigator}
     {view === "settings" && session.user && renderEditor()}
-    {view === "read" && <main className="preview-page"><div className={`preview-toolbar ${meetingEditing ? "editing" : ""}`}><div><span>{"Point marché"}</span><strong>{session.user ? "Clic droit ou ••• pour modifier les blocs. Les changements sont sauvegardés automatiquement." : "Choisis le marché et la semaine dans le calendrier ci-dessus."}</strong></div><div className="meeting-toolbar-actions">{session.user && <><button type="button" className="secondary-button" disabled={!previousPoint} onClick={openCarryover}><Icon name="copy"/> Reprendre le point précédent</button><button type="button" className="secondary-button" disabled={refreshingImports} onClick={() => { void refreshImports(); }}><Icon name="spark"/> {refreshingImports ? "Actualisation…" : "Actualiser les imports"}</button><button type="button" className="secondary-button" onClick={() => setComparisonOpen(true)}><Icon name="trend"/> Comparer les marchés</button></>}</div></div>{session.user && <details className="point-display-settings"><summary>Réglages d’affichage</summary><div className="point-layout-toolbar" role="toolbar" aria-label="Affichage du point"><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent - 5)}>A−</button><output>{data.preferences.fontScalePercent}%</output><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent + 5)}>A+</button>{(["compact", "comfortable", "airy"] as Density[]).map((density) => <button type="button" key={density} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, density } }))}>{density === "compact" ? "Compacte" : density === "airy" ? "Aérée" : "Normale"}</button>)}<label>Couleur<input type="color" value={accent} onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/></label><button type="button" onClick={resetCanvasLayout}>Structure initiale</button></div></details>}{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Complète ce point : les modifications sont sauvegardées automatiquement." : "Aucun brouillon n’est affiché publiquement. Connecte-toi pour préparer cette semaine."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard tasks={plannerTasks} markets={marketOptions} plannerUpdatedAt={plannerUpdatedAt} data={preparedData} market={market} archive={archive} editing={false} actions={session.user ? canvasActions : undefined}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou connecte-toi pour la préparer.</p></div>}</main>}
+    {view === "read" && <main className="preview-page"><div className={`preview-toolbar ${meetingEditing ? "editing" : ""}`}><div><span>{"Point marché"}</span><strong>{session.user ? "Clic droit ou ••• pour modifier les blocs. Les changements sont sauvegardés automatiquement." : "Choisis le marché et la semaine dans le calendrier ci-dessus."}</strong></div><div className="meeting-toolbar-actions">{session.user && <><button type="button" className="secondary-button" disabled={!previousPoint} onClick={openCarryover}><Icon name="copy"/> Reprendre le point précédent</button><button type="button" className="secondary-button" disabled={refreshingImports} onClick={() => { void refreshImports(); }}><Icon name="spark"/> {refreshingImports ? "Actualisation…" : "Actualiser les imports"}</button><button type="button" className="secondary-button" onClick={() => setComparisonOpen(true)}><Icon name="trend"/> Comparer les marchés</button></>}</div></div>{session.user && <details className="point-display-settings"><summary>Réglages d’affichage</summary><div className="point-layout-toolbar" role="toolbar" aria-label="Affichage du point"><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent - 5)}>A−</button><output>{data.preferences.fontScalePercent}%</output><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent + 5)}>A+</button>{(["compact", "comfortable", "airy"] as Density[]).map((density) => <button type="button" key={density} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, density } }))}>{density === "compact" ? "Compacte" : density === "airy" ? "Aérée" : "Normale"}</button>)}<label>Couleur<input type="color" value={accent} onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/></label><button type="button" onClick={resetCanvasLayout}>Structure initiale</button></div></details>}{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Complète ce point : les modifications sont sauvegardées automatiquement." : "Aucun brouillon n’est affiché publiquement. L’espace partagé est en cours de chargement."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard tasks={plannerTasks} markets={marketOptions} plannerUpdatedAt={plannerUpdatedAt} data={preparedData} market={market} archive={archive} editing={false} actions={session.user ? canvasActions : undefined}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou complète ce point dans l’espace partagé.</p></div>}</main>}
     {view === "stats" && session.user && (plannerReady && directoryReady ? <AnalystStatsDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} registry={plannerRegistry} updatedAt={plannerUpdatedAt} onImport={importPlannerData}/> : <main className="analyst-stats-page"><div className="surface stats-loading"><span>Chargement de la source Planner et de l’annuaire GLOBAL…</span></div></main>)}
-    {view === "analyst" && session.user && (plannerReady && directoryReady ? <AnalystPointDashboard onReconnect={openLogin} tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData}/> : <main className="analyst-point-page"><div className="surface stats-loading"><span>Chargement du point analyste, de Planner et de l’annuaire GLOBAL…</span></div></main>)}
+    {view === "analyst" && session.user && (plannerReady && directoryReady ? <AnalystPointDashboard onReconnect={retryWorkspace} tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData}/> : <main className="analyst-point-page"><div className="surface stats-loading"><span>Chargement du point analyste, de Planner et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "imports" && session.user && (plannerReady && directoryReady ? <ImportCenter users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerTasks={plannerTasks} plannerRegistry={plannerRegistry} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData} onJiraImported={refreshJiraFromRegistry} onManual={useManualImport}/> : <main className="import-center-page"><div className="surface stats-loading"><span>Chargement des registres et de l’annuaire GLOBAL…</span></div></main>)}
     {view === "mail" && <main className="mail-page">
-      <div className="mail-toolbar"><div><span>Kit Outlook</span><strong>Le mail reste lisible seul, la pièce jointe conserve les interactions.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { if (!session.user) { setLoginDestination("settings"); openLogin(); } else { setSection("mail"); setView("settings"); } }}><Icon name={session.user ? "edit" : "lock"}/> Paramètres</button><button className="secondary-button" onClick={copyMail}><Icon name="copy"/> Copier le corps du mail</button><button className="primary-button" onClick={downloadMailDraft}><Icon name="mail"/> Préparer le mail + la page</button></div></div>
+      <div className="mail-toolbar"><div><span>Kit Outlook</span><strong>Le mail reste lisible seul, la pièce jointe conserve les interactions.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { setSection("mail"); setView("settings"); }}><Icon name={session.user ? "edit" : "lock"}/> Paramètres</button><button className="secondary-button" onClick={copyMail}><Icon name="copy"/> Copier le corps du mail</button><button className="primary-button" onClick={downloadMailDraft}><Icon name="mail"/> Préparer le mail + la page</button></div></div>
       <section className="mail-kit-panel" aria-label="Préparation de l’envoi Outlook"><div className="mail-kit-intro"><span>Mail prêt à ouvrir</span><strong>Le point mis en forme et la page HTML jointe</strong><p>« Préparer le mail + la page » télécharge un fichier .eml avec les destinataires, l’objet, le corps mis en forme et la page jointe. Ouvre-le dans Outlook pour vérifier et envoyer. Les deux éléments restent disponibles séparément ci-dessous.</p></div><div className="mail-kit-steps"><article><span>1</span><div><strong>Version mail</strong><small>Synthèse compatible Outlook, sans script.</small></div><div className="attachment-actions"><button type="button" className="secondary-button" onClick={copyMail}><Icon name="copy" size={15}/> Copier</button><button type="button" className="secondary-button" onClick={() => download(htmlAttachmentName.replace(/\.html$/, "-mail.html"), mailHtml, "text/html;charset=utf-8")}><Icon name="download" size={15}/> Version mail</button></div></article><article className="html-attachment-card" draggable onDragStart={dragInteractiveHtml} title="Faire glisser cette pièce jointe vers Outlook"><span>2</span><div className="html-file-icon">HTML</div><div><strong>{htmlAttachmentName}</strong><small>Graphiques, filtres Jira et personnes dépliables · aucune modification possible</small></div><div className="attachment-actions"><span><Icon name="upload" size={14}/> Glisser dans Outlook</span><button type="button" className="secondary-button" onClick={downloadInteractiveHtml}><Icon name="download" size={15}/> Télécharger</button></div></article></div><div className="mail-security-note"><Icon name="alert" size={15}/><span>La version statique reste complète si la sécurité de l’entreprise bloque l’ouverture d’une pièce jointe HTML.</span></div></section>
       <div className="mail-frame-label"><span>Aperçu de la version intégrée au mail</span><strong>La pièce jointe interactive reprend le même point avec les filtres Jira.</strong></div><div className="mail-frame-wrap"><iframe title="Aperçu du mail Outlook" srcDoc={mailHtml}/></div>
     </main>}
@@ -1159,7 +1097,7 @@ function MarketPulseWorkspace() {
       </div>
       <div className="carryover-footer"><span>Le point précédent reste intact. Chaque élément repris garde son origine.</span><button className="primary-button" type="button" disabled={!carryoverSelectedCount} onClick={applyCarryover}><Icon name="copy"/> Reporter {carryoverSelectedCount || ""} élément{carryoverSelectedCount > 1 ? "s" : ""}</button></div>
     </AppDialog>}
-    <AppDialog open={loginOpen} onClose={() => { if (!loginLoading) setLoginOpen(false); }} busy={loginLoading} labelledBy="login-title" className="login-dialog"><span className="login-emblem"><Icon name="lock" size={22}/></span><div className="login-heading"><span>Accès interne</span><h2 id="login-title">Connexion GLOBAL</h2><p>La lecture des points reste accessible. La préparation, les imports et les statistiques analystes utilisent le compte interne partagé.</p></div><form onSubmit={submitLogin}><label><span>Compte</span><input data-autofocus autoComplete="username" value={loginUsername} onChange={(event) => setLoginUsername(event.target.value)} /></label><label><span>Mot de passe</span><input type="password" autoComplete="current-password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} /></label>{loginError && <div className="login-error"><Icon name="alert" size={15}/>{loginError}</div>}<button className="primary-button login-submit" type="submit" disabled={loginLoading || !loginUsername || !loginPassword}><Icon name="lock"/> {loginLoading ? "Connexion…" : "Se connecter"}</button></form><small className="login-session-note">La session interne reste active pendant 12 heures sur cet appareil.</small></AppDialog>
+
     {confirmRequest && <AppDialog open onClose={() => settleConfirmation(false)} labelledBy="confirm-dialog-title" className="confirm-dialog"><span className={`confirm-emblem ${confirmRequest.destructive ? "danger" : ""}`}><Icon name={confirmRequest.destructive ? "alert" : "check"} size={22}/></span><div className="login-heading"><span>Confirmation</span><h2 id="confirm-dialog-title">{confirmRequest.title}</h2><p>{confirmRequest.detail}</p></div><div className="confirm-actions"><button className="secondary-button" type="button" onClick={() => settleConfirmation(false)}>Annuler</button><button className={`primary-button ${confirmRequest.destructive ? "danger-button-solid" : ""}`} type="button" onClick={() => settleConfirmation(true)}>{confirmRequest.confirmLabel}</button></div></AppDialog>}
     {toast && <div className="toast"><Icon name="check"/>{toast}</div>}
   </div></div>;

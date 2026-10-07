@@ -40,13 +40,13 @@ export function PointSyncStatus({ scope, ownerId, date, onRestore, onReconnect }
     finally { setBusy(false); }
   };
   const label = state.status === "saved" ? `Brouillon sauvegardé${state.updatedAt ? ` · ${pointTimeLabel(state.updatedAt)}` : ""}`
-    : state.status === "conflict" ? "Deux copies à comparer" : state.status === "error" ? "Brouillon à sauvegarder" : state.status === "idle" ? "Sauvegarde automatique activée" : "Sauvegarde du brouillon…";
+    : state.status === "conflict" ? "Deux copies à comparer" : state.status === "error" ? "Sauvegarde interrompue" : state.status === "idle" ? "Sauvegarde automatique activée" : "Sauvegarde du brouillon…";
   const differences = review && reviewData ? pointDifferences(reviewData, remotePointData(review)) : [];
   return <>
     <div className={`point-sync-status ${state.status}`} role={state.status === "error" || state.status === "conflict" ? "alert" : "status"}>
       <div><strong>{label}</strong>{state.message && <span>{state.message}</span>}{error && !review && <span>{error}</span>}</div>
       {state.status === "error" && <button type="button" className="secondary-button" onClick={() => { void hostedPointDrafts.retry(scope, ownerId, date); }}>Réessayer</button>}
-      {state.status === "error" && /session|connecte/i.test(state.message) && onReconnect && <button type="button" className="secondary-button" onClick={onReconnect}>Se reconnecter</button>}
+
       {state.status === "conflict" && <button type="button" className="secondary-button" disabled={busy} onClick={() => { void compare(); }}>Comparer les copies</button>}
     </div>
     <AppDialog open={Boolean(review)} busy={busy} onClose={() => { if (!busy) setReview(null); }} className="point-conflict-dialog" labelledBy="point-conflict-title">
