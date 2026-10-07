@@ -1,7 +1,4 @@
-import { clearedEditorSessionCookie } from "../../simple-auth";
-
+// Shared editing has no login lifecycle. Keep older clients compatible.
 export async function POST() {
-  return Response.json({ ok: true }, {
-    headers: { "Cache-Control": "no-store", "Set-Cookie": clearedEditorSessionCookie() },
-  });
+  return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }
