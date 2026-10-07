@@ -1,10 +1,9 @@
-import { cookies } from "next/headers";
-import { EDITOR_SESSION_COOKIE, verifyEditorSessionToken } from "../lib/editor-session";
-
+import { getRuntimeEnv } from "../lib/runtime-env";
 export { clearedEditorSessionCookie, createEditorSession, editorAuthConfigured, editorSessionCookie, validateEditorCredentials } from "../lib/editor-session";
 export type { EditorUser } from "../lib/editor-session";
 
+// V48: the owner explicitly enabled shared editing without an application login.
+// Reuse the configured account key so existing drafts remain available.
 export async function getEditorUser() {
-  const token = (await cookies()).get(EDITOR_SESSION_COOKIE)?.value;
-  return token ? verifyEditorSessionToken(token) : null;
+  return { displayName: "Espace partagé", username: getRuntimeEnv()?.MARKET_PULSE_USERNAME?.trim() || "market-pulse-shared" };
 }

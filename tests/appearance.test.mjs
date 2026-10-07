@@ -76,7 +76,7 @@ test("renders theme controls and an accessible current destination without clien
   const nav = renderToStaticMarkup(createElement(WorkspaceNavigation, { view: "imports", userName: null, onSelect() {}, onLogin() {}, onLogout() {} }));
   assert.equal((nav.match(/aria-current="page"/g) ?? []).length, 1);
   assert.match(nav, /Centre d’import/);
-  assert.match(nav, /Mode lecture/);
+  assert.match(nav, /Espace partagé/);
   assert.match(nav, /Ouvrir la navigation/);
 });
 

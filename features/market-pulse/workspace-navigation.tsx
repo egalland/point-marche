@@ -37,13 +37,14 @@ export function WorkspaceNavigation({ view, userName, onSelect, onLogin, onLogou
   const [open, setOpen] = useState(false);
   const select = (next: WorkspaceView) => { setOpen(false); onSelect(next); };
   const content = <>
-    <button type="button" className="workspace-brand" onClick={() => select("read")} aria-label="Market Pulse, ouvrir le point marché"><span className="workspace-brand-mark"><AppIcon name="trend" size={24}/></span><span><strong>Market Pulse</strong><small>Espace GLOBAL</small></span></button>
+    <button type="button" className="workspace-brand" onClick={() => select("read")} aria-label="Market Pulse, ouvrir le point marché"><span className="workspace-brand-mark"><AppIcon name="trend" size={24}/></span><span><strong>Market Pulse</strong><small>Espace GLOBAL · V48</small></span></button>
     <nav className="workspace-nav" aria-label="Navigation principale">
       {groups.map((group) => <div className="workspace-nav-group" key={group.label}><span>{group.label}</span>{group.items.map((item) => <button key={item.id} type="button" className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={() => select(item.id)}><AppIcon name={item.icon} size={20}/><span>{item.label}</span>{view === item.id && <i aria-hidden="true"/>}</button>)}</div>)}
     </nav>
     <footer className="workspace-account">
-      <div><span className="workspace-avatar"><AppIcon name={userName ? "user" : "eye"}/></span><span><strong>{userName || "Mode lecture"}</strong><small>{userName ? "Session interne GLOBAL" : "Points enregistrés"}</small></span></div>
-      {isLocalWorkspace() ? <button type="button" onClick={() => { setOpen(false); openLocalFiles(); }}><AppIcon name="download" size={16}/>Fichier local</button> : <button type="button" onClick={() => { setOpen(false); if (userName) onLogout(); else onLogin(); }}><AppIcon name={userName ? "logout" : "lock"} size={16}/>{userName ? "Se déconnecter" : "Connexion GLOBAL"}</button>}
+      <div><span className="workspace-avatar"><AppIcon name={userName ? "user" : "eye"}/></span><span><strong>{userName || "Espace partagé"}</strong><small>{userName ? "Modification partagée" : "Points enregistrés"}</small></span></div>
+      {isLocalWorkspace() && <button type="button" onClick={() => { setOpen(false); openLocalFiles(); }}><AppIcon name="download" size={16}/>Fichier local</button>}
+
     </footer>
   </>;
   return <>
