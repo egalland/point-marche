@@ -12,6 +12,10 @@ export type RuntimeEnv = {
   MARKET_PULSE_USERNAME?: string;
   MARKET_PULSE_PASSWORD?: string;
   MARKET_PULSE_SESSION_SECRET?: string;
+  FILES?: {
+    put(key: string, value: Uint8Array, options: { httpMetadata: { contentType: string }; customMetadata: { name: string } }): Promise<unknown>;
+    get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string }; customMetadata?: { name?: string } } | null>;
+  };
   DB?: {
     prepare(query: string): D1PreparedStatementLike;
     batch<T = unknown>(statements: D1PreparedStatementLike[]): Promise<T[]>;

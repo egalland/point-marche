@@ -46,6 +46,8 @@ function cleanTicket(value: unknown): JiraCsvTicket | null {
     internalId: cleanText(source.internalId, 60),
     status: cleanText(source.status, 120),
     summary: cleanText(source.summary, 4000),
+    category: cleanText(source.category, 240),
+    subcategory: cleanText(source.subcategory, 240),
     createdAt,
     assigneeUserCode: /^[A-Z]\d{7}$/.test(assigneeUserCode) ? assigneeUserCode : "",
     updatedAt,
@@ -131,6 +133,8 @@ export async function POST(request: Request) {
         internalId: ticket.internalId,
         status: ticket.status,
         summary: ticket.summary,
+        category: ticket.category ?? "",
+        subcategory: ticket.subcategory ?? "",
         jiraCreatedAt: ticket.createdAt,
         assigneeUserCode: ticket.assigneeUserCode,
         jiraUpdatedAt: ticket.updatedAt,
@@ -151,6 +155,8 @@ export async function POST(request: Request) {
             internalId: sql`excluded.internal_id`,
             status: sql`excluded.status`,
             summary: sql`excluded.summary`,
+            category: sql`excluded.category`,
+            subcategory: sql`excluded.subcategory`,
             jiraCreatedAt: sql`excluded.jira_created_at`,
             assigneeUserCode: sql`excluded.assignee_usercode`,
             jiraUpdatedAt: sql`excluded.jira_updated_at`,
@@ -180,10 +186,10 @@ export async function POST(request: Request) {
       const integrityError = jiraImportCountError({ tickets: body.expectedTicketCount, participants: body.expectedParticipantCount }, { tickets: Number(tickets?.count ?? 0), participants: Number(participants?.count ?? 0) });
       if (integrityError) return Response.json({ error: integrityError }, { status: 409 });
       await raw.batch([
-        raw.prepare(`INSERT INTO jira_tickets (ticket_key, internal_id, status, summary, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, last_import_id, imported_at)
-          SELECT ticket_key, internal_id, status, summary, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, import_id, CURRENT_TIMESTAMP
+        raw.prepare(`INSERT INTO jira_tickets (ticket_key, internal_id, status, summary, category, subcategory, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, last_import_id, imported_at)
+          SELECT ticket_key, internal_id, status, summary, category, subcategory, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, import_id, CURRENT_TIMESTAMP
           FROM jira_import_tickets WHERE import_id = ?
-          ON CONFLICT(ticket_key) DO UPDATE SET internal_id = excluded.internal_id, status = excluded.status, summary = excluded.summary,
+          ON CONFLICT(ticket_key) DO UPDATE SET internal_id = excluded.internal_id, status = excluded.status, summary = excluded.summary, category = excluded.category, subcategory = excluded.subcategory,
           jira_created_at = excluded.jira_created_at, assignee_usercode = excluded.assignee_usercode, jira_updated_at = excluded.jira_updated_at,
           resolution_at = excluded.resolution_at, link = excluded.link, last_import_id = excluded.last_import_id, imported_at = CURRENT_TIMESTAMP`).bind(importId),
         raw.prepare(`DELETE FROM jira_ticket_participants WHERE ticket_key IN (SELECT ticket_key FROM jira_import_tickets WHERE import_id = ?)`).bind(importId),

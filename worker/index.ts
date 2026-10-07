@@ -8,6 +8,7 @@ type D1Database = NonNullable<RuntimeEnv["DB"]>;
 
 interface Env {
   ASSETS: Fetcher;
+  FILES: NonNullable<RuntimeEnv["FILES"]>;
   DB: D1Database;
   MARKET_PULSE_USERNAME?: string;
   MARKET_PULSE_PASSWORD?: string;

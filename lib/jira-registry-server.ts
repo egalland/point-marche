@@ -15,11 +15,11 @@ export async function latestCompletedJiraBatch() {
   return batch ?? null;
 }
 
-type JiraTicketRow = Pick<typeof jiraTickets.$inferSelect, "key" | "internalId" | "status" | "summary" | "jiraCreatedAt" | "assigneeUserCode" | "jiraUpdatedAt" | "resolutionAt" | "link">;
+type JiraTicketRow = Pick<typeof jiraTickets.$inferSelect, "key" | "internalId" | "status" | "summary" | "category" | "subcategory" | "jiraCreatedAt" | "assigneeUserCode" | "jiraUpdatedAt" | "resolutionAt" | "link">;
 type AnalystTicketRow = JiraTicketRow & { participantUserCode: string | null; participantJiraUserId: string | null };
 
 const JIRA_READ_PAGE_SIZE = 1000;
-const ticketColumns = `t.ticket_key AS key, t.internal_id AS internalId, t.status, t.summary,
+const ticketColumns = `t.ticket_key AS key, t.internal_id AS internalId, t.status, t.summary, t.category, t.subcategory,
   t.jira_created_at AS jiraCreatedAt, t.assignee_usercode AS assigneeUserCode,
   t.jira_updated_at AS jiraUpdatedAt, t.resolution_at AS resolutionAt, t.link`;
 
@@ -42,6 +42,8 @@ function ticketFromRow(row: JiraTicketRow, participants: JiraParticipant[] = [])
     internalId: row.internalId,
     status: canonicalJiraStatus(row.status),
     summary: row.summary,
+    category: row.category,
+    subcategory: row.subcategory,
     createdAt: row.jiraCreatedAt,
     assigneeUserCode: row.assigneeUserCode,
     updatedAt: row.jiraUpdatedAt,

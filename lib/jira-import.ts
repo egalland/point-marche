@@ -19,6 +19,8 @@ export type JiraDetailedTicket = {
   createdAt: string;
   assigneeUserCode: string;
   assigneeName?: string;
+  category?: string;
+  subcategory?: string;
   marketId?: string;
   updatedAt: string;
   link: string;
