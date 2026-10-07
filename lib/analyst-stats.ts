@@ -10,6 +10,7 @@ export type AnalystStatsMarket = {
 export type AnalystStatsFilters = {
   from: string;
   to: string;
+  comparisonRange?: { from: string; to: string };
   marketId: string;
   specialty: PlannerSpecialty | "all";
   analystIds: string[];
@@ -245,8 +246,8 @@ export function buildAnalystStats(tasks: PlannerTask[], users: GlobalDirectoryUs
   const delaySource = plannerDelaySamples(tasks, users, markets);
   const contributions = applyFilters(source, filters);
   const span = daySpan(filters.from, filters.to);
-  const previousTo = addDays(filters.from, -1);
-  const previousFrom = addDays(previousTo, -(span - 1));
+  const previousTo = filters.comparisonRange?.to ?? addDays(filters.from, -1);
+  const previousFrom = filters.comparisonRange?.from ?? addDays(previousTo, -(span - 1));
   const previousContributions = applyFilters(source, filters, previousFrom, previousTo);
   const delaySamples = applyDelayFilters(delaySource, filters);
   const previousDelaySamples = applyDelayFilters(delaySource, filters, previousFrom, previousTo);
