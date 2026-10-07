@@ -97,7 +97,7 @@ export function AnalystStatsDashboard({ tasks, users, markets, registry, updated
   const [specialty, setSpecialty] = useState<PlannerSpecialty | "all">("all");
   const [analystIds, setAnalystIds] = useState<string[]>([]);
   const [detailSort, setDetailSort] = useState<{ key: DetailSort; direction: "asc" | "desc" }>({ key: "date", direction: "desc" });
-  const [statsView, setStatsView] = useState<"activity" | "suppliers">("activity");
+  const [statsView, setStatsView] = useState<"activity" | "suppliers" | "purchaseData">("activity");
   const stats = useMemo(() => buildAnalystStats(tasks, users, markets, { from: appliedRange.from, to: appliedRange.to, marketId, specialty, analystIds }), [analystIds, appliedRange, marketId, markets, specialty, tasks, users]);
   const maxMonth = Math.max(1, ...stats.monthly.map((item) => item.total));
   const maxAnalyst = Math.max(1, ...stats.byAnalyst.map((item) => item.total));
@@ -140,9 +140,9 @@ export function AnalystStatsDashboard({ tasks, users, markets, registry, updated
       <div className="stats-hero-actions"><PlannerImportDialog markets={markets} onImport={onImport}/><div className="stats-freshness"><span>Source actualisée</span><strong>{updatedAt ? new Date(updatedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "Aucun import"}</strong><small>{tasks.length} tâche{tasks.length > 1 ? "s" : ""} Planner disponible{tasks.length > 1 ? "s" : ""}</small></div><small>L’import actualise aussi les simulations du point actif.</small></div>
     </header>
 
-    <nav className="stats-view-tabs" aria-label="Vue des statistiques"><button type="button" className={statsView === "activity" ? "active" : ""} onClick={() => setStatsView("activity")}>Activité analystes</button><button type="button" className={statsView === "suppliers" ? "active" : ""} onClick={() => setStatsView("suppliers")}>Variations fournisseurs</button></nav>
+    <nav className="stats-view-tabs" aria-label="Vue des statistiques"><button type="button" className={statsView === "activity" ? "active" : ""} onClick={() => setStatsView("activity")}>Activité analystes</button><button type="button" className={statsView === "suppliers" ? "active" : ""} onClick={() => setStatsView("suppliers")}>Variations fournisseurs</button><button type="button" className={statsView === "purchaseData" ? "active" : ""} onClick={() => setStatsView("purchaseData")}>PURCHASES</button></nav>
 
-    {statsView === "suppliers" ? <SupplierVariationDashboard tasks={tasks} markets={markets} registry={registry}/> : <>
+    {statsView === "purchaseData" ? <section className="surface purchaseData-stats-empty"><h2>PURCHASES</h2><p>Les indicateurs seront ajoutés après définition de la structure du fichier PURCHASES.</p></section> : statsView === "suppliers" ? <SupplierVariationDashboard tasks={tasks} markets={markets} registry={registry}/> : <>
 
     <section className="surface stats-filters" aria-label="Filtres des statistiques">
       <div className="stats-period-presets"><span>Période rapide</span><div><button type="button" onClick={() => applyPeriod("previousWeek")}>Semaine dernière</button><button type="button" onClick={() => applyPeriod("cycle20")}>Mois dernier · 20 au 20</button><button type="button" onClick={() => applyPeriod("30d")}>30 jours</button><button type="button" onClick={() => applyPeriod("3m")}>3 mois</button><button type="button" onClick={() => applyPeriod("6m")}>6 mois</button><button type="button" onClick={() => applyPeriod("year")}>Cette année</button></div></div>
