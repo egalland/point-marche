@@ -49,6 +49,20 @@ const users = [
 ];
 const markets = [{ id: "market-rev", name: "Revêtements", plannerTags: ["REV-PB"] }];
 
+test("a freely chosen comparison period uses the same filters for volumes and delays", () => {
+  const old = { ...baseTask, externalId: "old", checklist: baseTask.checklist.map((step) => ({ ...step, date: step.date.replace("2026", "2025") })) };
+  const filters = { from: "2026-06-01", to: "2026-06-30", marketId: "market-rev", specialty: "simulation", analystIds: ["analyst-1"], comparisonRange: { from: "2025-06-01", to: "2025-06-30" } };
+  const stats = analytics.buildAnalystStats([baseTask, old], users, markets, filters);
+  assert.equal(stats.totalActivities, 1);
+  assert.equal(stats.previousTotal, 1);
+  assert.equal(stats.previousContributions[0].taskId, "old");
+  assert.ok(stats.previousContributions.every((c) => c.analystId === "analyst-1" && c.specialty === "simulation"));
+  assert.equal(stats.delaySummaries.find((s) => s.kind === "simulation").previousAverage, 7);
+  const empty = analytics.buildAnalystStats([baseTask, old], users, markets, { ...filters, comparisonRange: { from: "2024-06-01", to: "2024-06-30" } });
+  assert.equal(empty.previousTotal, 0);
+  assert.equal(empty.delaySummaries.find((s) => s.kind === "simulation").previousAverage, null);
+});
+
 test("counts old unnamed activities globally and matches configured Planner aliases", () => {
   const stats = analytics.buildAnalystStats([baseTask], users, markets, {
     from: "2026-05-01",

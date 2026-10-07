@@ -7,9 +7,9 @@ import { resolve } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 const require = createRequire(import.meta.url);
-async function bundled(sourcefile, suffix = '', plugins = []) {
+async function bundled(sourcefile, suffix = '', plugins = [], reactOverride = null) {
   const result = await build({ stdin: { contents: await readFile(sourcefile, 'utf8') + suffix, sourcefile: resolve(sourcefile), resolveDir: resolve(sourcefile, '..'), loader: sourcefile.endsWith('tsx') ? 'tsx' : 'ts' }, tsconfig: resolve('tsconfig.json'), bundle: true, packages: 'external', format: 'cjs', platform: 'node', write: false, plugins, logLevel: 'silent' });
-  const holder = { exports: {} }; new Function('require','module','exports',result.outputFiles[0].text)(require,holder,holder.exports); return holder.exports;
+  const holder = { exports: {} }; new Function('require','module','exports',result.outputFiles[0].text)((id) => id === 'react' && reactOverride ? reactOverride : require(id),holder,holder.exports); return holder.exports;
 }
 const rich = await bundled('lib/point-rich-content.ts');
 const comparison = await bundled('lib/simulation-comparison.ts');
@@ -80,4 +80,36 @@ test('uploaded attachments persist in object storage, require editor access and 
   const read = await asset.runWithRuntimeEnv(env,()=>asset.GET(new Request('https://site.test'+saved.url))); assert.equal(read.status,200); assert.match(read.headers.get('content-disposition'),/^attachment/); assert.equal(read.headers.get('content-type'),'application/octet-stream'); assert.equal(await read.text(),'hello');
   const unavailable = await asset.runWithRuntimeEnv({},()=>asset.POST(new Request('https://site.test/api/point-assets',{method:'POST',body:form}))); assert.equal(unavailable.status,503);
   delete globalThis.assetEditor;
+});
+
+const actualReact = require('react');
+let canvasHooks = { cursor: 0, slots: [] };
+const interactiveReact = { ...actualReact, useState(initial) { const index = canvasHooks.cursor++; if (!(index in canvasHooks.slots)) canvasHooks.slots[index] = typeof initial === 'function' ? initial() : initial; return [canvasHooks.slots[index], next => { canvasHooks.slots[index] = typeof next === 'function' ? next(canvasHooks.slots[index]) : next; }]; }, useRef(initial) { const index = canvasHooks.cursor++; return canvasHooks.slots[index] ??= { current: initial }; }, useMemo(fn) { return fn(); }, useEffect() {} };
+const interactiveCanvas = await bundled('features/market-pulse/market-pulse-app.tsx', '\nexport { PreviewDashboard };', [], interactiveReact);
+const treeNodes = (value) => Array.isArray(value) ? value.flatMap(treeNodes) : value && typeof value === 'object' ? [value, ...treeNodes(value.props?.children)] : [];
+test('context actions work without a global edit toggle and drop snaps before or after a block', () => {
+  canvasHooks = { cursor: 0, slots: [] };
+  const previousWindow = globalThis.window; globalThis.window = { innerWidth: 1400, innerHeight: 1000 };
+  try {
+    const data = app.initialData(market.id); data.operations = [{ id:'sim',name:'Simulation test',month:'Octobre 2026',state:'Faite',steps:[] }];
+    const moved = [];
+    const props = { data, market, archive:[], actions:{insertModule:(...args)=>moved.push(args)} };
+    const render = () => { canvasHooks.cursor = 0; return treeNodes(interactiveCanvas.PreviewDashboard(props)); };
+    let nodes = render();
+    assert.ok(nodes.some(n => n.props?.className === 'canvas-module-options'));
+    assert.ok(!nodes.some(n => n.type === 'input' && n.props['aria-label'] === 'Nom de la simulation'));
+    const event = { preventDefault(){},stopPropagation(){}, target:{closest(){return null;}},clientX:200,clientY:200 };
+    nodes.find(n => n.props?.['data-point-module'] === 'operations').props.onContextMenu(event);
+    nodes = render(); nodes.find(n => n.type === 'button' && n.props.children === 'Modifier le bloc').props.onClick();
+    nodes = render(); assert.ok(nodes.some(n => n.type === 'input' && n.props['aria-label'] === 'Nom de la simulation'));
+    nodes.find(n => n.props?.['aria-label'] === 'Déplacer Simulations').props.onDragStart({dataTransfer:{setData(){}}});
+    nodes = render();
+    nodes.find(n => n.props?.['data-point-module'] === 'jira').props.onDragOver({...event,clientY:180,currentTarget:{getBoundingClientRect(){return {top:0,height:200};}}});
+    nodes = render(); assert.ok(nodes.some(n => n.props?.className?.includes('canvas-grid-slot')));
+    nodes.find(n => n.props?.['data-point-module'] === 'jira').props.onDrop(event);
+    assert.deepEqual(moved, [['operations','dossiers']]);
+    canvasHooks = { cursor:0,slots:[] };
+    const publicTree = treeNodes(interactiveCanvas.PreviewDashboard({...props,actions:undefined}));
+    assert.ok(!publicTree.some(n => n.props?.className === 'canvas-module-options'));
+  } finally {globalThis.window = previousWindow;}
 });

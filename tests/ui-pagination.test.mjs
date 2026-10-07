@@ -70,7 +70,7 @@ test("supplier table renders only a page but keeps its full dataset in the stati
 
 test("analyst table pagination does not truncate KPI totals", async () => {
   const contribution = { taskId: "task", taskName: "Simulation exemple", purchases12m: 0, date: "2026-08-25", analystName: "Jane DOE", marketIds: [], marketTags: [], specialty: "simulation", stepLabel: "Simulation" };
-  const statsUrl = sourceUrl(`export function buildAnalystStats(){return {totalActivities:12491,distinctTasks:12491,simulations:12491,controls:0,coverageRate:1,movement:0,monthly:[],byAnalyst:[],delaySummaries:[],unmatchedNames:[],contributions:Array.from({length:12491},(_,index)=>({...${JSON.stringify(contribution)},taskId:String(index)}))}}`);
+  const statsUrl = sourceUrl(`export function buildAnalystStats(){return {totalActivities:12491,distinctTasks:12491,simulations:12491,controls:0,coverageRate:1,movement:0,previousTotal:0,previousContributions:[],monthly:[],byAnalyst:[],delaySummaries:[],unmatchedNames:[],contributions:Array.from({length:12491},(_,index)=>({...${JSON.stringify(contribution)},taskId:String(index)}))}}`);
   const { AnalystStatsDashboard } = await import(moduleUrl("../../features/market-pulse/analyst-stats-dashboard.tsx", {
     ...reactImports,
     "@/lib/analyst-stats": statsUrl,
@@ -78,9 +78,12 @@ test("analyst table pagination does not truncate KPI totals", async () => {
     "@/components/table-pagination": paginationUrl,
     "./planner-import-dialog": sourceUrl("export function PlannerImportDialog(){ return null; }"),
     "./supplier-variation-dashboard": supplierChartUrl,
+    "./activity-period-comparison": moduleUrl("../../features/market-pulse/activity-period-comparison.tsx", reactImports),
+    "./simulation-comparison": sourceUrl("export function SimulationComparison(){return null;}"),
+    "@/lib/simulation-comparison": sourceUrl("export function defaultComparison(){return {metric:\"count\"};}"),
   }));
   const html = renderToStaticMarkup(createElement(AnalystStatsDashboard, { tasks: [], users: [], markets: [], registry: {}, updatedAt: "", onImport() {} }));
-  const tbody = html.match(/<tbody>(.*?)<\/tbody>/s)?.[1];
+  const tbody = [...html.matchAll(/<tbody>(.*?)<\/tbody>/gs)].at(-1)?.[1];
   assert.equal((tbody.match(/<tr/g) ?? []).length, 100);
   assert.match(html, />12491 activités dans la sélection</);
   assert.match(html, />12491<\/strong>/);
