@@ -878,3 +878,5 @@ iframe {
   .point-conflict-dialog footer button { flex:1 1 100%; min-height:44px; }
   .draft-queue-state { flex-basis:100%; }
 }
+
+@media(max-width:700px){.report-module-grid>.report-module-item{grid-column:1/-1}}

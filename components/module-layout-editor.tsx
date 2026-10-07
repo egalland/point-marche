@@ -2,7 +2,7 @@
 
 import { useState, type DragEvent } from "react";
 
-export type ModuleWidth = "half" | "two-thirds" | "full";
+export type ModuleWidth = "quarter" | "half" | "three-quarters" | "two-thirds" | "full";
 
 type ModuleDefinition<T extends string> = {
   id: T;
