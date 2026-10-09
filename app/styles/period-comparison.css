@@ -1,0 +1,33 @@
+.stats-period-comparison { padding: 20px; margin: 16px 0; }
+.stats-period-comparison > header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.period-comparison-modes { display: flex; flex-wrap: wrap; gap: 6px; }
+.period-comparison-modes button, .canvas-priority-edit { padding: 9px 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 8px; font-size: .875rem; }
+.period-comparison-modes button.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.period-comparison-legend { display: flex; flex-wrap: wrap; gap: 18px; margin: 18px 0; font-size: .875rem; }
+.period-comparison-legend span { display: flex; align-items: center; gap: 7px; }
+.period-comparison-legend i { width: 12px; height: 12px; border-radius: 3px; }
+.period-a { background: #168fb4; }
+.period-b { background: #a470d2; }
+.period-comparison-bars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin: 16px 0 20px; }
+.period-comparison-bars > div { min-width: 0; padding: 14px; background: var(--surface-subtle); border-radius: 10px; }
+.period-comparison-bars strong { display: block; margin-bottom: 12px; font-size: .875rem; }
+.period-comparison-bars small { display: block; margin-top: 10px; color: var(--muted); }
+.period-bar-line { display: grid; grid-template-columns: 14px minmax(0, 1fr) 35px; gap: 8px; align-items: center; margin-top: 7px; font-size: .875rem; }
+.period-bar-line > div { height: 14px; background: var(--surface); border-radius: 4px; overflow: hidden; }
+.period-bar-line i { display: block; height: 100%; border-radius: 4px; }
+.period-bar-line b { text-align: right; }
+.period-b-fields { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 18px; }
+.period-b-fields label { display: grid; gap: 6px; font-size: .875rem; }
+.period-b-fields input { padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); }
+.stats-supplier-comparison { margin: 16px 0; padding: 18px; }
+.stats-supplier-comparison > summary { font-weight: 700; cursor: pointer; }
+.stats-supplier-comparison[open] > summary { margin-bottom: 18px; }
+.canvas-drag-handle { touch-action: none; }
+.report-module-grid > .canvas-inline-add { grid-column: 1 / -1; justify-self: start; }
+.report-module-grid.is-grid-dragging { background-image: repeating-linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, transparent) 0, color-mix(in srgb, var(--accent) 12%, transparent) calc(100% / 6 - 2px), transparent calc(100% / 6 - 2px), transparent calc(100% / 6)); background-size: 100% 100%; border-radius: 12px; }
+.report-module-item.is-drag-source { opacity: .4; }
+.canvas-grid-slot { min-height: 64px; display: flex; justify-content: center; align-items: center; padding: 14px; border: 2px dashed var(--accent); border-radius: 12px; background: var(--surface-subtle); color: var(--text); font-size: .875rem; pointer-events: auto; }
+.report-module-item.is-drop-after > .canvas-module-shell { outline: 2px solid var(--accent); outline-offset: 3px; }
+.report-priority .canvas-priority-edit { align-self: center; }
+@media (max-width: 1000px) { .period-comparison-bars { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .stats-period-comparison { padding: 14px; } .period-comparison-bars { grid-template-columns: minmax(0, 1fr); gap: 10px; } .period-b-fields > label { flex: 1; min-width: 130px; } .period-comparison-legend { flex-direction: column; gap: 8px; } }

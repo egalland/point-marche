@@ -1,0 +1,16 @@
+.local-startup { margin: 40px; color: var(--muted); font: 1rem/1.5 var(--font-sans); }
+.local-file-dialog { width: min(700px, calc(100vw - 32px)); }
+.local-file-status { display: grid; gap: 8px; padding: 18px 0; }
+.local-file-status strong { overflow-wrap: anywhere; font-size: 1rem; }
+.local-file-status > span, .local-file-options p { color: var(--muted); font-size: .875rem; line-height: 1.6; }
+.local-file-actions, .local-file-options > div { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+.local-file-actions kbd { font: .75rem var(--font-mono); opacity: .8; }
+.local-file-options { border-top: 1px solid var(--line); padding-top: 16px; }
+.local-file-options summary { margin-bottom: 16px; cursor: pointer; font-size: .9375rem; font-weight: 600; }
+.local-file-warning { margin-top: 14px; font-size: .875rem; line-height: 1.6; color: var(--peach); }
+.local-file-notice { display: flex; align-items: center; gap: 16px; max-width: min(560px, calc(100vw - 32px)); }
+.local-file-notice button { flex: 0 0 32px; min-height: 32px; color: inherit; background: transparent; border: 0; cursor: pointer; font-size: 1.25rem; }
+.local-file-failure { margin: 40px auto; max-width: 700px; padding: 28px; }
+.local-file-failure p { margin: 16px 0; color: var(--muted); }
+.local-file-failure > div { display: flex; gap: 12px; }
+@media print { .local-file-notice { display: none !important; } }
