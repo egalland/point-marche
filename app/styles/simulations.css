@@ -1,0 +1,91 @@
+.simulation-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin: 16px 0;
+}
+
+.simulation-metrics .supplier-turnover {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+.simulation-metrics .supplier-variation-missing { flex: 1 1 160px; margin: 0; }
+
+.supplier-sparkline {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  width: auto;
+  max-width: 100%;
+  min-height: 54px;
+  margin: 0;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.supplier-sparkline:hover { background: var(--accent-soft); }
+.supplier-sparkline:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+.supplier-mini-summary { display: grid; gap: 2px; min-width: 0; }
+.supplier-mini-summary > span { color: var(--muted); font-size: .875rem; line-height: 1.4; }
+.supplier-mini-summary > strong { color: var(--text); font-size: 1.125rem; font-weight: 700; line-height: 1.3; }
+.supplier-mini-summary > small { color: var(--muted); font-size: .75rem; line-height: 1.4; }
+.supplier-mini-open { color: var(--aqua); font-size: 1.125rem; }
+.supplier-mini-chart {
+  display: block;
+  flex: 0 0 120px;
+  width: 120px;
+  max-width: 120px;
+  height: 36px;
+  max-height: 36px;
+  overflow: hidden;
+  color: var(--aqua);
+}
+.supplier-mini-chart.weighted { color: var(--violet); }
+
+.simulation-steps { display: grid; gap: 0; margin-top: 14px; }
+.report-step {
+  gap: 12px;
+  min-height: 42px;
+  margin: 0;
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+}
+.report-step:first-child { border-radius: 8px 8px 0 0; }
+.report-step:last-child { border-bottom: 0; border-radius: 0 0 8px 8px; }
+.report-step > span {
+  min-width: 0;
+  color: var(--text);
+  font-size: max(.9375rem, var(--report-caption, .9375rem));
+  font-weight: 550;
+  line-height: 1.5;
+  text-transform: none;
+  overflow-wrap: anywhere;
+}
+.report-step > strong {
+  flex-shrink: 0;
+  font-size: max(.875rem, var(--report-caption, .875rem));
+  font-weight: 650;
+  line-height: 1.5;
+  text-transform: none;
+}
+
+@media (max-width: 540px) {
+  .simulation-metrics { gap: 10px 14px; }
+  .supplier-mini-chart { flex-basis: 96px; width: 96px; max-width: 96px; height: 32px; max-height: 32px; }
+  .supplier-sparkline { gap: 6px 8px; }
+  .report-step { padding: 8px 10px; }
+}
