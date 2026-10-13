@@ -77,19 +77,21 @@ assert.match(importCenter, /onManual/);
 assert.match(css, /\.meeting-edit-dialog/);
 assert.match(css, /\.market-comparison-grid/);
 const marketPoint = await readFile(resolve(root, 'features/market-pulse/market-pulse-app.tsx'), 'utf8');
-assert.match(marketPoint, /Modification active/);
-assert.match(marketPoint, /ModuleInsertion/);
-assert.match(marketPoint, /Modifiée? dans le point/);
-assert.match(marketPoint, /Valeur importée/);
-assert.match(marketPoint, /Promotions/);
-assert.match(marketPoint, /canvas-drag-handle/);
-assert.match(marketPoint, /point-layout-toolbar/);
-assert.match(marketPoint, /canvas-context-menu/);
-assert.match(marketPoint, /two-thirds/);
+assert.match(marketPoint, /V51/);
+const freeCanvas = await readFile(resolve(root, 'features/market-pulse/free-point-canvas.tsx'), 'utf8');
+assert.match(freeCanvas, /v51-stage/);
+assert.match(freeCanvas, /updateFreeLayout/);
+assert.match(freeCanvas, /gesture\(e,id,true\)/);
+assert.match(freeCanvas, /Aimantation/);
+const dossier = await readFile(resolve(root, 'features/market-pulse/dossier-board.tsx'), 'utf8');
+assert.match(dossier, /FloatingTools/);
+assert.match(dossier, /contentEditable/);
+assert.match(html, /v51-help-page/);
+assert.match(html, /V51/);
 assert.doesNotMatch(marketPoint, /planner-source-pill/);
 const navigation = await readFile(resolve(root, 'features/market-pulse/workspace-navigation.tsx'), 'utf8');
 assert.doesNotMatch(navigation, /Préparer le point/);
-const featurePaths = ['app/globals.css', 'app/styles/meeting.css', 'features/market-pulse/market-pulse-app.tsx', 'features/market-pulse/workspace-navigation.tsx', 'features/market-pulse/analyst-point-dashboard.tsx', 'features/market-pulse/import-center.tsx', 'features/market-pulse/source-mode-control.tsx', 'features/market-pulse/manual-analyst-jira.tsx', 'features/market-pulse/market-comparison.tsx', 'lib/analyst-point.ts', 'lib/analyst-point-export.ts', 'lib/market-simulation.ts', 'lib/point-source-mode.ts', 'lib/point-planner-enrichment.ts', 'lib/planner-registry.ts', 'lib/market-comparison.ts', 'lib/mail-draft.ts'];
+const featurePaths = ['app/globals.css', 'app/styles/meeting.css', 'features/market-pulse/market-pulse-app.tsx', 'features/market-pulse/workspace-navigation.tsx', 'features/market-pulse/analyst-point-dashboard.tsx', 'features/market-pulse/import-center.tsx', 'features/market-pulse/source-mode-control.tsx', 'features/market-pulse/manual-analyst-jira.tsx', 'features/market-pulse/market-comparison.tsx', 'lib/analyst-point.ts', 'lib/analyst-point-export.ts', 'lib/market-simulation.ts', 'lib/point-source-mode.ts', 'lib/point-planner-enrichment.ts', 'lib/planner-registry.ts', 'lib/market-comparison.ts', 'lib/mail-draft.ts', 'features/market-pulse/free-point-canvas.tsx', 'components/floating-tools.tsx', 'components/workspace-help.tsx', 'lib/free-point-layout.ts', 'lib/point-help.ts', 'app/styles/point-workspace-v51.css'];
 const featureSources = [];
 for (const path of featurePaths) featureSources.push({ path, sha256: sha(await readFile(resolve(root, path))) });
 const report = {
@@ -100,7 +102,7 @@ const report = {
   opensSharedApplication: true, separateWelcomeOrTopBar: false,
   data: data ? { embedded: true, markets: data.markets.length, people: data.users.length, marketPoints: data.points.length, analystPoints: data.analystPoints.length, plannerTasks: data.plannerTasks.length, jiraTickets: data.jiraTickets.length, jiraImports: data.jiraImports.length } : { embedded: false },
   sharedImportCenter: true, originalCsvRequired: false,
-  requestedFeatures: ['Direct editing in the market point with a guarded switch', 'Composable draggable point blocks and three widths', 'Separate manual promotions block', 'Final business state only for simulations', 'Persistent field overrides over Jira and Planner imports', 'Email draft with formatted body and HTML page attachment', 'Persistent manual source modes', 'Interactive optional market comparison pie chart', 'Font scale, density, theme and presentation toolbar', 'Undo, redo and keyboard shortcuts'],
+  requestedFeatures: ['Inline editing with floating tools', 'Free 2D point blocks with width and height, optional snapping', 'Separate manual promotions block', 'Final business state only for simulations', 'Persistent field overrides over Jira and Planner imports', 'Email draft with formatted body and HTML page attachment', 'Persistent manual source modes', 'Interactive optional market comparison pie chart', 'Font scale, density, theme and presentation toolbar', 'Undo, redo and keyboard shortcuts', 'Searchable illustrated help and contextual helpers'],
   featureSources,
   adaptations: ['File commands replace the server session action', 'Saving uses a local data file'],
   interactiveBrowserComparison: false,

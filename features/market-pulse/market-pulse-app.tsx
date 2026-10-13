@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceHelp } from "@/components/workspace-help";
 import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft, saveLocalFile, markPointSaved, hasUnsavedSessionDrafts, configureHostedDrafts, loadPointDraft, preparePointSave, finishPointSave, hostedPointDrafts } from "@/lib/app-transport";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type ReactNode } from "react";
 import { normalizeJiraRules } from "@/lib/jira-alert-rules";
@@ -1020,6 +1021,7 @@ function MarketPulseWorkspace() {
     hideModule: hideCanvasModule,
     moveModule: moveCanvasModule,
     updateModuleWidth,
+    updateFreeLayout: (freeLayout) => setData((current) => ({ ...current, preferences: { ...current.preferences, freeLayout } })),
     resetLayout: resetCanvasLayout,
   };
 
@@ -1039,7 +1041,7 @@ function MarketPulseWorkspace() {
     <a className="skip-link" href="#workspace-content">Aller au contenu</a>
     <WorkspaceNavigation view={view} userName={session.user?.displayName ?? null} onSelect={chooseView}/>
     <header className="app-header">
-      <div className="workspace-location"><span>Espace de travail</span><strong>{workspaceTitles[view]} <small className="app-version">V50</small></strong></div>
+      <WorkspaceHelp/><div className="workspace-location"><span>Espace de travail</span><strong>{workspaceTitles[view]} <small className="app-version">V51</small></strong></div>
       <div className="header-actions">
         {session.user && <DraftQueueStatus/>}
         <AppearanceControl/>
