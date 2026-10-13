@@ -1,6 +1,13 @@
-# Market Pulse — points marché et analystes
+# Projet Point marché
 
 Application de préparation, présentation et diffusion des points hebdomadaires GLOBAL. Le site et l’application HTML autonome utilisent les mêmes composants React, styles et règles métier.
+
+## Dossier de projet
+
+
+Sources de la V51, développée à partir de la V50. La cible HTML autonome sur le réseau interne et les adaptations restantes sont décrites dans le dossier. PURCHASES et la synchronisation multi-utilisateur sur fichiers réseau ne constituent pas des fonctions livrées de cette cible.
+
+Le répertoire technique historique `features/market-pulse/` est conservé pour préserver les imports du code. Le nom du projet est « Projet Point marché ».
 
 ## Utilisation
 
@@ -15,7 +22,7 @@ Sur le site, les brouillons marché et analyste se sauvegardent automatiquement 
 
 Le compte GLOBAL est commun : les personnes connectées partagent les brouillons du compte. Les brouillons ne sont jamais affichés dans la lecture publique. Les dates du bandeau indiquent les imports effectivement utilisés dans le point ; une date historique inconnue reste inconnue.
 
-L’export autonome reste à la livraison du 8 septembre antérieure à cette évolution du site. Il n’est pas recompilé pendant cette phase. Les fichiers `.marketpulse.json` et la récupération locale conservent leur fonctionnement.
+L’export autonome a été recompilé pour la V51 avec la disposition libre et l’aide intégrée. Les fichiers `.marketpulse.json` et la récupération locale conservent leur fonctionnement.
 
 ## Structure
 
@@ -44,3 +51,10 @@ L’export sans données initiales ouvre une application vide, prête pour les i
 Voir `docs/review-20260908.md` pour les corrections de la revue complète.
 
 Voir `docs/site-drafts-20260908.md` pour le fonctionnement des brouillons persistants et des conflits.
+
+## V51 — interface et aide
+
+Disposition libre sur deux axes, aimantation facultative, édition avec palette flottante et menu de bloc, helpers et manuel illustré de 24 chapitres avec recherche. Voir [les changements et limites](docs/v51.md) et [le mode opératoire](docs/Mode_Operatoire_V51.md). La page `/aide` permet d’ouvrir le manuel.
+
+Validation : 216 tests passants, TypeScript, build Worker et vérification du HTML autonome. Rendu navigateur et Outlook non vérifié dans cet environnement.
+

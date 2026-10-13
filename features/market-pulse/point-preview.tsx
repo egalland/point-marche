@@ -1,6 +1,7 @@
 "use client";
-import { GRID_WIDTHS, moduleColumns, resizeMovesOtherBlocks } from "@/lib/point-grid";
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { FreePointCanvas } from "./free-point-canvas";
+import type { FreeLayout } from "@/lib/free-point-layout";
+import { useMemo, useState, type ReactNode } from "react";
 import { DossierBoard } from "./dossier-board";
 import { SimulationComparison } from "./simulation-comparison";
 import { JiraRulesEditor } from "./jira-rules-editor";
@@ -86,6 +87,7 @@ function JiraCommandCenter({ data, archive, market, editing = false, onUpdate, o
 }
 
 export type PointCanvasActions = {
+  updateFreeLayout?: (layout: FreeLayout) => void;
   updatePriority: (value: string) => void;
   updateDossier: (id: string, patch: Partial<Dossier>) => void;
   addDossier: () => void;
@@ -121,17 +123,10 @@ export function PreviewDashboard({ data, market, archive, editing = false, actio
   const modules = data.preferences.readModules;
   const canManage = Boolean(actions);
   const [priorityEditing, setPriorityEditing] = useState(false);
-  const [dropAfter, setDropAfter] = useState(false);
-  const [libraryOpen, setLibraryOpen] = useState(false);
-  const [blockedResize, setBlockedResize] = useState<{ module: PointModule; width: ModuleWidth } | null>(null);
   const [activeDossier, setActiveDossier] = useState<string | null>(null);
   const [editingModule, setEditingModule] = useState<PointModule | null>(null);
   const alerts = useMemo(() => buildAlerts(data, market), [data, market]);
   const [alertFilter, setAlertFilter] = useState<"all" | "danger">("all");
-  const [selectedModule, setSelectedModule] = useState<PointModule | null>(null);
-  const [draggedModule, setDraggedModule] = useState<PointModule | null>(null);
-  const [dropModule, setDropModule] = useState<PointModule | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ module: PointModule; x: number; y: number } | null>(null);
   const visibleAlerts = alerts.filter((item) => alertFilter === "all" || item.severity === "danger");
   const currentMonth = calendarMonthLabel(monthStart(data.meetingDate));
   const followingMonth = calendarMonthLabel(shiftMonth(monthStart(data.meetingDate), 1));
@@ -147,101 +142,11 @@ export function PreviewDashboard({ data, market, archive, editing = false, actio
   });
   const content = blockContent(editing);
   if (editingModule && canManage) content[editingModule] = blockContent(true)[editingModule];
-  const visibleModules = data.preferences.moduleOrder.filter((module) => modules[module]);
-  const hiddenModules = data.preferences.moduleOrder.filter((module) => !modules[module]);
-  useEffect(() => {
-    if (canManage) return;
-    const timer = window.setTimeout(() => { setSelectedModule(null); setContextMenu(null); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [canManage]);
-  useEffect(() => {
-    if (!canManage || !actions) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable='true'], [role='dialog']")) return;
-      if (event.key === "Escape") { setSelectedModule(null); setContextMenu(null); return; }
-      if (!selectedModule) return;
-      if ((event.key === "Delete" || event.key === "Backspace") && !event.altKey && !event.ctrlKey && !event.metaKey) {
-        event.preventDefault(); actions.hideModule(selectedModule); setSelectedModule(null); return;
-      }
-      if (!event.altKey) return;
-      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-        event.preventDefault(); actions.moveModule(selectedModule, event.key === "ArrowUp" ? -1 : 1); return;
-      }
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        event.preventDefault();
-        const widths = GRID_WIDTHS;
-        const current = widths.indexOf(data.preferences.moduleWidths[selectedModule]);
-        const next = Math.max(0, Math.min(widths.length - 1, current + (event.key === "ArrowLeft" ? -1 : 1)));
-        requestWidth(selectedModule, widths[next]);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [actions, data.preferences.moduleWidths, canManage, selectedModule]);
-  const requestWidth = (module: PointModule, width: ModuleWidth) => {
-    if (!actions) return;
-    if (resizeMovesOtherBlocks(visibleModules, data.preferences.moduleWidths, module, width)) {
-      setBlockedResize({ module, width }); return;
-    }
-    setBlockedResize(null); actions.updateModuleWidth(module, width);
-  };
-  const beginResize = (event: ReactPointerEvent<HTMLButtonElement>, module: PointModule) => {
-    if (!actions) return;
-    event.preventDefault(); event.stopPropagation(); touchCleanup.current?.();
-    const grid = event.currentTarget.closest(".report-module-grid")?.getBoundingClientRect();
-    if (!grid) return;
-    const initialX = event.clientX, initial = moduleColumns(data.preferences.moduleWidths[module]);
-    let width = data.preferences.moduleWidths[module];
-    const move = (e: PointerEvent) => {
-      const columns = Math.max(1, Math.min(4, initial + Math.round((e.clientX - initialX) / (grid.width / 4))));
-      width = GRID_WIDTHS[columns - 1];
-      setBlockedResize({ module, width });
-    };
-    const cleanup = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); touchCleanup.current = null; };
-    const finish = () => { cleanup(); requestWidth(module, width); };
-    const cancel = () => { cleanup(); setBlockedResize(null); };
-    touchCleanup.current = cleanup;
-    window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish, { once: true }); window.addEventListener("pointercancel", cancel, { once: true });
-  };
-  const moduleLabel = (module: PointModule) => pointModules.find((item) => item.id === module)?.label ?? module;
-  const touchCleanup = useRef<(() => void) | null>(null);
-  useEffect(() => () => touchCleanup.current?.(), []);
-  const beginTouchDrag = (event: ReactPointerEvent<HTMLButtonElement>, module: PointModule) => {
-    if (event.pointerType === "mouse" || !actions) return;
-    event.preventDefault(); event.stopPropagation(); touchCleanup.current?.();
-    setDraggedModule(module); setSelectedModule(module); setContextMenu(null);
-    let destination: PointModule | null = null, after = false;
-    const move = (e: PointerEvent) => {
-      e.preventDefault();
-      const node = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-point-module]");
-      const id = node?.dataset.pointModule as PointModule | undefined;
-      if (node && id && id !== module) { const box = node.getBoundingClientRect(); destination = id; after = e.clientY > box.top + box.height / 2; setDropModule(id); setDropAfter(after); }
-      if (e.clientY < 90) window.scrollBy(0, -16); else if (e.clientY > window.innerHeight - 90) window.scrollBy(0, 16);
-    };
-    const cleanup = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); setDraggedModule(null); setDropModule(null); touchCleanup.current = null; };
-    const finish = () => { if (destination) { const before = after ? visibleModules[visibleModules.indexOf(destination) + 1] ?? null : destination; if (before !== module) actions.insertModule(module, before); } cleanup(); };
-    const cancel = () => cleanup();
-    touchCleanup.current = cleanup;
-    window.addEventListener("pointermove", move, { passive: false }); window.addEventListener("pointerup", finish, { once: true }); window.addEventListener("pointercancel", cancel, { once: true });
-  };
-  const dropPreview = draggedModule ? <div className={`canvas-grid-slot report-module-item width-${data.preferences.moduleWidths[draggedModule]}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { if (!actions || !dropModule) return; event.preventDefault(); event.stopPropagation(); const before = dropAfter ? visibleModules[visibleModules.indexOf(dropModule) + 1] ?? null : dropModule; if (before !== draggedModule) actions.insertModule(draggedModule, before); setDraggedModule(null); setDropModule(null); }} aria-hidden="true">{moduleLabel(draggedModule)} · déposer {dropAfter ? "après" : "avant"}</div> : null;
-  const moduleToolbar = (module: PointModule) => canManage && actions ? <div className="canvas-module-toolbar" aria-label={`Mise en page du bloc ${moduleLabel(module)}`}>
-    <button type="button" className="canvas-drag-handle" onPointerDown={(event) => beginTouchDrag(event, module)} draggable title="Faire glisser le bloc" aria-label={`Déplacer ${moduleLabel(module)}`} onDragStart={(event) => { setDraggedModule(module); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", module); }} onDragEnd={() => { setDraggedModule(null); setDropModule(null); }}>⋮⋮</button>
-    <span className="canvas-module-label">{moduleLabel(module)}</span>{editingModule === module && <button type="button" className="canvas-edit-done" onClick={() => { setEditingModule(null); setActiveDossier(null); }}>Revenir à la lecture</button>}
-    <button type="button" className="canvas-module-options" aria-haspopup="menu" aria-expanded={contextMenu?.module === module} title="Ordre, largeur et visibilité" aria-label={`Options de mise en page pour ${moduleLabel(module)}`} onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); setSelectedModule(module); setContextMenu((current) => current?.module === module ? null : { module, x: Math.max(8, Math.min(rect.right - 230, window.innerWidth - 238)), y: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 420)) }); }}>•••</button>
-  </div> : null;
-  return <div className={`report-canvas ${canManage && libraryOpen ? "has-block-library" : ""}`} onClick={() => setContextMenu(null)} onContextMenu={(event) => { if (!actions || (event.target as HTMLElement).closest("a,input,textarea,select,[contenteditable]")) return; event.preventDefault(); setLibraryOpen(true); }}><div className="report-ambient report-ambient-one"/><div className="report-ambient report-ambient-two"/>
-    {canManage && actions && <><button type="button" className="block-library-toggle" aria-expanded={libraryOpen} onClick={() => setLibraryOpen(!libraryOpen)}>{libraryOpen ? "Fermer la structure" : "Structure du point"}</button>{libraryOpen && <aside className="block-library structure-dock" aria-label="Structure du point"><header><strong>Structure du point</strong><button type="button" aria-label="Fermer la structure" onClick={() => setLibraryOpen(false)}>×</button></header><p>Grille de 4 colonnes. Choisis la position et la largeur des blocs.</p><ol className="structure-tree">{visibleModules.map((module, index) => <li key={module} className={selectedModule === module ? "active" : ""} onDragOver={(event) => { if (draggedModule && draggedModule !== module) { event.preventDefault(); setDropModule(module); setDropAfter(false); } }} onDrop={(event) => { if (!draggedModule || draggedModule === module) return; event.preventDefault(); actions.insertModule(draggedModule, module); setDraggedModule(null); setDropModule(null); }}><div className="structure-row"><button type="button" draggable className="structure-drag" aria-label={`Déplacer ${moduleLabel(module)} dans la structure`} onDragStart={(event) => { setDraggedModule(module); event.dataTransfer.setData("text/plain", module); }} onDragEnd={() => { setDraggedModule(null); setDropModule(null); }}>⋮⋮</button><button type="button" className="structure-name" onClick={() => { setSelectedModule(module); document.querySelector(`[data-point-module="${module}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }); }}>{moduleLabel(module)}</button><button type="button" className="structure-edit" aria-label={`Modifier ${moduleLabel(module)}`} onClick={() => { setSelectedModule(module); setEditingModule(module); }}>•••</button></div><div className="structure-row-settings"><label>Position<select aria-label={`Position ${moduleLabel(module)}`} value={index} onChange={(event) => { const others = visibleModules.filter((id) => id !== module); actions.insertModule(module, others[Number(event.target.value)] ?? null); }}>{visibleModules.map((_, i) => <option key={i} value={i}>{i + 1}</option>)}</select></label><label>Largeur<select aria-label={`Largeur ${moduleLabel(module)}`} value={data.preferences.moduleWidths[module]} onChange={(event) => requestWidth(module, event.target.value as ModuleWidth)}><option value="full">Entière</option><option value="three-quarters">3/4</option><option value="half">1/2</option><option value="quarter">1/4</option></select></label></div></li>)}</ol><details className="structure-add"><summary>Ajouter un bloc</summary>{hiddenModules.map((module) => <button type="button" key={module} onClick={() => { actions.insertModule(module, null); setSelectedModule(module); }}>{moduleLabel(module)}</button>)}<button type="button" onClick={actions.addDossier}>Nouveau dossier</button></details></aside>}</>}
-
-    {blockedResize && actions && <div className="canvas-resize-notice" role="status"><span>{moduleLabel(blockedResize.module)} · {moduleColumns(blockedResize.width)}/4 — les autres blocs restent en place.</span><button type="button" onClick={() => { actions.updateModuleWidth(blockedResize.module, blockedResize.width); setBlockedResize(null); }}>Appliquer et réorganiser</button><button type="button" onClick={() => setBlockedResize(null)}>Annuler</button></div>}
+  return <div className="report-canvas"><div className="report-ambient report-ambient-one"/><div className="report-ambient report-ambient-two"/>
     <header className="report-hero"><div><div className="market-badge"><i/> MARKET PULSE <b>/</b> {market.short}</div><h1>Point marché</h1><p><strong>{market.name}</strong><span>Dossiers · simulations · promotions · Jira</span></p></div><div className="week-card"><strong><small>{isoWeekYear(data.meetingDate)} ·</small>S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong><i/><div><b>{dateLabel(data.meetingDate)}</b><span>Année et semaine ISO</span></div></div></header>
     <section className={`report-priority ${priorityEditing ? "is-inline-editing" : ""}`} onContextMenu={(event) => { if (!actions) return; event.preventDefault(); event.stopPropagation(); setPriorityEditing(true); }}><span>Priorité de la semaine</span>{priorityEditing && actions ? <><textarea autoFocus aria-label="Priorité de la semaine" value={data.priority} onChange={(event) => actions.updatePriority(event.target.value)}/><button type="button" onClick={() => setPriorityEditing(false)}>Terminer</button></> : <><strong>{data.priority || "Aucune priorité renseignée."}</strong>{actions && <button type="button" className="canvas-priority-edit" onClick={() => setPriorityEditing(true)}>Modifier</button>}</>}</section>
 
-    <div className={`report-module-grid ${canManage ? "is-inline-editing" : ""} ${draggedModule ? "is-grid-dragging" : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { if (!actions || !draggedModule || dropModule) return; event.preventDefault(); actions.insertModule(draggedModule, null); setDraggedModule(null); }}>
-      {visibleModules.map((module) => <Fragment key={module}>{dropModule === module && !dropAfter && draggedModule !== module && dropPreview}<div data-point-module={module} className={`report-module-item ${editingModule === module ? "is-block-editing" : ""} width-${data.preferences.moduleWidths[module]} ${selectedModule === module ? "is-selected" : ""} ${dropModule === module ? (dropAfter ? "is-drop-after" : "is-drop-target") : ""} ${draggedModule === module ? "is-drag-source" : ""}`} onClick={(event) => { if (canManage) { event.stopPropagation(); setSelectedModule(module); setContextMenu(null); } }} tabIndex={canManage ? 0 : undefined} onKeyDown={(event) => { if (canManage && actions && event.key === "F10" && event.shiftKey) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setContextMenu({ module, x: Math.max(8, Math.min(box.left, window.innerWidth - 245)), y: Math.max(8, Math.min(box.top, window.innerHeight - 420)) }); } }} onContextMenu={(event) => { if (!canManage || !actions || (event.target as HTMLElement).closest("input,textarea,select,[contenteditable]")) return; event.preventDefault(); event.stopPropagation(); setSelectedModule(module); setContextMenu({ module, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 245)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 420)) }); }} onDragEnter={(event) => { if (!canManage || !draggedModule || draggedModule === module) return; event.preventDefault(); setDropModule(module); }} onDragOver={(event) => { if (canManage && draggedModule) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setDropModule(module); setDropAfter(event.clientY > box.top + box.height / 2); } }} onDragLeave={(event) => { if (!(event.relatedTarget instanceof HTMLElement && event.relatedTarget.closest(".canvas-grid-slot")) && !event.currentTarget.contains(event.relatedTarget as Node)) setDropModule((current) => current === module ? null : current); }} onDrop={(event) => { if (!actions || !draggedModule || draggedModule === module) return; event.preventDefault(); event.stopPropagation(); const index = visibleModules.indexOf(module); const before = dropAfter ? visibleModules[index + 1] ?? null : module; if (before !== draggedModule) actions.insertModule(draggedModule, before); setDraggedModule(null); setDropModule(null); }}><div className="canvas-module-shell">{moduleToolbar(module)}{editingModule === module && actions && (module === "jira" || module === "operations") && <div className="canvas-source-controls"><span>Source {module === "jira" ? "Jira" : "simulations"}</span><div>{(["automatic", "manual"] as const).map((mode) => <button type="button" key={mode} className={(module === "jira" ? data.jiraMode : data.plannerMode) === mode ? "active" : ""} onClick={() => actions.setSourceMode(module === "jira" ? "jira" : "planner", mode)}>{mode === "automatic" ? "Import" : "Manuel"}</button>)}</div></div>}{content[module]}{canManage && <button type="button" className="canvas-resize-handle" aria-label={`Redimensionner ${moduleLabel(module)}`} title="Glisser pour redimensionner sur la grille" onPointerDown={(event) => beginResize(event, module)} onClick={(event) => { event.stopPropagation(); const next = GRID_WIDTHS[Math.min(3, moduleColumns(data.preferences.moduleWidths[module]))]; requestWidth(module, next); }}>↔</button>}</div></div>{dropModule === module && dropAfter && draggedModule !== module && dropPreview}</Fragment>)}
-    </div>
-    {contextMenu && canManage && actions && <div className="canvas-context-menu" role="menu" aria-label={`Actions pour ${moduleLabel(contextMenu.module)}`} style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}><strong>{moduleLabel(contextMenu.module)}</strong><button type="button" onClick={() => { setEditingModule(editingModule === contextMenu.module ? null : contextMenu.module); setActiveDossier(null); setContextMenu(null); }}>{editingModule === contextMenu.module ? "Revenir à la lecture" : "Modifier le bloc"}</button><button type="button" onClick={() => { actions.moveModule(contextMenu.module, -1); setContextMenu(null); }}>↑ Monter</button><button type="button" onClick={() => { actions.moveModule(contextMenu.module, 1); setContextMenu(null); }}>↓ Descendre</button><div className="canvas-context-width"><span>Largeur</span>{GRID_WIDTHS.map((width) => <button key={width} type="button" className={data.preferences.moduleWidths[contextMenu.module] === width ? "active" : ""} onClick={() => requestWidth(contextMenu.module, width)}>{`${moduleColumns(width)}/4`}</button>)}</div>{hiddenModules.length > 0 && <><label>Ajouter avant<select defaultValue="" onChange={(event) => { const moduleId = event.target.value as PointModule; if (moduleId) actions.insertModule(moduleId, contextMenu.module); setContextMenu(null); }}><option value="">Choisir…</option>{hiddenModules.map((module) => <option key={module} value={module}>{moduleLabel(module)}</option>)}</select></label><label>Ajouter après<select defaultValue="" onChange={(event) => { const moduleId = event.target.value as PointModule; if (moduleId) { const index = data.preferences.moduleOrder.indexOf(contextMenu.module); actions.insertModule(moduleId, data.preferences.moduleOrder[index + 1] ?? null); } setContextMenu(null); }}><option value="">Choisir…</option>{hiddenModules.map((module) => <option key={module} value={module}>{moduleLabel(module)}</option>)}</select></label></>}<button type="button" className="danger" onClick={() => { actions.hideModule(contextMenu.module); setSelectedModule(null); setContextMenu(null); }}>Supprimer du point</button><button type="button" onClick={() => { actions.resetLayout(); setContextMenu(null); }}>Réinitialiser la structure</button></div>}
+    <FreePointCanvas data={data} content={content} actions={actions} editingModule={editingModule} onEdit={(module) => { setEditingModule(module); if (module === "dossiers") setActiveDossier(data.dossiers[0]?.id ?? null); }}/>
     <footer className="report-footer"><span>Market Pulse · {market.name}</span><span>Point marché · {isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</span></footer>
   </div>;
 }
