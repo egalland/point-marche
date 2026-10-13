@@ -5,7 +5,7 @@ import postcss from "postcss";
 
 const globals = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const mobileSource = readFileSync(new URL("../app/styles/mobile.css", import.meta.url), "utf8");
-const appSource = readFileSync(new URL("../features/market-pulse/point-preview.tsx", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("../features/market-pulse/free-point-canvas.tsx", import.meta.url), "utf8");
 
 test("loads the shared mobile layer last and keeps every responsive selector valid", () => {
   const imports = [...globals.matchAll(/@import\s+["']([^"']+)["']/g)].map((match) => match[1]);
@@ -18,7 +18,7 @@ test("loads the shared mobile layer last and keeps every responsive selector val
 });
 
 test("mobile point editing keeps one touch-friendly layout control", () => {
-  assert.match(appSource, /className="canvas-module-options"/);
+  assert.match(appSource, /className="v51-block-tools"/);
   assert.match(appSource, /aria-haspopup="menu"/);
   assert.doesNotMatch(appSource, /className="surface market-layout-settings"/);
   assert.doesNotMatch(appSource, /<ModuleLayoutEditor modules=\{pointModules\}/);

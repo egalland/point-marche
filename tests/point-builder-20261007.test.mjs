@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const require = createRequire(import.meta.url);
 async function bundled(sourcefile, suffix = '', plugins = [], reactOverride = null) {
   const result = await build({ stdin: { contents: await readFile(sourcefile, 'utf8') + suffix, sourcefile: resolve(sourcefile), resolveDir: resolve(sourcefile, '..'), loader: sourcefile.endsWith('tsx') ? 'tsx' : 'ts' }, tsconfig: resolve('tsconfig.json'), bundle: true, packages: 'external', format: 'cjs', platform: 'node', write: false, plugins, logLevel: 'silent' });
-  const holder = { exports: {} }; new Function('require','module','exports',result.outputFiles[0].text)((id) => id === 'react' && reactOverride ? reactOverride : require(id),holder,holder.exports); return holder.exports;
+  const holder = { exports: {} }; new Function('require','module','exports',result.outputFiles[0].text)((id) => id === 'react' && reactOverride ? reactOverride : id === 'react-dom' && reactOverride ? {createPortal: children=>children} : require(id),holder,holder.exports); return holder.exports;
 }
 const rich = await bundled('lib/point-rich-content.ts');
 const comparison = await bundled('lib/simulation-comparison.ts');
@@ -66,8 +66,8 @@ test('rich dossiers, comparative snapshot and rules survive point normalization 
   const data = app.normalizePointData({...base,simulationComparisonConfig:config,simulationComparisonSnapshot:snapshot,jiraAlertRules:[{id:'r',subcategory:'Flux',warningDays:2,criticalDays:5}],dossiers:[{id:'d',title:'Décision',status:'En cours',richHtml:'<p><strong>Texte enrichi</strong></p>',attachments:[]}],preferences:{...base.preferences,moduleOrder:['dossiers','simulationComparison','jira','operations','promotions','alerts','comparison'],readModules:{...base.preferences.readModules,simulationComparison:true,jira:false},mailModules:{...base.preferences.mailModules,jira:true,simulationComparison:false}}},market.id,market);
   assert.match(data.dossiers[0].richHtml,/<strong>/); assert.equal(data.jiraAlertRules[0].warningDays,2); assert.equal(data.simulationComparisonSnapshot.totalA,1);
   for (const html of [app.buildMailHtml(data,market,[]),app.buildInteractiveHtml(data,market,[])]) { assert.match(html,/Texte enrichi/); assert.match(html,/Comparatif des simulations/); assert.doesNotMatch(html,/Tickets Jira ·/); assert.ok(html.indexOf('Décision') < html.indexOf('Comparatif des simulations')); }
-  const ui = renderToStaticMarkup(createElement(app.PreviewDashboard,{data,market,archive:[],tasks:[],markets:[market],editing:true,actions:{}}));
-  assert.match(ui,/Structure du point/); assert.match(ui,/Modifier/);
+  const ui = renderToStaticMarkup(createElement(app.PreviewDashboard,{data,market,archive:[],tasks:[],markets:[market],editing:true,actions:{updateFreeLayout(){}}}));
+  assert.match(ui,/Ajouter un bloc/); assert.match(ui,/Modifier/);
 });
 const asset = await bundled('app/api/point-assets/route.ts', '\nexport { runWithRuntimeEnv } from "../../../lib/runtime-env";', [{ name:'auth-fixture', setup(build) { build.onLoad({filter:/app\/simple-auth\.ts$/},()=>({contents:'export async function getEditorUser(){return globalThis.assetEditor ?? null}',loader:'ts'})); } }]);
 test('uploaded attachments persist in object storage, require editor access and download as files', async () => {
@@ -88,36 +88,15 @@ let canvasHooks = { cursor: 0, slots: [] };
 const interactiveReact = { ...actualReact, useState(initial) { const index = canvasHooks.cursor++; if (!(index in canvasHooks.slots)) canvasHooks.slots[index] = typeof initial === 'function' ? initial() : initial; return [canvasHooks.slots[index], next => { canvasHooks.slots[index] = typeof next === 'function' ? next(canvasHooks.slots[index]) : next; }]; }, useRef(initial) { const index = canvasHooks.cursor++; return canvasHooks.slots[index] ??= { current: initial }; }, useMemo(fn) { return fn(); }, useEffect() {} };
 const interactiveCanvas = await bundled('features/market-pulse/market-pulse-app.tsx', '\nexport { PreviewDashboard };', [], interactiveReact);
 const treeNodes = (value) => Array.isArray(value) ? value.flatMap(treeNodes) : value && typeof value === 'object' ? [value, ...treeNodes(value.props?.children)] : [];
-test('context actions work without a global edit toggle and drop snaps before or after a block', () => {
-  canvasHooks = { cursor: 0, slots: [] };
-  const previousWindow = globalThis.window; globalThis.window = { innerWidth: 1400, innerHeight: 1000 };
-  try {
-    const data = app.initialData(market.id); data.operations = [{ id:'sim',name:'Simulation test',month:'Octobre 2026',state:'Faite',steps:[] }];
-    const moved = [];
-    const props = { data, market, archive:[], actions:{insertModule:(...args)=>moved.push(args)} };
-    const render = () => { canvasHooks.cursor = 0; return treeNodes(interactiveCanvas.PreviewDashboard(props)); };
-    let nodes = render();
-    assert.ok(nodes.some(n => n.props?.className === 'canvas-module-options'));
-    assert.ok(!nodes.some(n => n.type === 'input' && n.props['aria-label'] === 'Nom de la simulation'));
-    const event = { preventDefault(){},stopPropagation(){}, target:{closest(){return null;}},clientX:200,clientY:200 };
-    nodes.find(n => n.props?.['data-point-module'] === 'operations').props.onContextMenu(event);
-    nodes = render(); nodes.find(n => n.type === 'button' && n.props.children === 'Modifier le bloc').props.onClick();
-    nodes = render();
-    const inlineModule = nodes.find(n => n.props?.['data-point-module'] === 'operations');
-    assert.ok(treeNodes(inlineModule).some(n => n.type === 'input' && n.props['aria-label'] === 'Nom de la simulation'));
-    assert.ok(!nodes.some(n => n.type?.name === 'AppDialog'));
-    nodes.find(n => n.props?.className === 'canvas-edit-done').props.onClick();
-    nodes = render(); assert.ok(!nodes.some(n => n.type === 'input' && n.props['aria-label'] === 'Nom de la simulation'));
-    nodes.find(n => n.props?.['aria-label'] === 'Déplacer Simulations').props.onDragStart({dataTransfer:{setData(){}}});
-    nodes = render();
-    nodes.find(n => n.props?.['data-point-module'] === 'jira').props.onDragOver({...event,clientY:180,currentTarget:{getBoundingClientRect(){return {top:0,height:200};}}});
-    nodes = render(); assert.ok(nodes.some(n => n.props?.className?.includes('canvas-grid-slot')));
-    nodes.find(n => n.props?.['data-point-module'] === 'jira').props.onDrop(event);
-    assert.deepEqual(moved, [['operations','dossiers']]);
-    canvasHooks = { cursor:0,slots:[] };
-    const publicTree = treeNodes(interactiveCanvas.PreviewDashboard({...props,actions:undefined}));
-    assert.ok(!publicTree.some(n => n.props?.className === 'canvas-module-options'));
-  } finally {globalThis.window = previousWindow;}
+const freeCanvas = await bundled('features/market-pulse/free-point-canvas.tsx','',[],interactiveReact);
+test('V51 édition sur place et menu sans modifier la disposition',()=>{
+ canvasHooks={cursor:0,slots:[]}; const data=app.initialData(market.id),edits=[],writes=[];
+ const props={data,content:{},actions:{updateFreeLayout:l=>writes.push(l)},editingModule:null,onEdit:id=>edits.push(id)};
+ const render=()=>{canvasHooks.cursor=0;return treeNodes(freeCanvas.FreePointCanvas(props));};
+ let nodes=render();const before=nodes.find(n=>n.props?.['data-point-module']==='operations').props.style;
+ nodes.find(n=>n.props?.['aria-label']==='Modifier Simulations').props.onClick();
+ assert.deepEqual(edits,['operations']);assert.equal(writes.length,0);nodes=render();assert.deepEqual(nodes.find(n=>n.props?.['data-point-module']==='operations').props.style,before);
+ canvasHooks={cursor:0,slots:[]};assert.ok(!treeNodes(freeCanvas.FreePointCanvas({...props,actions:undefined})).some(n=>n.props?.className==='v51-block-tools'));
 });
 
 const dossierUi = await bundled('features/market-pulse/dossier-board.tsx', '\nexport { DossierEditor };', [], interactiveReact);
@@ -126,7 +105,8 @@ test('editing a dossier keeps the rich editor inside its publication card', () =
   const row = {id:'inline',title:'Dossier',status:'En cours',universe:'',reference:'',owner:'',action:'Texte',comment:'',deadline:'',progress:0};
   const props = {items:[row],editing:true,onUpdate(){}};
   const render = () => {canvasHooks.cursor = 0;return treeNodes(dossierUi.DossierBoard(props));};
-  let nodes = render(); nodes.find(n => n.props?.id === 'dossier-inline').props.onDoubleClick();
+  const previousDocument=globalThis.document;globalThis.document={getElementById(){return null;}};
+  let nodes = render(); nodes.find(n => n.props?.id === 'dossier-inline').props.onDoubleClick();globalThis.document=previousDocument;
   nodes = render(); const card = nodes.find(n => n.props?.id === 'dossier-inline');
   const editor = treeNodes(card).find(n => n.type?.name === 'DossierEditor');
   assert.ok(editor); assert.ok(!nodes.some(n => n.type?.name === 'AppDialog'));
@@ -151,20 +131,12 @@ test('formatted dossier titles persist in normalization, mail and page exports',
   for (const html of [app.buildMailHtml(data,market,[]), app.buildInteractiveHtml(data,market,[])]) assert.match(html, /font-size:24px;color:#123456/);
 });
 
-test('a resize that displaces another block waits for explicit reorganization', () => {
-  canvasHooks = {cursor:0,slots:[]};
-  const previousWindow = globalThis.window; globalThis.window = {innerWidth:1400,innerHeight:1000};
-  try {
-    const data = app.initialData(market.id);
-    data.preferences.moduleOrder = ['operations','jira','dossiers','promotions','alerts','comparison','simulationComparison'];
-    data.preferences.moduleWidths.operations = 'half'; data.preferences.moduleWidths.jira = 'half';
-    const changes = [], props = {data,market,archive:[],actions:{updateModuleWidth:(...args)=>changes.push(args)}};
-    const render = () => {canvasHooks.cursor=0;return treeNodes(interactiveCanvas.PreviewDashboard(props));};
-    let nodes = render();
-    nodes.find(n=>n.props?.['data-point-module']==='operations').props.onContextMenu({preventDefault(){},stopPropagation(){},target:{closest(){return null;}},clientX:100,clientY:100});
-    nodes=render(); nodes.find(n=>n.type==='button'&&n.props.children==='3/4').props.onClick();
-    assert.deepEqual(changes,[]);
-    nodes=render();nodes.find(n=>n.type==='button'&&n.props.children==='Appliquer et réorganiser').props.onClick();
-    assert.deepEqual(changes,[['operations','three-quarters']]);
-  } finally {globalThis.window=previousWindow;}
+test('V51 pointer resize keeps sibling positions and saves both dimensions',()=>{
+ canvasHooks={cursor:0,slots:[]};const old=globalThis.window, listeners=new Map();globalThis.window={innerWidth:1400,innerHeight:1000,addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
+ try {const data=app.initialData(market.id);data.preferences.freeLayout={enabled:true,snap:true,showGrid:true,blocks:{operations:{x:0,y:0,width:576,height:480},jira:{x:600,y:0,width:576,height:480}},titles:{},copies:[]};const writes=[];
+ const props={data,content:{},actions:{updateFreeLayout:l=>writes.push(l)},editingModule:null,onEdit(){}};const render=()=>{canvasHooks.cursor=0;return treeNodes(freeCanvas.FreePointCanvas(props));};let nodes=render();
+ const stage=nodes.find(n=>n.props?.className?.startsWith('v51-stage'));stage.props.ref.current={getBoundingClientRect(){return {width:1200};}};
+ nodes.find(n=>n.props?.['aria-label']==='Redimensionner Simulations').props.onPointerDown({preventDefault(){},stopPropagation(){},clientX:576,clientY:480});listeners.get('pointermove')({clientX:624,clientY:528,altKey:false});listeners.get('pointerup')();
+ assert.equal(writes.at(-1).blocks.operations.width,624);assert.equal(writes.at(-1).blocks.operations.height,528);assert.deepEqual(writes.at(-1).blocks.jira,data.preferences.freeLayout.blocks.jira);
+ }finally{globalThis.window=old;}
 });

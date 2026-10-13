@@ -132,9 +132,9 @@ test("mail and standalone comparison visibility follow the point despite legacy 
   assert.doesNotMatch(app.buildInteractiveHtml(data, market, []), /Marché A/);
   data.preferences.htmlModules.comparison = true;
   assert.doesNotMatch(app.buildInteractiveHtml(data, market, []), /Marché A/);
-  const actions = { updatePriority() {}, updateDossier() {}, addDossier() {}, removeDossier() {}, updateOperation() {}, resetOperation() {}, addOperation() {}, removeOperation() {}, updatePromotion() {}, addPromotion() {}, removePromotion() {}, updateJira() {}, resetJira() {}, addJira() {}, setSourceMode() {}, insertModule() {}, hideModule() {}, moveModule() {}, updateModuleWidth() {}, resetLayout() {} };
+  const actions = { updateFreeLayout() {}, updatePriority() {}, updateDossier() {}, addDossier() {}, removeDossier() {}, updateOperation() {}, resetOperation() {}, addOperation() {}, removeOperation() {}, updatePromotion() {}, addPromotion() {}, removePromotion() {}, updateJira() {}, resetJira() {}, addJira() {}, setSourceMode() {}, insertModule() {}, hideModule() {}, moveModule() {}, updateModuleWidth() {}, resetLayout() {} };
   const read = renderToStaticMarkup(createElement(app.PreviewDashboard, { data, market, archive: [], editing: true, actions }));
-  assert.match(read, /Structure du point/);
+  assert.match(read, /Ajouter un bloc/);
   assert.doesNotMatch(read, /Modifier pendant le point/);
   assert.doesNotMatch(read, /Marché A/);
   data.preferences.readModules.comparison = true;
