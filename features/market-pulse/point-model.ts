@@ -1,3 +1,4 @@
+import { normalizeFreeLayout, type FreeLayout } from "@/lib/free-point-layout";
 
 import { normalizeModuleWidth } from "@/lib/point-grid";
 import { appFetch as fetch } from "@/lib/app-transport";
@@ -26,7 +27,7 @@ export type FontScale = "compact" | "standard" | "large";
 export type Density = "compact" | "comfortable" | "airy";
 export type PointModule = "jira" | "dossiers" | "operations" | "promotions" | "alerts" | "comparison" | "simulationComparison";
 export type ModuleVisibility = Record<PointModule, boolean>;
-export type PointPreferences = { fontScale: FontScale; fontScalePercent: number; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
+export type PointPreferences = { freeLayout?: FreeLayout; fontScale: FontScale; fontScalePercent: number; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
 export type CarryoverFields = { sourceId?: string; carriedFromYear?: number; carriedFromWeek?: number };
 export type Dossier = RichDossier & CarryoverFields;
 export type PlannerPointSource = { externalId: string; metrics: PlannerTask["metrics"]; supplierLabel?: string; variationHistory?: SupplierVariationPoint[] };
@@ -79,7 +80,7 @@ export const allModulesVisible = (): ModuleVisibility => ({ jira: true, dossiers
 export const defaultModuleOrder: PointModule[] = ["jira", "dossiers", "operations", "promotions", "alerts", "comparison", "simulationComparison"];
 export const defaultModuleWidths: Record<PointModule, ModuleWidth> = { jira: "full", dossiers: "full", operations: "full", promotions: "full", alerts: "half", comparison: "full", simulationComparison: "full" };
 export const defaultPreferences = (): PointPreferences => ({ fontScale: "standard", fontScalePercent: 100, density: "comfortable", readModules: allModulesVisible(), mailModules: allModulesVisible(), htmlModules: allModulesVisible(), moduleOrder: [...defaultModuleOrder], moduleWidths: { ...defaultModuleWidths } });
-export const copyPreferences = (preferences: PointPreferences): PointPreferences => ({ ...preferences, readModules: { ...preferences.readModules }, mailModules: { ...preferences.mailModules }, htmlModules: { ...preferences.htmlModules }, moduleOrder: [...preferences.moduleOrder], moduleWidths: { ...preferences.moduleWidths } });
+export const copyPreferences = (preferences: PointPreferences): PointPreferences => ({ ...preferences, freeLayout: preferences.freeLayout ? structuredClone(preferences.freeLayout) : undefined, readModules: { ...preferences.readModules }, mailModules: { ...preferences.mailModules }, htmlModules: { ...preferences.htmlModules }, moduleOrder: [...preferences.moduleOrder], moduleWidths: { ...preferences.moduleWidths } });
 export const emptyPlannerRegistry = (): PlannerRegistrySummary => ({ imported: 0, archiveCandidates: 0, recovered: 0, enriched: 0, usableVariations: 0, withoutVariation: 0, withoutMonth: 0 });
 export const emptyDirectoryDraft = (): DirectoryDraft => ({ name: "", email: "", usercode: "", plannerAlias: "", role: "chef-produit", marketIds: [] });
 export const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -183,6 +184,7 @@ export function normalizePointData(value: unknown, marketId: string, marketOverr
     priority: typeof source.priority === "string" ? source.priority : fallback.priority,
     jiraMode: normalizeSourceMode(source.jiraMode), plannerMode: normalizeSourceMode(source.plannerMode), marketComparison: normalizeMarketComparison(source.marketComparison),
     preferences: {
+      freeLayout: (() => { const layout = normalizeFreeLayout(sourcePreferences.freeLayout); return {...layout, copies: layout.copies.map(c => ({...c, html: sanitizePointHtml(c.html)}))}; })(),
       fontScale,
       fontScalePercent,
       density: sourcePreferences.density === "compact" || sourcePreferences.density === "airy" ? sourcePreferences.density : "comfortable",
