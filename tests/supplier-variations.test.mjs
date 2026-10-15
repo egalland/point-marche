@@ -78,3 +78,15 @@ test("column scale always includes zero and bounds every visible value", () => {
     assert(scale.ticks.every(Number.isFinite));
   }
 });
+
+test("supplier search matches accented names and codes without losing the all option", () => {
+  const suppliers = [
+    { key: "a", label: "Établissements Chêne", code: "F0123" },
+    { key: "b", label: "Bois du Nord", code: "F0456" },
+  ];
+  assert.equal(variations.filterSupplierOptions(suppliers, "").length, 3);
+  assert.equal(variations.filterSupplierOptions(suppliers, "")[0].key, "all");
+  assert.deepEqual(variations.filterSupplierOptions(suppliers, "chene f0123").map((s) => s.key), ["a"]);
+  assert.deepEqual(variations.filterSupplierOptions(suppliers, "0456").map((s) => s.key), ["b"]);
+  assert.deepEqual(variations.filterSupplierOptions(suppliers, "introuvable"), []);
+});

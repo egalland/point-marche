@@ -89,3 +89,9 @@ export function variationColumnScale(values: number[]) {
   const ticks = Array.from({ length: Math.round((max - min) / step) + 1 }, (_, index) => min + index * step);
   return { min, max, ticks };
 }
+
+export function filterSupplierOptions(suppliers: { key: string; label: string; code: string }[], query: string) {
+  const options = [{ key: "all", label: "Tous les fournisseurs", code: "" }, ...suppliers];
+  const terms = normalized(query).split(" ").filter(Boolean);
+  return options.filter((supplier) => terms.every((term) => normalized(`${supplier.label} ${supplier.code}`).includes(term)));
+}
