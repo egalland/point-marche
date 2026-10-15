@@ -42,6 +42,8 @@ export type PlannerTask = {
   comments: string;
   metrics: PlannerTaskMetrics;
   workflowState: "active" | "completed" | "stopped" | "needs-closure";
+  importedAt?: string;
+  integratedAt?: string;
   registrySource?: "planner-import" | "point-recovery";
 };
 

@@ -90,3 +90,53 @@ test("supplier search matches accented names and codes without losing the all op
   assert.deepEqual(variations.filterSupplierOptions(suppliers, "0456").map((s) => s.key), ["b"]);
   assert.deepEqual(variations.filterSupplierOptions(suppliers, "introuvable"), []);
 });
+
+test("supplier month keeps V2 instead of averaging the original and its revision", () => {
+  const original = {...task("placo-v1", "2025-11", "PLACOPLATRE", "B7795", -2.63, 3), checklist:[{label:"Intégration",date:"2025-10-15"}]};
+  const revised = {...task("placo-v2", "2025-11", "PLACOPLATRE V2", "B7795", -11.46, null), checklist:[{label:"Intégration",date:"2025-11-03"}]};
+  for (const tasks of [[original, revised], [revised, original]]) {
+    const points = variations.buildSupplierVariations(tasks);
+    assert.equal(points.length, 1);
+    assert.equal(points[0].taskId, "placo-v2");
+    assert.equal(points[0].globalVariation, -11.46);
+    assert.equal(points[0].weightedVariation, null);
+    assert.equal(variations.averageVariation(points, "globalVariation"), -11.46);
+    const monthly = variations.aggregateMonthlyVariations(points, "2025-11-01", "2025-11-30");
+    assert.equal(monthly[0].globalVariation, -11.46);
+    assert.equal(monthly[0].weightedVariation, null);
+  }
+});
+
+test("latest integration date resolves same-month records and suppliers stay separate", () => {
+  const old = {...task("old", "2025-11", "ALPHA", "A", 2, 3), integratedAt:"2025-10-01",createdAt:"2025-10-05"};
+  const latest = {...task("new", "2025-11", "ALPHA", "A", 6, 0), integratedAt:"2025-10-10",createdAt:"2025-09-01"};
+  const other = task("other", "2025-11", "BETA", "B", 10, 2);
+  const points = variations.buildSupplierVariations([latest,old,other]);
+  assert.equal(points.length,2);
+  assert.equal(points.find(p=>p.supplierKey==='A').taskId,'new');
+  assert.equal(variations.aggregateMonthlyVariations(points,'2025-11-01','2025-11-30')[0].globalVariation,8);
+  assert.equal(variations.aggregateMonthlyVariations(points,'2025-11-01','2025-11-30')[0].weightedVariation,1);
+});
+
+test("creation/import chronology and legacy ordering break ties without changing other months", () => {
+  const a={...task('a','2026-01','ALPHA','A',2,1),createdAt:'2025-10-01'};
+  const b={...task('b','2026-01','ALPHA','A',4,2),createdAt:'2025-10-02'};
+  const feb=task('feb','2026-02','ALPHA','A',7,3);
+  assert.deepEqual(variations.buildSupplierVariations([b,a,feb]).map(p=>p.taskId),['b','feb']);
+  assert.equal(variations.buildSupplierVariations([{...a,createdAt:'',importedAt:'2026-01-01T12:00:00Z'},{...b,createdAt:'',importedAt:'2026-01-01T11:00:00Z'}])[0].taskId,'a');
+});
+
+test("integration date beats revision name, creation, completion and import dates", () => {
+  const v2={...task('v2','2025-11','ALPHA V2','A',1,2),createdAt:'2025-11-20',completedAt:'2025-12-01',importedAt:'2026-10-15',checklist:[{label:'Intégration',date:'2025-10-20'}]};
+  const integratedLater={...task('later','2025-11','ALPHA','A',5,0),createdAt:'2025-09-01',checklist:[{label:'Intégration',date:'2025-11-03'}]};
+  for(const tasks of [[v2,integratedLater],[integratedLater,v2]]){
+    const points=variations.buildSupplierVariations(tasks);
+    assert.equal(points.length,1);assert.equal(points[0].taskId,'later');assert.equal(points[0].integratedAt,'2025-11-03');assert.equal(points[0].weightedVariation,0);
+  }
+});
+
+test("a newer integration with missing rates does not revive the older rates", () => {
+  const old={...task('old','2025-11','ALPHA','A',5,3),integratedAt:'2025-10-01'};
+  const recent={...task('new','2025-11','ALPHA','A',null,null),integratedAt:'2025-11-03'};
+  assert.equal(variations.buildSupplierVariations([old,recent]).length,0);
+});

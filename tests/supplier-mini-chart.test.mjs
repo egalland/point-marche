@@ -85,6 +85,7 @@ test("click opens the detailed two-series dialog and closing returns to the mini
     const state = []; let cursor = 0;
     export const beginRender = () => { cursor = 0; };
     export const useId = () => "supplier-history-test";
+    export const useMemo = fn => fn();
     export const useState = initial => {
       const index = cursor++;
       if (!(index in state)) state[index] = typeof initial === "function" ? initial() : initial;
