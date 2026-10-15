@@ -167,6 +167,7 @@ test("supplier picker filters and selects by keyboard, with an empty-result stat
   const hooks = await import(hooksUrl);
   const module = await import(moduleUrl("../../features/market-pulse/supplier-variation-dashboard.tsx", {
     ...reactImports, react: hooksUrl,
+    "@/lib/chart-image-export": moduleUrl("../../lib/chart-image-export.ts"),
     "@/lib/supplier-turnover": moduleUrl("../../lib/supplier-turnover.ts"),
     "@/lib/supplier-variations": moduleUrl("../../lib/supplier-variations.ts"),
     "@/components/app-dialog": dialogUrl,

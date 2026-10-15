@@ -41,3 +41,7 @@
 .supplier-chart-toggles .weighted i,.supplier-chart-tooltip i.weighted{background:var(--supplier-weighted)}
 .supplier-chart-line.weighted{stroke:var(--supplier-weighted)}
 .supplier-mini-chart.weighted{color:var(--supplier-weighted)}
+.supplier-chart-export-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0}
+.supplier-chart-export-actions>span{font-size:.875rem;color:var(--muted)}
+.supplier-chart-export-actions>[role=alert]{color:var(--text)}
+@media(max-width:640px){.supplier-chart-export-actions>button{flex:1 1 150px}}
