@@ -1,4 +1,6 @@
 "use client";
+import {PURCHASESPoint} from "./purchaseData-dashboard";
+import type {PURCHASESConfig} from "@/lib/purchaseData";
 import { FreePointCanvas } from "./free-point-canvas";
 import type { FreeLayout } from "@/lib/free-point-layout";
 import { useMemo, useState, type ReactNode } from "react";
@@ -93,6 +95,7 @@ export type PointCanvasActions = {
   addDossier: () => void;
   removeDossier: (id: string) => void;
   moveDossier: (id: string, before: string | null) => void;
+  updatePURCHASES: (configs: PURCHASESConfig[]) => void;
   updateComparison: (config: ComparisonConfig, snapshot: ComparisonSnapshot) => void;
   updateJiraRules: (rules: JiraAlertRule[]) => void;
   updateOperation: (id: string, patch: Partial<CommercialOperation>) => void;
@@ -132,6 +135,7 @@ export function PreviewDashboard({ data, market, archive, editing = false, actio
   const followingMonth = calendarMonthLabel(shiftMonth(monthStart(data.meetingDate), 1));
   const operationGroups = [currentMonth, followingMonth].map((month, index) => ({ month, items: data.operations.filter((item) => index === 1 ? item.month === followingMonth : item.month !== followingMonth) }));
   const blockContent = (editing: boolean): Record<PointModule, ReactNode> => ({
+    purchaseData: <PURCHASESPoint configs={data.purchaseDataConfigs} specialty={market.name} onChange={editing ? actions?.updatePURCHASES : undefined}/>,
     simulationComparison: <SimulationComparison tasks={tasks} markets={markets} config={data.simulationComparisonConfig ?? normalizeComparison(null, market.id)} snapshot={data.simulationComparisonSnapshot} editing={editing} updatedAt={plannerUpdatedAt} onChange={actions?.updateComparison}/>,
     comparison: <MarketComparisonChart snapshot={data.marketComparison}/>,
     jira: <JiraCommandCenter key={`${market.id}-${data.meetingDate}`} data={data} archive={archive} market={market} editing={editing} onUpdate={actions?.updateJira} onReset={actions?.resetJira} onAdd={actions?.addJira} onRules={actions?.updateJiraRules}/>,
