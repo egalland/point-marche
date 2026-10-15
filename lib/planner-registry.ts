@@ -103,6 +103,9 @@ function recoveredTask(input: {
   labels: string[];
   metrics: PlannerTaskMetrics;
   state?: string;
+  createdAt?: string;
+  importedAt?: string;
+  integratedAt?: string;
 }): PlannerTask {
   const completed = /(?:clotur|termin|finalis)/.test(normalized(input.state ?? ""));
   return {
@@ -115,7 +118,9 @@ function recoveredTask(input: {
     priority: "",
     assignedTo: "",
     createdBy: "",
-    createdAt: "",
+    createdAt: input.createdAt ?? "",
+    importedAt: input.importedAt,
+    integratedAt: input.integratedAt,
     dueDate: "",
     startDate: "",
     recurring: false,
@@ -137,6 +142,9 @@ function mergeTask(primary: PlannerTask, fallback: PlannerTask): PlannerTask {
   return {
     ...fallback,
     ...primary,
+    createdAt: primary.createdAt || fallback.createdAt,
+    importedAt: primary.importedAt || fallback.importedAt,
+    integratedAt: primary.integratedAt || fallback.integratedAt,
     taskName: primary.taskName || fallback.taskName,
     effectiveMonth: primary.effectiveMonth || fallback.effectiveMonth,
     category: primary.category || fallback.category,
@@ -197,6 +205,9 @@ export function recoverPlannerTasksFromPoints(points: PlannerArchivePoint[], mar
         if (!externalId) return;
         register(recoveredTask({
           externalId,
+          createdAt: text(item.createdAt),
+          importedAt: text(item.importedAt),
+          integratedAt: text(item.integratedAt),
           taskName: text(item.taskName) || operationName,
           effectiveMonth: effectiveMonth(text(item.taskName) || operationName, operationMonth, text(item.period)),
           labels: uniqueLabels(item.labels).length ? uniqueLabels(item.labels) : labels,

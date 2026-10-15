@@ -36,7 +36,7 @@ export async function loadPlannerRegistry() {
     db.select({ id: marketDefinitions.id, plannerTags: marketDefinitions.plannerTags }).from(marketDefinitions),
   ]);
   const tagsByMarket = Object.fromEntries(marketRows.map((market) => [market.id, plannerTags(market.plannerTags)]));
-  const imported = rows.map((row) => rehydrateMetrics(JSON.parse(row.payload) as PlannerTask));
+  const imported = rows.map((row) => rehydrateMetrics({ ...JSON.parse(row.payload) as PlannerTask, importedAt: row.updatedAt }));
   const recovered = recoverPlannerTasksFromPoints(pointRows, tagsByMarket);
   const registry = mergePlannerTaskRegistry(imported, recovered);
   return {

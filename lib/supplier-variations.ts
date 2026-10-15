@@ -11,6 +11,9 @@ export type SupplierVariationPoint = {
   globalVariation: number | null;
   weightedVariation: number | null;
   labels: string[];
+  integratedAt?: string;
+  createdAt?: string;
+  importedAt?: string;
 };
 
 function normalized(value: string) {
@@ -26,23 +29,40 @@ export function supplierKeyForTask(task: PlannerTask) {
   return task.metrics.supplierCode.trim().toUpperCase() || normalized(supplierLabelFromTask(task.taskName));
 }
 
+function timestamp(value: string | undefined) {
+  const parsed = value ? Date.parse(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/** Keep the latest integration per supplier/month; other suppliers remain distinct. */
+export function latestSupplierVariations(points: SupplierVariationPoint[]) {
+  const latest = new Map<string, SupplierVariationPoint>();
+  for (const point of points) {
+    const key = `${point.supplierKey}\u0000${point.period}`;
+    const previous = latest.get(key);
+    if (!previous) { latest.set(key, point); continue; }
+    const comparison = timestamp(point.integratedAt) - timestamp(previous.integratedAt)
+      || timestamp(point.createdAt) - timestamp(previous.createdAt)
+      || timestamp(point.importedAt) - timestamp(previous.importedAt);
+    // Without chronology, the last supplied record wins deterministically.
+    if (comparison >= 0) latest.set(key, point);
+  }
+  return Array.from(latest.values()).sort((left, right) => left.period.localeCompare(right.period) || left.supplierLabel.localeCompare(right.supplierLabel, "fr"));
+}
+
 export function buildSupplierVariations(tasks: PlannerTask[]) {
-  return tasks.flatMap((task): SupplierVariationPoint[] => {
-    if (!task.effectiveMonth || (task.metrics.globalVariation === null && task.metrics.weightedVariation === null)) return [];
+  return latestSupplierVariations(tasks.flatMap((task): SupplierVariationPoint[] => {
+    if (!task.effectiveMonth) return [];
     const supplierLabel = supplierLabelFromTask(task.taskName);
+    const integratedAt = task.integratedAt || (task.checklist ?? []).filter((item) => /integr/i.test(normalized(item.label)) && item.date).map((item) => item.date).sort().at(-1) || "";
     return [{
-      taskId: task.externalId,
-      taskName: task.taskName,
-      supplierKey: supplierKeyForTask(task),
-      supplierLabel,
-      supplierCode: task.metrics.supplierCode,
-      period: task.effectiveMonth,
-      purchases12m: task.metrics.purchases12m ?? null,
-      globalVariation: task.metrics.globalVariation,
-      weightedVariation: task.metrics.weightedVariation,
-      labels: task.labels,
+      taskId: task.externalId, taskName: task.taskName, supplierKey: supplierKeyForTask(task),
+      supplierLabel, supplierCode: task.metrics.supplierCode, period: task.effectiveMonth,
+      purchases12m: task.metrics.purchases12m ?? null, globalVariation: task.metrics.globalVariation,
+      weightedVariation: task.metrics.weightedVariation, labels: task.labels,
+      integratedAt, createdAt: task.createdAt, importedAt: task.importedAt,
     }];
-  }).sort((left, right) => left.period.localeCompare(right.period) || left.supplierLabel.localeCompare(right.supplierLabel, "fr"));
+  })).filter((point) => point.globalVariation !== null || point.weightedVariation !== null);
 }
 
 export function supplierSeriesForTask(task: PlannerTask, tasks: PlannerTask[]) {
@@ -51,7 +71,7 @@ export function supplierSeriesForTask(task: PlannerTask, tasks: PlannerTask[]) {
 }
 
 export function averageVariation(points: SupplierVariationPoint[], key: "globalVariation" | "weightedVariation") {
-  const values = points.map((point) => point[key]).filter((value): value is number => value !== null);
+  const values = latestSupplierVariations(points).map((point) => point[key]).filter((value): value is number => value !== null);
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 }
 
@@ -59,7 +79,7 @@ export function averageVariation(points: SupplierVariationPoint[], key: "globalV
 export function aggregateMonthlyVariations(points: SupplierVariationPoint[], from: string, to: string): SupplierVariationPoint[] {
   if (from > to) return [];
   const grouped = new Map<string, SupplierVariationPoint[]>();
-  for (const point of points) {
+  for (const point of latestSupplierVariations(points)) {
     const rows = grouped.get(point.period) ?? [];
     rows.push(point);
     grouped.set(point.period, rows);
