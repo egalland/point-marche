@@ -49,3 +49,32 @@ test("preserves the amount for each observation rather than a supplier total", (
   });
   assert.deepEqual(variations.supplierSeriesForTask(tasks[0], tasks).map((point) => point.purchases12m), amounts);
 });
+
+test("monthly columns span a rolling year and preserve gaps and real zeros", () => {
+  const points = variations.buildSupplierVariations([
+    task("a", "2025-11", "ALPHA", "A", -2, null),
+    task("b", "2025-11", "BETA", "B", 0, 4),
+    task("c", "2026-10", "ALPHA", "A", .9, 1.52),
+  ]);
+  const result = variations.aggregateMonthlyVariations(points, "2025-11-01", "2026-10-15");
+  assert.equal(result.length, 12);
+  assert.equal(result[0].period, "2025-11");
+  assert.equal(result.at(-1).period, "2026-10");
+  assert.equal(result[0].globalVariation, -1);
+  assert.equal(result[0].weightedVariation, 4);
+  assert.equal(result[1].globalVariation, null);
+  assert.equal(result[1].weightedVariation, null);
+  assert.equal(variations.aggregateMonthlyVariations(points, "2026-11-01", "2026-10-01").length, 0);
+  assert.equal(variations.aggregateMonthlyVariations([], "2026-01-01", "2026-03-01").length, 3);
+});
+
+test("column scale always includes zero and bounds every visible value", () => {
+  for (const values of [[], [0, 0], [-8, -1], [3, 4], [-2, 4], [.9, 1.52]]) {
+    const scale = variations.variationColumnScale(values);
+    assert(scale.ticks.includes(0));
+    assert(scale.max > scale.min);
+    assert(scale.min <= Math.min(0, ...values));
+    assert(scale.max >= Math.max(0, ...values));
+    assert(scale.ticks.every(Number.isFinite));
+  }
+});
