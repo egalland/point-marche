@@ -118,3 +118,13 @@ test("recovers per-simulation amounts without copying a later supplier amount in
   const imported = { ...importedTask("current"), metrics: { ...importedTask("current").metrics, purchases12m: 0 } };
   assert.equal(registry.mergePlannerTaskRegistry([imported], recovered).tasks.find((task) => task.externalId === "current").metrics.purchases12m, 0);
 });
+
+test("repairs the month of an already imported reversed Isover title on read", () => {
+  const isover={...importedTask('iso-avr'),taskName:'2026-AVRIL-04-ISOVER',effectiveMonth:'',metrics:{purchases12m:1944513.02,supplierCode:'A1941',announcedVariation:null,globalVariation:5,weightedVariation:5,tariffStructure:'Brut + Remise au SKU'}};
+  const result=registry.mergePlannerTaskRegistry([isover],[]);
+  assert.equal(result.tasks[0].effectiveMonth,'2026-04');
+  assert.equal(result.tasks[0].metrics.globalVariation,5);
+  assert.equal(result.tasks[0].metrics.weightedVariation,5);
+  assert.equal(result.summary.withoutMonth,0);
+  assert.equal(isover.effectiveMonth,'');
+});

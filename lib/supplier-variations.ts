@@ -21,7 +21,7 @@ function normalized(value: string) {
 }
 
 export function supplierLabelFromTask(taskName: string) {
-  const stripped = taskName.replace(/^20\d{2}-(?:0[1-9]|1[0-2])-(?:[A-ZÀ-Ÿ]+-)?/i, "").trim();
+  const stripped = taskName.replace(/^(?:20\d{2}-(?:0[1-9]|1[0-2])-(?:[A-ZÀ-Ÿ]+-)?|20\d{2}-[A-ZÀ-Ÿ]+-(?:0[1-9]|1[0-2])-)/i, "").trim();
   return stripped || taskName;
 }
 

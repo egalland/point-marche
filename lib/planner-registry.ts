@@ -92,6 +92,8 @@ function effectiveMonth(taskName: string, monthLabel: string, preferred = "") {
   if (/^20\d{2}-(?:0[1-9]|1[0-2])$/.test(preferred)) return preferred;
   const taskMatch = taskName.match(/^(20\d{2})-(0[1-9]|1[0-2])(?:-|\b)/);
   if (taskMatch) return `${taskMatch[1]}-${taskMatch[2]}`;
+  const reversed = normalized(taskName).match(/^(20\d{2})[-\s]+([a-z]+)[-\s]+(0?[1-9]|1[0-2])(?:[-\s]|$)/);
+  if (reversed && frenchMonths[reversed[2]] === reversed[3].padStart(2, "0")) return `${reversed[1]}-${reversed[3].padStart(2, "0")}`;
   const labelMatch = normalized(monthLabel).match(/\b(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)\s+(20\d{2})\b/);
   return labelMatch ? `${labelMatch[2]}-${frenchMonths[labelMatch[1]]}` : "";
 }
@@ -228,7 +230,7 @@ export function recoverPlannerTasksFromPoints(points: PlannerArchivePoint[], mar
 }
 
 export function mergePlannerTaskRegistry(importedTasks: PlannerTask[], recoveredTasks: PlannerTask[]) {
-  const imported = new Map<string, PlannerTask>(importedTasks.map((task) => [task.externalId, { ...task, registrySource: task.registrySource === "point-recovery" ? "point-recovery" : "planner-import" }]));
+  const imported = new Map<string, PlannerTask>(importedTasks.map((task) => [task.externalId, { ...task, effectiveMonth: task.effectiveMonth || effectiveMonth(task.taskName, ""), registrySource: task.registrySource === "point-recovery" ? "point-recovery" : "planner-import" }]));
   let enriched = 0;
   let recovered = 0;
 

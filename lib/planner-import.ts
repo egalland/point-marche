@@ -181,9 +181,13 @@ function numberValue(value: string) {
   return match ? Number(match[0]) : null;
 }
 
-function effectiveMonth(taskName: string) {
+export function plannerTaskEffectiveMonth(taskName: string) {
   const match = cleanCell(taskName).match(/^(20\d{2})-(0[1-9]|1[0-2])(?:-|\b)/);
-  return match ? `${match[1]}-${match[2]}` : "";
+  if (match) return `${match[1]}-${match[2]}`;
+  const namedMonths = ["janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "decembre"];
+  const reversed = normalized(taskName).match(/^(20\d{2})\s+([a-z]+)\s+(0?[1-9]|1[0-2])(?:\s|$)/);
+  if (!reversed || namedMonths.indexOf(reversed[2]) + 1 !== Number(reversed[3])) return "";
+  return `${reversed[1]}-${reversed[3].padStart(2, "0")}`;
 }
 
 function checklistKind(label: string): PlannerChecklistItem["kind"] {
@@ -310,7 +314,7 @@ export function parsePlannerTasks(text: string): PlannerImport {
     return {
       externalId,
       taskName,
-      effectiveMonth: effectiveMonth(taskName),
+      effectiveMonth: plannerTaskEffectiveMonth(taskName),
       category: cell(row, columns.category),
       goal: cell(row, columns.goal),
       plannerStatus: cell(row, columns.status),
