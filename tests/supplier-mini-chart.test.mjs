@@ -104,7 +104,9 @@ test("click opens the detailed two-series dialog and closing returns to the mini
   const html = renderToStaticMarkup(opened);
   assert.match(html, /aria-expanded="true"/);
   assert.match(html, /role="dialog" aria-modal="true" aria-labelledby="supplier-history-test"/);
-  assert.match(html, /viewBox="0 0 760 300"/);
+  assert.match(html, /class="supplier-chart-bar global"/);
+  assert.match(html, /class="supplier-chart-bar weighted"/);
+  assert.match(html, /class="supplier-chart-zero"/);
   assert.equal((html.match(/aria-pressed="true"/g) ?? []).length, 2);
   assert.match(html, /Variation GLOBAL/);
   assert.match(html, /Variation pondérée/);
