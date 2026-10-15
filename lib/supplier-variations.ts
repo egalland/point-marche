@@ -51,8 +51,8 @@ export function latestSupplierVariations(points: SupplierVariationPoint[]) {
 }
 
 export function buildSupplierVariations(tasks: PlannerTask[]) {
-  return latestSupplierVariations(tasks.flatMap((task): SupplierVariationPoint[] => {
-    if (!task.effectiveMonth) return [];
+  return tasks.flatMap((task): SupplierVariationPoint[] => {
+    if (!task.effectiveMonth || (task.metrics.globalVariation === null && task.metrics.weightedVariation === null)) return [];
     const supplierLabel = supplierLabelFromTask(task.taskName);
     const integratedAt = task.integratedAt || (task.checklist ?? []).filter((item) => /integr/i.test(normalized(item.label)) && item.date).map((item) => item.date).sort().at(-1) || "";
     return [{
@@ -62,7 +62,7 @@ export function buildSupplierVariations(tasks: PlannerTask[]) {
       weightedVariation: task.metrics.weightedVariation, labels: task.labels,
       integratedAt, createdAt: task.createdAt, importedAt: task.importedAt,
     }];
-  })).filter((point) => point.globalVariation !== null || point.weightedVariation !== null);
+  }).sort((left, right) => left.period.localeCompare(right.period) || left.supplierLabel.localeCompare(right.supplierLabel, "fr"));
 }
 
 export function supplierSeriesForTask(task: PlannerTask, tasks: PlannerTask[]) {
