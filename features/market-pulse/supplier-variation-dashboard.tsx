@@ -6,7 +6,7 @@ import { SafeDateInput } from "@/components/safe-date-input";
 import { TablePagination, useTablePage } from "@/components/table-pagination";
 import { SupplierMiniChart } from "./supplier-mini-chart";
 import { supplierMiniTrend } from "@/lib/supplier-mini-trend";
-import { latestSupplierVariations, filterSupplierOptions, aggregateMonthlyVariations, averageVariation, buildSupplierVariations, variationColumnScale, type SupplierVariationPoint } from "@/lib/supplier-variations";
+import { supplierVariationView, latestSupplierVariations, filterSupplierOptions, aggregateMonthlyVariations, averageVariation, buildSupplierVariations, variationColumnScale, type SupplierVariationPoint } from "@/lib/supplier-variations";
 import type { PlannerTask } from "@/lib/planner-import";
 import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 import { compareSupplierTurnover, formatSupplierTurnover, supplierTurnoverLabel, supplierTurnoverSource } from "@/lib/supplier-turnover";
@@ -41,13 +41,15 @@ export function SupplierVariationChart({ points, compact = false, title, subtitl
   return compact ? <SupplierMiniChart points={latest}/> : <SupplierDetailChart points={latest} title={title} subtitle={subtitle}/>;
 }
 
-function SupplierDetailChart({ points, title, subtitle }: { points: SupplierVariationPoint[]; title?: string; subtitle?: string }) {
+function SupplierDetailChart({ points: observations, title, subtitle }: { points: SupplierVariationPoint[]; title?: string; subtitle?: string }) {
   const helpId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
   const [imageStatus, setImageStatus] = useState<{ busy: boolean; error: boolean; message: string }>({ busy: false, error: false, message: "" });
 
   const [showGlobal, setShowGlobal] = useState(true);
   const [showWeighted, setShowWeighted] = useState(true);
+  const [view, setView] = useState<"months" | "variations">("months");
+  const points = useMemo(() => supplierVariationView(observations, view, showGlobal, showWeighted), [observations, view, showGlobal, showWeighted]);
   const [selection, setSelection] = useState<{ points: SupplierVariationPoint[]; index: number | null }>({ points, index: null });
   const activeIndex = points.length ? Math.max(0, Math.min(points.length - 1, selection.points === points ? selection.index ?? points.length - 1 : points.length - 1)) : null;
   const setActiveIndex = (index: number) => setSelection({ points, index });
@@ -79,7 +81,7 @@ function SupplierDetailChart({ points, title, subtitle }: { points: SupplierVari
   };
   const exportInfo = {
         title: title ?? (points[0]?.supplierKey === "selection-average" ? "Variation moyenne par mois" : `Variations · ${points[0]?.supplierLabel ?? "Fournisseur"}`),
-        subtitle: subtitle ?? (points.length ? `${monthLabel(points[0].period)} — ${monthLabel(points.at(-1)!.period)}` : ""),
+        subtitle: `${subtitle ?? (points.length ? `${monthLabel(points[0].period)} — ${monthLabel(points.at(-1)!.period)}` : "")} · ${view === "months" ? "Tous les mois" : "Variations uniquement"}`,
         global: showGlobal, weighted: showWeighted,
       };
   const exportImage = async (copy: boolean) => {
@@ -110,6 +112,7 @@ function SupplierDetailChart({ points, title, subtitle }: { points: SupplierVari
     }
   };
   return <div className="supplier-line-chart supplier-column-chart">
+    <label className="supplier-chart-view"><span>Vue du graphique</span><select value={view} onChange={(event) => setView(event.target.value as "months" | "variations")}><option value="months">Tous les mois</option><option value="variations">Variations uniquement</option></select></label>
     <div className="supplier-chart-toggles">
       <button type="button" className={showGlobal ? "active global" : ""} aria-pressed={showGlobal} onClick={() => setShowGlobal((current) => !current)}><i/>Variation GLOBAL</button>
       <button type="button" className={showWeighted ? "active weighted" : ""} aria-pressed={showWeighted} onClick={() => setShowWeighted((current) => !current)}><i/>Variation pondérée</button>
@@ -120,7 +123,7 @@ function SupplierDetailChart({ points, title, subtitle }: { points: SupplierVari
       <button type="button" className="secondary-button" disabled={imageStatus.busy || !values.length} onClick={exportExcel}>Exporter en Excel</button>
       {imageStatus.message && <span role={imageStatus.error ? "alert" : "status"}>{imageStatus.message}</span>}
     </div>
-    <p id={helpId} className="editor-hint">Colonnes côte à côte · ligne de référence à 0 %. Faites défiler le graphique si nécessaire ; les flèches du clavier permettent de parcourir les mois.</p>
+    <p id={helpId} className="editor-hint">{view === "months" ? "Tous les mois sont espacés régulièrement ; un mois sans donnée reste vide." : "Seuls les mois avec une valeur dans les séries affichées sont présentés."} Colonnes côte à côte · référence à 0 %.</p>
     <div className="supplier-column-scroll">
       <div className="supplier-chart-stage" style={{ minWidth: width }}>
         <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} role="img" tabIndex={0} aria-describedby={helpId} aria-label={`Variations en colonnes${active ? ` · ${monthLabel(active.period)} · GLOBAL ${percent(active.globalVariation)} · Pondérée ${percent(active.weightedVariation)}` : ""}`} onKeyDown={handleKeyDown} onPointerMove={pointer} onPointerDown={pointer}>

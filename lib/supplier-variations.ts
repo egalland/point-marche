@@ -115,3 +115,26 @@ export function filterSupplierOptions(suppliers: { key: string; label: string; c
   const terms = normalized(query).split(" ").filter(Boolean);
   return options.filter((supplier) => terms.every((term) => normalized(`${supplier.label} ${supplier.code}`).includes(term)));
 }
+
+/** History can keep the calendar spacing or show only months with an observation. */
+export function supplierVariationView(points: SupplierVariationPoint[], mode: "months" | "variations", showGlobal = true, showWeighted = true) {
+  const observations = latestSupplierVariations(points);
+  if (mode === "variations") return observations.filter((point) =>
+    (showGlobal && typeof point.globalVariation === "number" && Number.isFinite(point.globalVariation)) ||
+    (showWeighted && typeof point.weightedVariation === "number" && Number.isFinite(point.weightedVariation)));
+  if (!observations.length) return [];
+  const byMonth = new Map(observations.map((point) => [point.period, point]));
+  const first = observations[0], last = observations.at(-1)!;
+  const date = new Date(`${first.period}-01T12:00:00Z`);
+  const result: SupplierVariationPoint[] = [];
+  while (Number.isFinite(date.getTime()) && date.toISOString().slice(0, 7) <= last.period) {
+    const period = date.toISOString().slice(0, 7);
+    result.push(byMonth.get(period) ?? {
+      taskId: `calendar:${first.supplierKey}:${period}`, taskName: "", supplierKey: first.supplierKey,
+      supplierLabel: first.supplierLabel, supplierCode: first.supplierCode, period,
+      globalVariation: null, weightedVariation: null, labels: [],
+    });
+    date.setUTCMonth(date.getUTCMonth() + 1);
+  }
+  return result;
+}
