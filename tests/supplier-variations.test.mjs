@@ -148,3 +148,19 @@ test("reversed Isover title keeps a clean supplier label", () => {
   assert.equal(variations.supplierLabelFromTask('2026-AVRIL-04-ISOVER'),'ISOVER');
   assert.equal(variations.supplierLabelFromTask('2026-04-AVRIL-ISOVER'),'ISOVER');
 });
+
+test("history view keeps calendar months empty or only the observations, including zero", () => {
+  const points=variations.buildSupplierVariations([
+    task('jan','2026-01','ALPHA','A',2,null),
+    task('apr','2026-04','ALPHA','A',0,5),
+    task('may','2026-05','ALPHA','A',null,3),
+  ]);
+  const calendar=variations.supplierVariationView(points,'months');
+  assert.deepEqual(calendar.map(p=>p.period),['2026-01','2026-02','2026-03','2026-04','2026-05']);
+  assert.equal(calendar[1].globalVariation,null);assert.equal(calendar[1].weightedVariation,null);
+  assert.equal(calendar[3].globalVariation,0);
+  assert.deepEqual(variations.supplierVariationView(points,'variations',true,false).map(p=>p.period),['2026-01','2026-04']);
+  assert.deepEqual(variations.supplierVariationView(points,'variations',false,true).map(p=>p.period),['2026-04','2026-05']);
+  assert.equal(variations.supplierVariationView(points,'variations',false,false).length,0);
+  assert.equal(variations.supplierVariationView([],'months').length,0);
+});

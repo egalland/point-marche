@@ -45,3 +45,6 @@
 .supplier-chart-export-actions>span{font-size:.875rem;color:var(--muted)}
 .supplier-chart-export-actions>[role=alert]{color:var(--text)}
 @media(max-width:640px){.supplier-chart-export-actions>button{flex:1 1 150px}}
+.supplier-chart-view{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.supplier-chart-view>span{font-size:.875rem;color:var(--muted);font-weight:650}
+.supplier-chart-view>select{min-height:42px;padding:8px 12px;max-width:100%;border:1px solid var(--line-strong);border-radius:8px;background:var(--field-bg);color:var(--text);font:inherit}
