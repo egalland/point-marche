@@ -9,6 +9,25 @@ const points=[
 ];
 const info={title:"Variations",subtitle:"Historique & filtres",global:false,weighted:false,exportedAt:new Date("2026-10-15T22:30:00Z")};
 
+test("annual means are formulas per view, linked from presentation, with separate years and blank guards",()=>{
+ const p=chartExcelParts(points,info),sheet=p["xl/worksheets/sheet2.xml"],cover=p["xl/worksheets/sheet1.xml"];
+ assert.match(sheet,/Moyennes par année/);
+ assert.match(sheet,/<x:c r="A36" s="1"><x:v>2025<\/x:v>/);
+ assert.match(sheet,/<x:c r="A37" s="1"><x:v>2026<\/x:v>/);
+ assert.match(sheet,/COUNTIFS\(\$D\$29:\$D\$32,\$A36,\$B\$29:\$B\$32,&quot;&lt;&gt;&quot;\)/);
+ assert.match(sheet,/SUMIFS\(\$B\$29:\$B\$32,\$D\$29:\$D\$32,\$A37\)/);
+ assert.match(cover,/IF\(ISNUMBER\(&apos;GLOBAL &amp; pondérée - mois&apos;!B36\)/);
+ assert.match(cover,/IF\(ISNUMBER\(&apos;GLOBAL &amp; pondérée - mois&apos;!B37\)/);
+ assert.match(p["xl/worksheets/sheet4.xml"],/SUMIFS\(\$B\$29:\$B\$30/);
+ assert.match(p["xl/worksheets/sheet6.xml"],/SUMIFS\(\$B\$29:\$B\$30/);
+ const readCell=(source,address)=>source.match(new RegExp(`<x:c r="${address}"[^>]*>[\\s\\S]*?<\\/x:c>`))[0];
+ assert.match(readCell(sheet,"B36"),/<x:v>0.02<\/x:v>/);
+ assert.match(readCell(sheet,"B37"),/<x:v>0<\/x:v>/);
+ assert.match(readCell(sheet,"C37"),/<x:v>-0.01<\/x:v>/);
+ const missing=chartExcelParts(points.map(x=>({...x,weightedVariation:null})),info);
+ assert.match(missing["xl/worksheets/sheet6.xml"],/<x:c r="B33" s="8" t="str"><x:f>IF\(COUNTIFS/);
+});
+
 test("every export contains presentation, five views, editable charts and navigation",()=>{
  const parts=chartExcelParts(points,info),cover=parts["xl/worksheets/sheet1.xml"];
  assert.equal((parts["xl/workbook.xml"].match(/<x:sheet /g)||[]).length,6);
@@ -30,9 +49,9 @@ test("all-month views preserve missing calendar months and genuine zero, variati
  assert.match(full,/<x:c r="B29" s="8"><x:v>0.02/);
  assert.match(full,/<x:c r="B30" s="8"\/>/); // December gap
  assert.match(full,/<x:c r="B31" s="8"><x:v>0<\/x:v>/);
- assert.match(p["xl/tables/table1.xml"],/ref="A28:C32"/);
- assert.match(p["xl/tables/table2.xml"],/ref="A28:B32"/);
- assert.match(p["xl/tables/table3.xml"],/ref="A28:B30"/);
+ assert.match(p["xl/tables/table1.xml"],/ref="A28:D32"/);
+ assert.match(p["xl/tables/table2.xml"],/ref="A28:C32"/);
+ assert.match(p["xl/tables/table3.xml"],/ref="A28:C30"/);
  assert.match(p["xl/worksheets/sheet4.xml"],/janv 2026/);assert.doesNotMatch(p["xl/worksheets/sheet4.xml"],/févr 2026/);
  assert.match(p["xl/worksheets/sheet6.xml"],/févr 2026/);assert.doesNotMatch(p["xl/worksheets/sheet6.xml"],/janv 2026/);
  assert.equal((p["xl/drawings/charts/chart1.xml"].match(/<c:ser>/g)||[]).length,2);
@@ -51,7 +70,7 @@ test("missing entire series still exports blank averages and a blank editable ta
  const p=chartExcelParts(points.map(x=>({...x,weightedVariation:null})),info);
  const sheet=p["xl/worksheets/sheet6.xml"];
  assert.match(sheet,/<x:c r="B5" s="8" t="str"><x:f>IF\(COUNT\(B29:B29/);
- assert.match(p["xl/tables/table5.xml"],/ref="A28:B29"/);
+ assert.match(p["xl/tables/table5.xml"],/ref="A28:C29"/);
  assert.doesNotMatch(sheet,/<x:v>0<\/x:v>/);
  assert.throws(()=>chartExcelParts([],info),/Aucune donnée/);
 });
