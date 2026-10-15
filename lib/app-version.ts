@@ -1,2 +1,2 @@
 // Update once per release, before committing and publishing the corresponding Sites version.
-export const APP_VERSION = "V65";
+export const APP_VERSION = "V66";

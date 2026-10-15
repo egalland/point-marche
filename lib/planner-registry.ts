@@ -1,4 +1,4 @@
-import type { PlannerTask, PlannerTaskMetrics } from "./planner-import";
+import { rehydratePlannerTaskMetrics, type PlannerTask, type PlannerTaskMetrics } from "./planner-import";
 
 export type PlannerArchivePoint = {
   marketId: string;
@@ -246,7 +246,7 @@ export function mergePlannerTaskRegistry(importedTasks: PlannerTask[], recovered
     imported.set(task.externalId, merged);
   });
 
-  const tasks = Array.from(imported.values()).sort((left, right) => right.effectiveMonth.localeCompare(left.effectiveMonth) || left.taskName.localeCompare(right.taskName, "fr"));
+  const tasks = Array.from(imported.values()).map((task) => ({ ...task, metrics: rehydratePlannerTaskMetrics(task.comments, task.metrics) })).sort((left, right) => right.effectiveMonth.localeCompare(left.effectiveMonth) || left.taskName.localeCompare(right.taskName, "fr"));
   const summary: PlannerRegistrySummary = {
     imported: importedTasks.length,
     archiveCandidates: recoveredTasks.length,
