@@ -15,7 +15,21 @@
 .supplier-chart-zero{stroke:var(--text);stroke-width:1.7;opacity:.7}
 .supplier-column-highlight{fill:var(--text);opacity:.035;pointer-events:none}
 .supplier-column-chart .supplier-column-value{font-size:12px;font-weight:700;fill:var(--text)}
-.supplier-column-chart .supplier-column-missing{font-size:10px;fill:var(--muted)}
 .supplier-column-chart .supplier-column-summary{position:static;transform:none;left:auto;top:auto;margin-top:12px;max-width:none;width:auto}
 .supplier-column-scroll svg:focus-visible{outline:2px solid var(--aqua);outline-offset:-2px}
 
+
+.supplier-picker{position:relative;min-width:0;display:grid;gap:6px;align-content:start}
+.supplier-picker>span{color:var(--muted);font-size:.8125rem;font-weight:650}
+.supplier-picker-trigger{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--line-strong);border-radius:10px;background:var(--field-bg);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.supplier-picker-trigger>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.supplier-picker-popup{position:absolute;top:100%;left:0;right:0;z-index:30;margin-top:6px;padding:10px;border:1px solid var(--line-strong);border-radius:12px;background:var(--surface);box-shadow:var(--shadow-sm);min-width:0}
+.supplier-picker-popup input{width:100%;max-width:100%;box-sizing:border-box}
+.supplier-picker-options{max-height:260px;overflow-y:auto;margin-top:8px;overscroll-behavior:contain}
+.supplier-picker-options button{display:flex;align-items:center;gap:8px;width:100%;padding:10px 8px;border:0;border-radius:6px;background:transparent;color:var(--text);text-align:left;cursor:pointer;font:inherit}
+.supplier-picker-options button>span:first-child{flex:1;min-width:0;overflow-wrap:anywhere}
+.supplier-picker-options button small{color:var(--muted)}
+.supplier-picker-options button.highlighted,.supplier-picker-options button:hover,.supplier-picker-options button[aria-selected=true]{background:var(--accent-soft)}
+.supplier-picker-popup p{padding:8px;color:var(--muted);font-size:.875rem}
+.supplier-picker-trigger:focus-visible,.supplier-picker-popup input:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
+@media(max-width:640px){.supplier-dashboard-filters>.supplier-picker{grid-column:1/-1}}
