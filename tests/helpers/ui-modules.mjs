@@ -9,6 +9,7 @@ export const miniTrendUrl = moduleUrl("../../lib/supplier-mini-trend.ts");
 export const miniChartUrl = moduleUrl("../../features/market-pulse/supplier-mini-chart.tsx", { ...reactImports, "@/lib/supplier-mini-trend": miniTrendUrl });
 export const supplierChartUrl = moduleUrl("../../features/market-pulse/supplier-variation-dashboard.tsx", {
   ...reactImports,
+  "@/lib/chart-excel-export": moduleUrl("../../lib/chart-excel-export.ts"),
   "@/lib/chart-image-export": moduleUrl("../../lib/chart-image-export.ts"),
   "@/lib/supplier-turnover": moduleUrl("../../lib/supplier-turnover.ts"),
   "@/lib/supplier-variations": moduleUrl("../../lib/supplier-variations.ts"),
