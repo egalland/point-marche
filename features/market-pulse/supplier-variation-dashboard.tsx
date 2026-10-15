@@ -11,6 +11,7 @@ import type { PlannerTask } from "@/lib/planner-import";
 import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 import { compareSupplierTurnover, formatSupplierTurnover, supplierTurnoverLabel, supplierTurnoverSource } from "@/lib/supplier-turnover";
 
+import { downloadChartExcel } from "@/lib/chart-excel-export";
 import { chartPngBlob, downloadChartPng } from "@/lib/chart-image-export";
 
 type Market = { id: string; name: string; plannerTags: string[] };
@@ -75,28 +76,36 @@ function SupplierDetailChart({ points, title, subtitle }: { points: SupplierVari
     const next = event.key === "ArrowLeft" ? Math.max(0, current - 1) : event.key === "ArrowRight" ? Math.min(points.length - 1, current + 1) : event.key === "Home" ? 0 : event.key === "End" ? points.length - 1 : null;
     if (next !== null) { event.preventDefault(); setActiveIndex(next); }
   };
-  const exportImage = async (copy: boolean) => {
-    if (!svgRef.current || imageStatus.busy) return;
-    setImageStatus({ busy: true, error: false, message: "Préparation de l’image…" });
-    try {
-      const info = {
+  const exportInfo = {
         title: title ?? (points[0]?.supplierKey === "selection-average" ? "Variation moyenne par mois" : `Variations · ${points[0]?.supplierLabel ?? "Fournisseur"}`),
         subtitle: subtitle ?? (points.length ? `${monthLabel(points[0].period)} — ${monthLabel(points.at(-1)!.period)}` : ""),
         global: showGlobal, weighted: showWeighted,
       };
+  const exportImage = async (copy: boolean) => {
+    if (!svgRef.current || imageStatus.busy) return;
+    setImageStatus({ busy: true, error: false, message: "Préparation de l’image…" });
+    try {
       if (copy) {
         if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") throw new Error("La copie d’image est indisponible ici. Utilise « Télécharger en PNG ».");
         // Start writing during the click gesture, including browsers requiring an activation.
-        const blob = chartPngBlob(svgRef.current, info);
+        const blob = chartPngBlob(svgRef.current, exportInfo);
         blob.catch(() => {});
         await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
         setImageStatus({ busy: false, error: false, message: "Graphique copié. Colle-le dans ton mail ou dans Excel." });
       } else {
-        downloadChartPng(await chartPngBlob(svgRef.current, info));
+        downloadChartPng(await chartPngBlob(svgRef.current, exportInfo));
         setImageStatus({ busy: false, error: false, message: "Téléchargement du PNG lancé." });
       }
     } catch {
       setImageStatus({ busy: false, error: true, message: copy ? "Le graphique n’a pas été copié. Autorise le presse-papiers ou utilise « Télécharger en PNG »." : "Impossible de créer le PNG. Réessaie ou utilise un autre navigateur." });
+    }
+  };
+  const exportExcel = () => {
+    try {
+      downloadChartExcel(points, exportInfo);
+      setImageStatus({ busy: false, error: false, message: "Téléchargement Excel lancé : graphique modifiable et tableau de données." });
+    } catch {
+      setImageStatus({ busy: false, error: true, message: "Impossible de créer le fichier Excel. Réduis la période ou réessaie." });
     }
   };
   return <div className="supplier-line-chart supplier-column-chart">
@@ -107,6 +116,7 @@ function SupplierDetailChart({ points, title, subtitle }: { points: SupplierVari
     <div className="supplier-chart-export-actions">
       <button type="button" className="secondary-button" disabled={imageStatus.busy || !values.length} onClick={() => { void exportImage(true); }}>Copier le graphique</button>
       <button type="button" className="secondary-button" disabled={imageStatus.busy || !values.length} onClick={() => { void exportImage(false); }}>Télécharger en PNG</button>
+      <button type="button" className="secondary-button" disabled={imageStatus.busy || !values.length} onClick={exportExcel}>Exporter en Excel</button>
       {imageStatus.message && <span role={imageStatus.error ? "alert" : "status"}>{imageStatus.message}</span>}
     </div>
     <p id={helpId} className="editor-hint">Colonnes côte à côte · ligne de référence à 0 %. Faites défiler le graphique si nécessaire ; les flèches du clavier permettent de parcourir les mois.</p>
