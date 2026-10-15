@@ -11,6 +11,8 @@ import type { PlannerTask } from "@/lib/planner-import";
 import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 import { compareSupplierTurnover, formatSupplierTurnover, supplierTurnoverLabel, supplierTurnoverSource } from "@/lib/supplier-turnover";
 
+import { chartPngBlob, downloadChartPng } from "@/lib/chart-image-export";
+
 type Market = { id: string; name: string; plannerTags: string[] };
 type SeriesKey = "globalVariation" | "weightedVariation";
 
@@ -33,12 +35,15 @@ function monthsAgo(amount: number) {
   return date.toISOString().slice(0, 10);
 }
 
-export function SupplierVariationChart({ points, compact = false }: { points: SupplierVariationPoint[]; compact?: boolean }) {
-  return compact ? <SupplierMiniChart points={points}/> : <SupplierDetailChart points={points}/>;
+export function SupplierVariationChart({ points, compact = false, title, subtitle }: { points: SupplierVariationPoint[]; compact?: boolean; title?: string; subtitle?: string }) {
+  return compact ? <SupplierMiniChart points={points}/> : <SupplierDetailChart points={points} title={title} subtitle={subtitle}/>;
 }
 
-function SupplierDetailChart({ points }: { points: SupplierVariationPoint[] }) {
+function SupplierDetailChart({ points, title, subtitle }: { points: SupplierVariationPoint[]; title?: string; subtitle?: string }) {
   const helpId = useId();
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [imageStatus, setImageStatus] = useState<{ busy: boolean; error: boolean; message: string }>({ busy: false, error: false, message: "" });
+
   const [showGlobal, setShowGlobal] = useState(true);
   const [showWeighted, setShowWeighted] = useState(true);
   const [selection, setSelection] = useState<{ points: SupplierVariationPoint[]; index: number | null }>({ points, index: null });
@@ -70,15 +75,44 @@ function SupplierDetailChart({ points }: { points: SupplierVariationPoint[] }) {
     const next = event.key === "ArrowLeft" ? Math.max(0, current - 1) : event.key === "ArrowRight" ? Math.min(points.length - 1, current + 1) : event.key === "Home" ? 0 : event.key === "End" ? points.length - 1 : null;
     if (next !== null) { event.preventDefault(); setActiveIndex(next); }
   };
+  const exportImage = async (copy: boolean) => {
+    if (!svgRef.current || imageStatus.busy) return;
+    setImageStatus({ busy: true, error: false, message: "Préparation de l’image…" });
+    try {
+      const info = {
+        title: title ?? (points[0]?.supplierKey === "selection-average" ? "Variation moyenne par mois" : `Variations · ${points[0]?.supplierLabel ?? "Fournisseur"}`),
+        subtitle: subtitle ?? (points.length ? `${monthLabel(points[0].period)} — ${monthLabel(points.at(-1)!.period)}` : ""),
+        global: showGlobal, weighted: showWeighted,
+      };
+      if (copy) {
+        if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") throw new Error("La copie d’image est indisponible ici. Utilise « Télécharger en PNG ».");
+        // Start writing during the click gesture, including browsers requiring an activation.
+        const blob = chartPngBlob(svgRef.current, info);
+        blob.catch(() => {});
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        setImageStatus({ busy: false, error: false, message: "Graphique copié. Colle-le dans ton mail ou dans Excel." });
+      } else {
+        downloadChartPng(await chartPngBlob(svgRef.current, info));
+        setImageStatus({ busy: false, error: false, message: "Téléchargement du PNG lancé." });
+      }
+    } catch {
+      setImageStatus({ busy: false, error: true, message: copy ? "Le graphique n’a pas été copié. Autorise le presse-papiers ou utilise « Télécharger en PNG »." : "Impossible de créer le PNG. Réessaie ou utilise un autre navigateur." });
+    }
+  };
   return <div className="supplier-line-chart supplier-column-chart">
     <div className="supplier-chart-toggles">
       <button type="button" className={showGlobal ? "active global" : ""} aria-pressed={showGlobal} onClick={() => setShowGlobal((current) => !current)}><i/>Variation GLOBAL</button>
       <button type="button" className={showWeighted ? "active weighted" : ""} aria-pressed={showWeighted} onClick={() => setShowWeighted((current) => !current)}><i/>Variation pondérée</button>
     </div>
+    <div className="supplier-chart-export-actions">
+      <button type="button" className="secondary-button" disabled={imageStatus.busy || !values.length} onClick={() => { void exportImage(true); }}>Copier le graphique</button>
+      <button type="button" className="secondary-button" disabled={imageStatus.busy || !values.length} onClick={() => { void exportImage(false); }}>Télécharger en PNG</button>
+      {imageStatus.message && <span role={imageStatus.error ? "alert" : "status"}>{imageStatus.message}</span>}
+    </div>
     <p id={helpId} className="editor-hint">Colonnes côte à côte · ligne de référence à 0 %. Faites défiler le graphique si nécessaire ; les flèches du clavier permettent de parcourir les mois.</p>
     <div className="supplier-column-scroll">
       <div className="supplier-chart-stage" style={{ minWidth: width }}>
-        <svg viewBox={`0 0 ${width} ${height}`} role="img" tabIndex={0} aria-describedby={helpId} aria-label={`Variations en colonnes${active ? ` · ${monthLabel(active.period)} · GLOBAL ${percent(active.globalVariation)} · Pondérée ${percent(active.weightedVariation)}` : ""}`} onKeyDown={handleKeyDown} onPointerMove={pointer} onPointerDown={pointer}>
+        <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} role="img" tabIndex={0} aria-describedby={helpId} aria-label={`Variations en colonnes${active ? ` · ${monthLabel(active.period)} · GLOBAL ${percent(active.globalVariation)} · Pondérée ${percent(active.weightedVariation)}` : ""}`} onKeyDown={handleKeyDown} onPointerMove={pointer} onPointerDown={pointer}>
           {ticks.map((value) => <g key={value}>
             <line x1={left} y1={y(value)} x2={width - right} y2={y(value)} className={value === 0 ? "supplier-chart-zero" : "supplier-chart-grid"}/>
             <text x={left - 8} y={y(value) + 4} textAnchor="end">{percent(Math.abs(value) < 1e-9 ? 0 : value)}</text>
@@ -205,7 +239,7 @@ export function SupplierVariationDashboard({ tasks, markets, registry }: { tasks
     <div className="surface supplier-source-note"><div><span>Source Planner consolidée</span><strong>Un seul registre pour les points et les statistiques</strong><small>Les simulations conservées dans les points marché complètent automatiquement l’import Planner, sans doublon grâce à l’ID de tâche.</small></div><div><span><b>{registry.imported}</b> importées</span><span className={registry.recovered ? "recovered" : ""}><b>{registry.recovered}</b> récupérées des points</span><span><b>{registry.usableVariations}</b> variations exploitables</span>{registry.enriched > 0 && <span className="recovered"><b>{registry.enriched}</b> complétées</span>}{registry.withoutVariation > 0 && <span className="muted"><b>{registry.withoutVariation}</b> sans variation</span>}{registry.withoutMonth > 0 && <span className="warning"><b>{registry.withoutMonth}</b> sans mois reconnu</span>}</div></div>
     <div className="surface supplier-dashboard-filters"><div className="stats-period-presets"><span>Période rapide</span><div><button type="button" onClick={() => applyPreset(1)}>1 mois</button><button type="button" onClick={() => applyPreset(3)}>3 mois</button><button type="button" onClick={() => applyPreset(6)}>6 mois</button><button type="button" onClick={() => applyPreset(12)} title="Les 12 derniers mois, mois en cours inclus, à partir de la date du jour">Année glissante</button><button type="button" onClick={() => applyPreset("year")}>Cette année</button></div></div><label><span>Du</span><SafeDateInput value={from} onCommit={setFrom} max={to}/></label><label><span>Au</span><SafeDateInput value={to} onCommit={setTo} min={from}/></label><label><span>Marché</span><select value={marketId} onChange={(event) => setMarketId(event.target.value)}><option value="all">Tous les marchés</option>{markets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><SupplierPicker suppliers={suppliers} value={supplierKey} onChange={setSupplierKey}/></div>
     <div className="stats-kpis supplier-kpis"><article><span>Observations</span><strong>{filtered.length}</strong><small>{new Set(filtered.map((point) => point.supplierKey)).size} fournisseur{new Set(filtered.map((point) => point.supplierKey)).size > 1 ? "s" : ""}</small></article><article><span>Moyenne GLOBAL</span><strong>{percent(averageVariation(filtered, "globalVariation"))}</strong><small>Valeurs renseignées uniquement</small></article><article><span>Moyenne pondérée</span><strong>{percent(averageVariation(filtered, "weightedVariation"))}</strong><small>Valeurs renseignées uniquement</small></article><article><span>Données doubles</span><strong>{filtered.filter((point) => point.globalVariation !== null && point.weightedVariation !== null).length}</strong><small>GLOBAL et pondérée disponibles</small></article></div>
-    <article className="surface supplier-overall-chart"><header><div><span>Lecture consolidée</span><strong>Variation moyenne par mois</strong></div><p>Chaque paire de colonnes compare les moyennes GLOBAL et pondérée des fournisseurs visibles.</p></header><SupplierVariationChart points={series}/></article>
+    <article className="surface supplier-overall-chart"><header><div><span>Lecture consolidée</span><strong>Variation moyenne par mois</strong></div><p>Chaque paire de colonnes compare les moyennes GLOBAL et pondérée des fournisseurs visibles.</p></header><SupplierVariationChart points={series} title="Variation moyenne par mois" subtitle={`${from.split("-").reverse().join("/")} — ${to.split("-").reverse().join("/")} · ${market?.name ?? "Tous les marchés"} · ${suppliers.find((item) => item.key === supplierKey)?.label ?? "Tous les fournisseurs"}`}/></article>
     <article className="surface stats-detail supplier-detail"><header><div><span>Détail fournisseur</span><strong>{rows.length} observation{rows.length > 1 ? "s" : ""}</strong></div><small>Clique sur une ligne pour ouvrir son historique.</small></header><div className="data-table-wrap"><table><thead><tr><th aria-sort={sort.key === "period" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleSort("period")}>Mois{mark("period")}</button></th><th aria-sort={sort.key === "supplier" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleSort("supplier")}>Fournisseur{mark("supplier")}</button></th><th>Code</th><th className="supplier-turnover-cell" title={supplierTurnoverSource} aria-sort={sort.key === "ca" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleSort("ca")}>{supplierTurnoverLabel}{mark("ca")}</button></th><th aria-sort={sort.key === "global" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleSort("global")}>GLOBAL{mark("global")}</button></th><th aria-sort={sort.key === "weighted" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleSort("weighted")}>Pondérée{mark("weighted")}</button></th><th aria-sort={sort.key === "delta" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleSort("delta")}>Écart précédent{mark("delta")}</button></th><th>Marchés / tags</th></tr></thead><tbody>{detailPage.rows.map(({ point, delta }) => <tr key={point.taskId} onClick={() => setSelected(allPoints.filter((candidate) => candidate.supplierKey === point.supplierKey))}><td>{monthLabel(point.period)}</td><td><button type="button" className="table-link" aria-haspopup="dialog" aria-label={`Voir l’historique de ${point.supplierLabel}`} onClick={(event) => { event.stopPropagation(); setSelected(allPoints.filter((candidate) => candidate.supplierKey === point.supplierKey)); }}>{point.supplierLabel}</button></td><td>{point.supplierCode || "—"}</td><td className="supplier-turnover-cell" title={supplierTurnoverSource}>{formatSupplierTurnover(point.purchases12m)}</td><td>{percent(point.globalVariation)}</td><td>{percent(point.weightedVariation)}</td><td className={delta !== null && delta > 0 ? "variation-up" : delta !== null && delta < 0 ? "variation-down" : ""}>{delta === null ? "—" : `${delta > 0 ? "+" : ""}${percent(delta)}`}</td><td>{point.labels.join(" · ") || "Non rattaché"}</td></tr>)}</tbody></table>{!rows.length && <div className="table-empty">Aucune variation ne correspond à ces filtres.</div>}</div><TablePagination {...detailPage} label="Pagination des variations fournisseurs"/></article>
     {selected && <AppDialog open onClose={() => setSelected(null)} labelledBy="supplier-dashboard-dialog-title" className="supplier-variation-dialog"><div className="supplier-dialog-heading"><span>Historique fournisseur</span><h2 id="supplier-dashboard-dialog-title">{selected[0]?.supplierLabel}</h2><p>{selected[0]?.supplierCode ? `Code ${selected[0].supplierCode} · ` : ""}{selected.length} observation{selected.length > 1 ? "s" : ""}</p></div><SupplierVariationChart points={selected}/></AppDialog>}
   </section>;
