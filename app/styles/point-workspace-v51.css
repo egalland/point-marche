@@ -33,3 +33,11 @@
 .supplier-picker-popup p{padding:8px;color:var(--muted);font-size:.875rem}
 .supplier-picker-trigger:focus-visible,.supplier-picker-popup input:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
 @media(max-width:640px){.supplier-dashboard-filters>.supplier-picker{grid-column:1/-1}}
+
+/* Identité de la série pondérée, distincte du bleu GLOBAL. */
+:root{--supplier-weighted:#a8560b}
+:root[data-theme=dark]{--supplier-weighted:#f5b34f}
+.supplier-chart-bar.weighted,.supplier-chart-dot.weighted{fill:var(--supplier-weighted)}
+.supplier-chart-toggles .weighted i,.supplier-chart-tooltip i.weighted{background:var(--supplier-weighted)}
+.supplier-chart-line.weighted{stroke:var(--supplier-weighted)}
+.supplier-mini-chart.weighted{color:var(--supplier-weighted)}
