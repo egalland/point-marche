@@ -143,3 +143,8 @@ test("a later blank profile does not erase the available variation for January",
   assert.equal(raw.length,1);
   assert.equal(variations.aggregateMonthlyVariations(raw,'2026-01-01','2026-01-31')[0].globalVariation,1.45);
 });
+
+test("reversed Isover title keeps a clean supplier label", () => {
+  assert.equal(variations.supplierLabelFromTask('2026-AVRIL-04-ISOVER'),'ISOVER');
+  assert.equal(variations.supplierLabelFromTask('2026-04-AVRIL-ISOVER'),'ISOVER');
+});

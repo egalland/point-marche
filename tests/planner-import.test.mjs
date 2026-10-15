@@ -202,3 +202,12 @@ test("keeps quoted and unquoted multiline Planner comments in their task row", (
     assert.equal(result.tasks[0].metrics.weightedVariation, 2.4);
   }
 });
+
+test("recognizes the reversed Isover title month without using integration month", () => {
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-AVRIL-04-ISOVER"), "2026-04");
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-04-AVRIL-ISOVER"), "2026-04");
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-FÉVRIER-02-ISOVER"), "2026-02");
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-AVRIL-05-ISOVER"), "");
+  const data = planner.parsePlannerTasks("ID de tâche\tNom de tâche\tNotes\niso-avr\t2026-AVRIL-04-ISOVER\tCode Fournisseur : A1941 Variation GLOBAL : 5 % Variation pondérée : 5 %");
+  assert.equal(data.tasks[0].effectiveMonth,"2026-04");
+});
