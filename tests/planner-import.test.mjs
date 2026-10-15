@@ -211,3 +211,28 @@ test("recognizes the reversed Isover title month without using integration month
   const data = planner.parsePlannerTasks("ID de tâche\tNom de tâche\tNotes\niso-avr\t2026-AVRIL-04-ISOVER\tCode Fournisseur : A1941 Variation GLOBAL : 5 % Variation pondérée : 5 %");
   assert.equal(data.tasks[0].effectiveMonth,"2026-04");
 });
+
+test("NOVLEK uses the percentage after agency 3517, not the agency number or the later agency breakdown", () => {
+  const notes = "Achats 12 mG : €\nCode Fournisseur : D3053\nVariation GLOBAL :\n3517 -1.43%\nAGENCES -0.12%\nPONDERE AU CA -1.69%\nStructure tarifaire :";
+  const result = planner.parsePlannerTaskMetrics(notes);
+  assert.equal(result.globalVariation, -1.43);
+  assert.equal(result.weightedVariation, -1.69);
+  assert.equal(result.supplierCode, "D3053");
+  assert.equal(result.purchases12m, null);
+  const repaired = planner.rehydratePlannerTaskMetrics(notes, { ...result, globalVariation: 3517, weightedVariation: null });
+  assert.equal(repaired.globalVariation, -1.43);
+  assert.equal(repaired.weightedVariation, -1.69);
+  const flat = planner.parsePlannerTaskMetrics(notes.replace(/\n/g, " "));
+  assert.equal(flat.globalVariation, -1.43);
+  assert.equal(flat.weightedVariation, -1.69);
+});
+
+test("percentage parsing preserves signs, zero and bare legacy rates without inventing rates from annotations", () => {
+  for (const [text, expected] of [["Agence 3517 : +2,7 %",2.7],["3517 − 1,43 %",-1.43],["3517 : 0 %",0],["-2.3",-2.3],["Agence 3517",null],["3517 : à compléter",null]]) {
+    assert.equal(planner.parsePlannerTaskMetrics(`Variation GLOBAL : ${text}`).globalVariation, expected, text);
+  }
+  assert.equal(planner.parsePlannerTaskMetrics("Variation GLOBAL : 1,2 % Variation pondérée : 1,5 %").weightedVariation, 1.5);
+  const weightedOnly = planner.parsePlannerTaskMetrics("Variation GLOBAL :\nPONDERE AU CA -1.69%");
+  assert.equal(weightedOnly.globalVariation, null);
+  assert.equal(weightedOnly.weightedVariation, -1.69);
+});

@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import ts from "typescript";
-
-const source = readFileSync(new URL("../lib/planner-registry.ts", import.meta.url), "utf8");
-const output = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
-}).outputText;
-const registry = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
+import { moduleUrl } from "./helpers/module-url.mjs";
+const registry = await import(moduleUrl("../../lib/planner-registry.ts"));
 
 function importedTask(externalId) {
   return {
@@ -127,4 +121,14 @@ test("repairs the month of an already imported reversed Isover title on read", (
   assert.equal(result.tasks[0].metrics.weightedVariation,5);
   assert.equal(result.summary.withoutMonth,0);
   assert.equal(isover.effectiveMonth,'');
+});
+
+test("repairs an already imported NOVLEK rate from its notes without mutating the saved payload", () => {
+  const novlek = { ...importedTask("novlek"), taskName: "2026-03-MARS-NOVLEK", effectiveMonth: "2026-03", comments: "Code Fournisseur : D3053\nVariation GLOBAL :\n3517 -1.43%\nAGENCES -0.12%\nPONDERE AU CA -1.69%\nStructure tarifaire :", metrics: { purchases12m: null, supplierCode: "D3053", announcedVariation: null, globalVariation: 3517, weightedVariation: null, tariffStructure: "" } };
+  const result = registry.mergePlannerTaskRegistry([novlek], []);
+  assert.equal(result.tasks[0].metrics.globalVariation, -1.43);
+  assert.equal(result.tasks[0].metrics.weightedVariation, -1.69);
+  assert.equal(novlek.metrics.globalVariation, 3517);
+  const noNotes = { ...novlek, comments: "", metrics: { ...novlek.metrics, globalVariation: -2 } };
+  assert.equal(registry.mergePlannerTaskRegistry([noNotes], []).tasks[0].metrics.globalVariation, -2);
 });

@@ -232,7 +232,7 @@ const metricPatterns = {
   supplierCode: String.raw`code\s+fournisseur`,
   announcedVariation: String.raw`annonc(?:e|é|ée)`,
   globalVariation: String.raw`variation\s+global`,
-  weightedVariation: String.raw`variation\s+pond[ée]r[ée]e`,
+  weightedVariation: String.raw`(?:variation\s+pond[ée]r[ée]e|pond[ée]r[ée]\s+au\s+ca)`,
   tariffStructure: String.raw`structure\s+tarifaire`,
 };
 
@@ -240,18 +240,42 @@ const metricBoundary = `(?:${Object.values(metricPatterns).join("|")})`;
 
 function metricValue(comments: string, pattern: string) {
   const compact = cleanCell(comments).replace(/\n/g, " ");
-  return compact.match(new RegExp(`${pattern}\\s*:\\s*(.*?)(?=\\s*${metricBoundary}\\s*:|$)`, "i"))?.[1]?.trim() ?? "";
+  const value = compact.match(new RegExp(`${pattern}\\s*:\\s*(.*?)(?=\\s*(?:${metricBoundary}\\s*:|pond[ée]r[ée]\\s+au\\s+ca\\b)|$)`, "i"))?.[1]?.trim();
+  if (value !== undefined) return value;
+  // Some notes label the weighted rate "PONDERE AU CA -1.69%", without a colon.
+  return pattern === metricPatterns.weightedVariation ? compact.match(/pond[ée]r[ée]\s+au\s+ca\s+([+−-]?\s*\d+(?:[.,]\d+)?\s*%)/i)?.[1] ?? "" : "";
+}
+
+function variationValue(value: string) {
+  const clean = cleanCell(value).replace(/−/g, "-");
+  // Agency identifiers and other annotations are not percentages.
+  const percentages = [...clean.matchAll(/([+-]?\s*\d+(?:[.,]\d+)?)\s*%/g)];
+  // The leading percentage is the reported rate; later agency breakdowns are not averaged.
+  if (percentages.length) return Number(percentages[0][1].replace(/\s/g, "").replace(",", "."));
+  // Legacy exports also contain a bare numeric field, without a percent sign.
+  return /^[+-]?\s*\d+(?:[.,]\d+)?$/.test(clean) ? Number(clean.replace(/\s/g, "").replace(",", ".")) : null;
 }
 
 export function parsePlannerTaskMetrics(comments: string): PlannerTaskMetrics {
   return {
     purchases12m: numberValue(metricValue(comments, metricPatterns.purchases12m)),
     supplierCode: metricValue(comments, metricPatterns.supplierCode).toUpperCase(),
-    announcedVariation: numberValue(metricValue(comments, metricPatterns.announcedVariation)),
-    globalVariation: numberValue(metricValue(comments, metricPatterns.globalVariation)),
-    weightedVariation: numberValue(metricValue(comments, metricPatterns.weightedVariation)),
+    announcedVariation: variationValue(metricValue(comments, metricPatterns.announcedVariation)),
+    globalVariation: variationValue(metricValue(comments, metricPatterns.globalVariation)),
+    weightedVariation: variationValue(metricValue(comments, metricPatterns.weightedVariation)),
     tariffStructure: metricValue(comments, metricPatterns.tariffStructure),
   };
+}
+
+/** Repair legacy parsed rates from their original notes without requiring another import. */
+export function rehydratePlannerTaskMetrics(comments: string, current: PlannerTaskMetrics): PlannerTaskMetrics {
+  if (!comments?.trim()) return current;
+  const parsed = parsePlannerTaskMetrics(comments);
+  const result = { ...current };
+  for (const key of ["announcedVariation", "globalVariation", "weightedVariation"] as const) {
+    if (metricValue(comments, metricPatterns[key])) result[key] = parsed[key];
+  }
+  return result;
 }
 
 function workflowState(status: string, checklist: PlannerChecklistItem[]): PlannerTask["workflowState"] {
