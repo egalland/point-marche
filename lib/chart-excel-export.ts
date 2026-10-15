@@ -47,6 +47,8 @@ export function chartExcelParts(observations: SupplierVariationPoint[], info: Ex
   const context = `${identity.label}${identity.code ? ` · Code ${identity.code}` : ""} · export du ${identity.dateLabel}`;
   const summaryRows: string[] = [];
   const links: string[] = [];
+  const years = Array.from(new Set(calendar.map((point) => point.period.slice(0, 4))));
+  const annualSummaryRows = years.map(() => [] as string[]);
   views.forEach((view, index) => {
     const points = view.mode === "months" ? calendar : supplierVariationView(observations, "variations", view.global, view.weighted);
     const series = [
@@ -54,7 +56,7 @@ export function chartExcelParts(observations: SupplierVariationPoint[], info: Ex
       { key: "weightedVariation" as const, label: "Variation pondérée", visible: view.weighted },
     ].filter((item) => item.visible);
     // An empty view still has a blank, editable table row, without a made-up month or zero.
-    const lastRow = 28 + Math.max(points.length, 1), lastColumn = series.length === 2 ? "C" : "B";
+    const lastRow = 28 + Math.max(points.length, 1), lastColumn = series.length === 2 ? "D" : "C";
     const tableRange = `A28:${lastColumn}${lastRow}`;
     const labels = points.map((point) => periodLabel(point.period));
     const means = series.map((item) => {
@@ -65,13 +67,38 @@ export function chartExcelParts(observations: SupplierVariationPoint[], info: Ex
       const column = String.fromCharCode(66 + seriesIndex), range = `${column}29:${column}${lastRow}`;
       return formulaCell(`${column}5`, `IF(COUNT(${range})=0,"",AVERAGE(${range}))`, means[seriesIndex]);
     }).join("");
-    const header = row(28, textCell("A28", "Mois", 9) + series.map((item, j) => textCell(`${String.fromCharCode(66 + j)}28`, item.label, 9)).join(""), 26);
-    const data = points.length ? points.map((point, i) => row(i + 29, textCell(`A${i + 29}`, labels[i]) + series.map((item, j) => percentCell(`${String.fromCharCode(66 + j)}${i + 29}`, point[item.key])).join(""))).join("") : row(29, textCell("A29", "") + percentCell("B29", null));
-    const rows = row(2, textCell("A2", view.title, 2), 28) + row(3, textCell("A3", context, 3)) + row(4, textCell("A4", "Retour à la présentation", 7)) + row(5, textCell("A5", "Moyenne des données") + averages, 26) + header + data;
+    const header = row(28, textCell("A28", "Mois", 9) + series.map((item, j) => textCell(`${String.fromCharCode(66 + j)}28`, item.label, 9)).join("") + textCell(`${lastColumn}28`, "Année", 9), 26);
+    const data = points.length ? points.map((point, i) => row(i + 29, textCell(`A${i + 29}`, labels[i]) + series.map((item, j) => percentCell(`${String.fromCharCode(66 + j)}${i + 29}`, point[item.key])).join("") + `<x:c r="${lastColumn}${i + 29}" s="1"><x:v>${Number(point.period.slice(0, 4))}</x:v></x:c>`)).join("") : row(29, textCell("A29", "") + percentCell("B29", null));
+    const annualHeaderRow = lastRow + 3;
+    const annualRows = years.map((year, yearIndex) => {
+      const annualRow = annualHeaderRow + yearIndex + 1;
+      const annualMeans = series.map((item) => {
+        const values = points.filter((point) => point.period.startsWith(`${year}-`)).map((point) => point[item.key]).filter((value): value is number => finite(value));
+        return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length / 100 : null;
+      });
+      const cells = series.map((_, seriesIndex) => {
+        const column = String.fromCharCode(66 + seriesIndex);
+        const yearRange = `$${lastColumn}$29:$${lastColumn}$${lastRow}`, values = `$${column}$29:$${column}$${lastRow}`;
+        // The year travels with its row when the Excel data table is sorted.
+        const count = `COUNTIFS(${yearRange},$A${annualRow},${values},"<>")`;
+        return formulaCell(`${column}${annualRow}`, `IF(${count}=0,"",SUMIFS(${values},${yearRange},$A${annualRow})/${count})`, annualMeans[seriesIndex]);
+      }).join("");
+      const summaryRow = 19 + yearIndex * 7 + index;
+      const summaryAnnualMean = (address: string, seriesIndex: number) => {
+        if (seriesIndex === -1) return textCell(address, "");
+        const ref = `'${view.name}'!${String.fromCharCode(66 + seriesIndex)}${annualRow}`;
+        return formulaCell(address, `IF(ISNUMBER(${ref}),${ref},"")`, annualMeans[seriesIndex]);
+      };
+      annualSummaryRows[yearIndex].push(row(summaryRow, textCell(`A${summaryRow}`, view.title) + summaryAnnualMean(`B${summaryRow}`, series.findIndex((item) => item.key === "globalVariation")) + summaryAnnualMean(`C${summaryRow}`, series.findIndex((item) => item.key === "weightedVariation")), 28));
+      return row(annualRow, `<x:c r="A${annualRow}" s="1"><x:v>${year}</x:v></x:c>` + cells);
+    }).join("");
+    const annualTable = row(lastRow + 2, textCell(`A${lastRow + 2}`, "Moyennes par année", 2), 28)
+      + row(annualHeaderRow, textCell(`A${annualHeaderRow}`, "Année", 6) + series.map((item, j) => textCell(`${String.fromCharCode(66 + j)}${annualHeaderRow}`, item.label, 6)).join(""), 26) + annualRows;
+    const rows = row(2, textCell("A2", view.title, 2), 28) + row(3, textCell("A3", context, 3)) + row(4, textCell("A4", "Retour à la présentation", 7)) + row(5, textCell("A5", "Moyenne des données") + averages, 26) + header + data + annualTable;
     const sheetPath = `xl/worksheets/sheet${index + 2}.xml`;
     parts[sheetPath] = parts[sheetPath].replace(/<x:sheetData>[\s\S]*?<\/x:sheetData>/, `<x:sheetData>${rows}</x:sheetData><x:hyperlinks><x:hyperlink ref="A4" location="&apos;Présentation&apos;!A1" display="Retour à la présentation"/></x:hyperlinks>`);
     const tablePath = `xl/tables/table${index + 1}.xml`;
-    parts[tablePath] = parts[tablePath].replace(/ref="[^"]+"/, `ref="${tableRange}"`).replace(/<x:tableColumns/, `<x:autoFilter ref="${tableRange}"/><x:tableColumns`);
+    parts[tablePath] = parts[tablePath].replace(/ref="[^"]+"/, `ref="${tableRange}"`).replace(/<x:tableColumns[\s\S]*?<\/x:tableColumns>/, `<x:autoFilter ref="${tableRange}"/><x:tableColumns count="${series.length + 2}"><x:tableColumn id="1" name="Mois"/>${series.map((item, j) => `<x:tableColumn id="${j + 2}" name="${item.label}"/>`).join("")}<x:tableColumn id="${series.length + 2}" name="Année"/></x:tableColumns>`);
     const chartPath = `xl/drawings/charts/chart${index + 1}.xml`;
     const originalSeries = parts[chartPath].match(/<c:ser>[\s\S]*?<\/c:ser>/g)!;
     const categoryCache = `<c:strCache><c:ptCount val="${points.length}"/>${labels.map((label, i) => `<c:pt idx="${i}"><c:v>${xml(label)}</c:v></c:pt>`).join("")}</c:strCache>`;
@@ -95,6 +122,11 @@ export function chartExcelParts(observations: SupplierVariationPoint[], info: Ex
     summaryRows.push(row(summaryRow, textCell(`A${summaryRow}`, view.title, 7) + summaryMean(`B${summaryRow}`, series.findIndex((item) => item.key === "globalVariation")) + summaryMean(`C${summaryRow}`, series.findIndex((item) => item.key === "weightedVariation")), 28));
     links.push(`<x:hyperlink ref="A${summaryRow}" location="${xml(`'${view.name}'!A1`)}" display="${xml(view.title)}"/>`);
   });
+  const annualCover = row(17, textCell("A17", "Moyennes par année", 2), 28) + years.map((year, yearIndex) => {
+    const headerRow = 18 + yearIndex * 7;
+    return row(headerRow, textCell(`A${headerRow}`, `Année ${year}`, 6) + textCell(`B${headerRow}`, "Moyenne GLOBAL", 6) + textCell(`C${headerRow}`, "Moyenne pondérée", 6), 26) + annualSummaryRows[yearIndex].join("");
+  }).join("");
+  const notesRow = 19 + years.length * 7;
   const coverRows = row(2, textCell("A2", identity.label, 2), 28) + row(3, textCell("A3", "Point marché · variations fournisseur", 3))
     + row(4, textCell("A4", "Code Code") + textCell("B4", identity.code))
     + row(5, textCell("A5", "Date d’export (Paris)") + `<x:c r="B5" s="4"><x:v>${identity.dateSerial}</x:v></x:c>`)
@@ -102,9 +134,11 @@ export function chartExcelParts(observations: SupplierVariationPoint[], info: Ex
     + row(7, textCell("A7", info.subtitle, 3))
     + row(9, textCell("A9", "Ouvrir une vue", 6) + textCell("B9", "Moyenne GLOBAL", 6) + textCell("C9", "Moyenne pondérée", 6), 26)
     + summaryRows.join("")
-    + row(17, textCell("A17", "Les moyennes excluent les cellules vides et incluent les vrais 0 %."))
-    + row(18, textCell("A18", "Chaque feuille contient son graphique et ses données modifiables."))
-    + row(19, textCell("A19", "Modifier une feuille recalcule sa moyenne et ce récapitulatif."));
+    + annualCover
+    + row(notesRow, textCell(`A${notesRow}`, "Les moyennes excluent les cellules vides et incluent les vrais 0 %."))
+    + row(notesRow + 1, textCell(`A${notesRow + 1}`, "Chaque feuille contient son graphique et ses données modifiables."))
+    + row(notesRow + 2, textCell(`A${notesRow + 2}`, "Modifier une feuille recalcule ses moyennes et ce récapitulatif."))
+    + row(notesRow + 3, textCell(`A${notesRow + 3}`, "Les moyennes annuelles portent sur les mois présents dans la période exportée."));
   parts["xl/worksheets/sheet1.xml"] = parts["xl/worksheets/sheet1.xml"].replace(/<x:sheetData>[\s\S]*?<\/x:sheetData>/, `<x:sheetData>${coverRows}</x:sheetData><x:hyperlinks>${links.join("")}</x:hyperlinks>`);
   parts["xl/workbook.xml"] = parts["xl/workbook.xml"].replace("</x:workbook>", '<x:calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></x:workbook>');
   return parts;
