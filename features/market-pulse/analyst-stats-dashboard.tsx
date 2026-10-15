@@ -1,4 +1,5 @@
 "use client";
+import { PURCHASESDashboard } from "./purchaseData-dashboard";
 
 import { useMemo, useState } from "react";
 import { TablePagination, useTablePage } from "@/components/table-pagination";
@@ -159,7 +160,7 @@ export function AnalystStatsDashboard({ tasks, users, markets, registry, updated
 
     <nav className="stats-view-tabs" aria-label="Vue des statistiques"><button type="button" className={statsView === "activity" ? "active" : ""} onClick={() => setStatsView("activity")}>Activité analystes</button><button type="button" className={statsView === "suppliers" ? "active" : ""} onClick={() => setStatsView("suppliers")}>Variations fournisseurs</button><button type="button" className={statsView === "purchaseData" ? "active" : ""} onClick={() => setStatsView("purchaseData")}>PURCHASES</button></nav>
 
-    {statsView === "purchaseData" ? <section className="surface purchaseData-stats-empty"><h2>PURCHASES</h2><p>Les indicateurs seront ajoutés après définition de la structure du fichier PURCHASES.</p></section> : statsView === "suppliers" ? <><details className="surface stats-supplier-comparison"><summary>Comparer deux périodes de variations</summary><SimulationComparison tasks={tasks} markets={markets} config={supplierComparison} editing updatedAt={updatedAt} onChange={(config) => setSupplierComparison(config)}/></details><SupplierVariationDashboard tasks={tasks} markets={markets} registry={registry}/></> : <>
+    {statsView === "purchaseData" ? <PURCHASESDashboard/> : statsView === "suppliers" ? <><details className="surface stats-supplier-comparison"><summary>Comparer deux périodes de variations</summary><SimulationComparison tasks={tasks} markets={markets} config={supplierComparison} editing updatedAt={updatedAt} onChange={(config) => setSupplierComparison(config)}/></details><SupplierVariationDashboard tasks={tasks} markets={markets} registry={registry}/></> : <>
 
     <section className="surface stats-filters" aria-label="Filtres des statistiques">
       <div className="stats-period-presets"><span>Période rapide</span><div><button type="button" onClick={() => applyPeriod("previousWeek")}>Semaine dernière</button><button type="button" onClick={() => applyPeriod("cycle20")}>Mois dernier · 20 au 20</button><button type="button" onClick={() => applyPeriod("30d")}>30 jours</button><button type="button" onClick={() => applyPeriod("3m")}>3 mois</button><button type="button" onClick={() => applyPeriod("6m")}>6 mois</button><button type="button" onClick={() => applyPeriod("year")}>Cette année</button></div></div>

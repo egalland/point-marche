@@ -1003,6 +1003,7 @@ function MarketPulseWorkspace() {
     updatePriority: (priority) => setData((current) => ({ ...current, priority })),
     updateDossier,
     moveDossier: (id, before) => setData((current) => { const item = current.dossiers.find((row) => row.id === id); if (!item || id === before) return current; const rows = current.dossiers.filter((row) => row.id !== id); const at = before ? rows.findIndex((row) => row.id === before) : rows.length; rows.splice(at < 0 ? rows.length : at, 0, item); return { ...current, dossiers: rows }; }),
+    updatePURCHASES: (configs) => setData(current => ({...current, purchaseDataConfigs: configs})),
     updateComparison: (config, snapshot) => setData((current) => ({ ...current, simulationComparisonConfig: config, simulationComparisonSnapshot: snapshot })),
     updateJiraRules: (rules) => setData((current) => ({ ...current, jiraAlertRules: normalizeJiraRules(rules) })),
     addDossier,
