@@ -34,3 +34,7 @@ Le point s’ouvre en disposition libre, avec les coordonnées et dimensions dé
 
 ### V72 — composition de présentation
 Les blocs restent placés sur la grille avec leurs commandes de manipulation. Un bloc déplacé ou agrandi repousse les blocs qui le croisent vers le bas, sans superposition. « Ranger les blocs » recompose une disposition régulière selon les largeurs des modules. La grille est visible sans activer Organiser.
+
+### V73 — dimensions et alignement
+Huit poignées permettent de tirer chaque bord ou coin, avec flèches au clavier. Les bords et centres des blocs voisins ainsi que la page sont détectés à dix pixels écran. Des guides apparaissent pendant le geste ; Alt désactive temporairement l’aimantation. Les collisions continuent à décaler les voisins.
+Le mode plein écran, son bouton et le double-clic sont retirés : les modules restent dans la présentation.

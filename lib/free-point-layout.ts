@@ -39,3 +39,30 @@ export function arrangePresentationBlocks(ids:string[], blocks:Record<string,Blo
  }
  return result;
 }
+
+export type ResizeEdge='n'|'s'|'e'|'w'|'ne'|'nw'|'se'|'sw';
+export function resizeFromEdge(rect:BlockRect,dx:number,dy:number,edge:ResizeEdge):BlockRect{
+ const right=rect.x+rect.width,bottom=rect.y+rect.height;
+ const x=edge.includes('w')?Math.max(0,Math.min(right-240,rect.x+dx)):rect.x;
+ const y=edge.includes('n')?Math.max(0,Math.min(bottom-144,rect.y+dy)):rect.y;
+ const width=edge.includes('w')?right-x:edge.includes('e')?Math.max(240,Math.min(CANVAS_WIDTH-x,rect.width+dx)):rect.width;
+ const height=edge.includes('n')?bottom-y:edge.includes('s')?Math.max(144,Math.min(10000,rect.height+dy)):rect.height;
+ return normalizeRect({x,y,width,height});
+}
+export function alignPresentationRect(raw:BlockRect,neighbours:BlockRect[],edge:ResizeEdge|null,snap:boolean,threshold=10){
+ let rect={...raw};const guides:{x?:number;y?:number}={};
+ if(!snap)return {rect,guides};
+ for(const axis of ['x','y'] as const){
+  const size=axis==='x'?'width':'height',start=edge?.includes(axis==='x'?'w':'n'),end=edge?.includes(axis==='x'?'e':'s');
+  if(edge&&!start&&!end)continue;
+  const offsets=edge?[start?0:rect[size]]:[0,rect[size]/2,rect[size]];
+  const targets=[...(axis==='x'?[0,CANVAS_WIDTH/2,CANVAS_WIDTH]:[0]),...neighbours.flatMap(p=>[p[axis],p[axis]+p[size]/2,p[axis]+p[size]])];
+  let best:{delta:number;target:number}|null=null;
+  for(const offset of offsets)for(const target of targets){const delta=target-(rect[axis]+offset);if(Math.abs(delta)<=threshold&&(!best||Math.abs(delta)<Math.abs(best.delta)))best={delta,target};}
+  const delta=best?best.delta:Math.round((rect[axis]+(edge&&end?rect[size]:0))/GRID_STEP)*GRID_STEP-(rect[axis]+(edge&&end?rect[size]:0));
+  const proposed=edge?resizeFromEdge(rect,axis==='x'?delta:0,axis==='y'?delta:0,edge):normalizeRect({...rect,[axis]:rect[axis]+delta});
+  const movedEdge=proposed[axis]+(edge&&end?proposed[size]:0),rawEdge=rect[axis]+(edge&&end?rect[size]:0);
+  rect=proposed;if(best&&Math.abs(movedEdge-rawEdge-best.delta)<0.01)guides[axis]=best.target;
+ }
+ return {rect,guides};
+}
