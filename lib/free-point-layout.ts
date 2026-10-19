@@ -27,3 +27,15 @@ export function initialRects(ids: string[], widths: Record<string,string>): Reco
 export function orderedBlockIds(ids:string[], order:string[]=[]){const allowed=new Set(ids);return [...new Set([...order.filter(id=>allowed.has(id)),...ids])];}
 export function reorderBlock(ids:string[],id:string,before:string|null){if(id===before||!ids.includes(id))return ids;const rest=ids.filter(v=>v!==id);const at=before?rest.indexOf(before):-1;rest.splice(at<0?rest.length:at,0,id);return rest;}
 export function placeMissingBlocks(ids:string[], widths:Record<string,string>, saved:Record<string,BlockRect>){const defaults=initialRects(ids,widths);const result={...saved};let bottom=Math.max(0,...ids.filter(id=>result[id]).map(id=>result[id].y+result[id].height+24));for(const id of ids)if(!result[id]){result[id]=normalizeRect({...defaults[id],...(Object.keys(saved).length?{x:0,y:bottom}:{})});if(Object.keys(saved).length)bottom=result[id].y+result[id].height+24;}return result;}
+
+// Keep the manipulated block under the pointer; move intersecting neighbours below it.
+export function arrangePresentationBlocks(ids:string[], blocks:Record<string,BlockRect>, anchor?:string):Record<string,BlockRect>{
+ const result={...blocks},placed:BlockRect[]=[];
+ const order=ids.filter(id=>blocks[id]).sort((a,b)=>blocks[a].y-blocks[b].y||blocks[a].x-blocks[b].x||ids.indexOf(a)-ids.indexOf(b));
+ if(anchor&&order.includes(anchor)){order.splice(order.indexOf(anchor),1);order.unshift(anchor);}
+ for(const id of order){const r={...blocks[id]};let hits:BlockRect[];
+  while((hits=placed.filter(p=>r.x<p.x+p.width&&r.x+r.width>p.x&&r.y<p.y+p.height+24&&r.y+r.height+24>p.y)).length)r.y=Math.max(...hits.map(p=>p.y+p.height+24));
+  result[id]=r;placed.push(r);
+ }
+ return result;
+}
