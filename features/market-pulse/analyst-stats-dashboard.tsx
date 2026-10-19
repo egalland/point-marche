@@ -119,6 +119,9 @@ export function AnalystStatsDashboard({ tasks, users, markets, registry, updated
   const stats = useMemo(() => buildAnalystStats(tasks, users, markets, { from: appliedRange.from, to: appliedRange.to, marketId, specialty, analystIds, comparisonRange: comparisonValid ? comparisonRange : undefined }), [analystIds, appliedRange, comparisonRange, comparisonValid, marketId, markets, specialty, tasks, users]);
   const maxMonth = Math.max(1, ...stats.monthly.map((item) => item.total));
   const maxAnalyst = Math.max(1, ...stats.byAnalyst.map((item) => item.total));
+  const [delayKind, setDelayKind] = useState("all");
+  const delayRows = useMemo(() => stats.delaySamples.filter(sample => delayKind === "all" || sample.kind === delayKind).sort((a, b) => b.endDate.localeCompare(a.endDate)), [stats.delaySamples, delayKind]);
+  const delayPage = useTablePage(delayRows, JSON.stringify([appliedRange, marketId, analystIds, delayKind]), 25);
   const maxDelay = Math.max(1, ...stats.delaySummaries.flatMap((item) => [item.average ?? 0, item.previousAverage ?? 0]));
   const selectAnalyst = (id: string) => setAnalystIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   const setRange = (range: { from: string; to: string }) => {
@@ -193,7 +196,8 @@ export function AnalystStatsDashboard({ tasks, users, markets, registry, updated
         <div className="stats-delay-visual" aria-label={`${summary.label}, moyenne ${daysLabel(summary.average)}, période B ${daysLabel(summary.previousAverage)}`}><div><i style={{ width: `${(summary.average ?? 0) / maxDelay * 100}%` }}/>{comparisonValid && summary.previousAverage !== null && <b style={{ left: `${summary.previousAverage / maxDelay * 100}%` }}/>}</div><small>{comparisonValid ? delayMovementLabel(summary) : "Période B à compléter"}</small></div>
         <footer><span>Médiane <b>{daysLabel(summary.median)}</b></span><span><b>{summary.sampleCount}</b> dossier{summary.sampleCount > 1 ? "s" : ""}</span></footer>
       </article>)}</div>
-      <div className="stats-delay-note"><span><i/>Période A</span><span><b/>Période B</span><small>Le filtre « spécialité » pilote les volumes ; les délais conservent les quatre étapes du cycle pour les tâches correspondant aux autres filtres.</small></div>
+      <details className="stats-delay-evidence"><summary>Voir les dates utilisées dans les calculs ({stats.delaySamples.length})</summary><label>Étape<select value={delayKind} onChange={event => setDelayKind(event.target.value)}><option value="all">Toutes les étapes</option>{stats.delaySummaries.map(summary => <option key={summary.kind} value={summary.kind}>{summary.label}</option>)}</select></label><div className="table-scroll"><table><thead><tr><th>Simulation</th><th>Étape</th><th>Début</th><th>Fin</th><th>Jours calendaires</th></tr></thead><tbody>{delayPage.rows.map(sample => <tr key={`${sample.taskId}-${sample.kind}`}><td>{sample.taskName}</td><td>{stats.delaySummaries.find(summary => summary.kind === sample.kind)?.label}</td><td>{sample.startDate.split("-").reverse().join("/")}</td><td>{sample.endDate.split("-").reverse().join("/")}</td><td>{sample.days}</td></tr>)}</tbody></table>{!delayRows.length && <p>Aucune paire de dates exploitable pour cette sélection.</p>}</div><TablePagination {...delayPage} label="Pagination des délais"/></details>
+      <div className="stats-delay-note"><span><i/>Période A</span><span><b/>Période B</span><small>Le filtre « spécialité » pilote les volumes ; les délais conservent les étapes du cycle, dont l’envoi et le retour de la trame pour les tâches correspondant aux autres filtres.</small></div>
     </section>
 
     <section className="stats-grid">

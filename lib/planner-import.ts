@@ -1,3 +1,5 @@
+import { milestoneKind, validMilestoneDate } from "./simulation-lifecycle";
+
 export type PlannerSpecialty = "simulation" | "control";
 
 export type PlannerChecklistItem = {
@@ -194,7 +196,7 @@ function checklistKind(label: string): PlannerChecklistItem["kind"] {
   const value = normalized(label);
   if (/^simulation\b/.test(value)) return "simulation";
   if (/^controle\b/.test(value)) return "control";
-  if (/trame workspace envoyee/.test(value)) return "trame";
+  if (milestoneKind(label) === "templateSent") return "trame";
   return "other";
 }
 
@@ -205,8 +207,8 @@ function checklistAnalyst(label: string, kind: PlannerChecklistItem["kind"]) {
 
 function parseChecklist(value: string) {
   return cleanCell(value).split(";").map((segment) => segment.trim()).filter(Boolean).map((segment) => {
-    const orderMatch = segment.match(/^\s*(\d+)\s*-/);
-    const withoutOrder = segment.replace(/^\s*\d+\s*-\s*/, "");
+    const orderMatch = segment.match(/^\s*(\d+)\s*[-.)]/);
+    const withoutOrder = segment.replace(/^\s*\d+\s*[-.)]\s*/, "");
     const dateMatch = withoutOrder.match(/:\s*(XX\/XX\/XXXX|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})\s*$/i);
     const label = cleanCell(dateMatch ? withoutOrder.slice(0, dateMatch.index) : withoutOrder);
     const kind = checklistKind(label);
@@ -214,7 +216,7 @@ function parseChecklist(value: string) {
     return {
       order: orderMatch ? Number(orderMatch[1]) : null,
       label,
-      date: dateMatch && !placeholder ? isoDate(dateMatch[1]) : "",
+      date: dateMatch && !placeholder && validMilestoneDate(isoDate(dateMatch[1])) ? isoDate(dateMatch[1]) : "",
       kind,
       analystName: checklistAnalyst(label, kind),
       nonApplicable: kind === "trame" && placeholder,

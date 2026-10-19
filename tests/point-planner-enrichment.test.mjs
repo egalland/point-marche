@@ -1,3 +1,4 @@
+import { moduleUrl } from "./helpers/module-url.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -19,7 +20,7 @@ const enrichmentSource = transpile("../lib/point-planner-enrichment.ts")
   .replace('from "./supplier-variations"', `from "${variationsUrl}"`)
   .replace('from "./point-source-mode"', `from "${sourceModeUrl}"`)
   .replace('from "./market-simulation"', `from "${marketSimulationUrl}"`);
-const enrichment = await import(`data:text/javascript;base64,${Buffer.from(enrichmentSource).toString("base64")}`);
+const enrichment = await import(moduleUrl("../../lib/point-planner-enrichment.ts"));
 
 function task(externalId, effectiveMonth, globalVariation, weightedVariation) {
   return {

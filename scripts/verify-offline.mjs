@@ -83,7 +83,7 @@ assert.match(marketPoint, /APP_VERSION/);
 const freeCanvas = await readFile(resolve(root, 'features/market-pulse/free-point-canvas.tsx'), 'utf8');
 assert.match(freeCanvas, /v51-stage/);
 assert.match(freeCanvas, /updateFreeLayout/);
-assert.match(freeCanvas, /gesture\(e,id,true\)/);
+assert.match(freeCanvas, /gesture\(e,id,edge\)/);
 assert.match(freeCanvas, /Aimantation/);
 const dossier = await readFile(resolve(root, 'features/market-pulse/dossier-board.tsx'), 'utf8');
 assert.match(dossier, /FloatingTools/);
@@ -93,7 +93,7 @@ assert.ok(html.includes(appVersion));
 assert.doesNotMatch(marketPoint, /planner-source-pill/);
 const navigation = await readFile(resolve(root, 'features/market-pulse/workspace-navigation.tsx'), 'utf8');
 assert.doesNotMatch(navigation, /Préparer le point/);
-const featurePaths = ['lib/app-version.ts', 'app/globals.css', 'app/styles/meeting.css', 'features/market-pulse/market-pulse-app.tsx', 'features/market-pulse/workspace-navigation.tsx', 'features/market-pulse/analyst-point-dashboard.tsx', 'features/market-pulse/import-center.tsx', 'features/market-pulse/source-mode-control.tsx', 'features/market-pulse/manual-analyst-jira.tsx', 'features/market-pulse/market-comparison.tsx', 'lib/analyst-point.ts', 'lib/analyst-point-export.ts', 'lib/market-simulation.ts', 'lib/point-source-mode.ts', 'lib/point-planner-enrichment.ts', 'lib/planner-registry.ts', 'lib/market-comparison.ts', 'lib/mail-draft.ts', 'features/market-pulse/free-point-canvas.tsx', 'components/floating-tools.tsx', 'components/workspace-help.tsx', 'lib/free-point-layout.ts', 'lib/point-help.ts', 'app/styles/point-workspace-v51.css'];
+const featurePaths = ['lib/app-version.ts', 'app/globals.css', 'app/styles/meeting.css', 'features/market-pulse/market-pulse-app.tsx', 'features/market-pulse/workspace-navigation.tsx', 'features/market-pulse/analyst-point-dashboard.tsx', 'features/market-pulse/import-center.tsx', 'features/market-pulse/source-mode-control.tsx', 'features/market-pulse/manual-analyst-jira.tsx', 'features/market-pulse/market-comparison.tsx', 'lib/analyst-point.ts', 'lib/analyst-point-export.ts', 'lib/market-simulation.ts', 'lib/simulation-lifecycle.ts', 'lib/simulation-details.ts', 'features/market-pulse/simulation-details.tsx', 'components/loading-status.tsx', 'features/market-pulse/use-point-exports.ts', 'app/styles/point-review-v74.css', 'lib/point-source-mode.ts', 'lib/point-planner-enrichment.ts', 'lib/planner-registry.ts', 'lib/market-comparison.ts', 'lib/mail-draft.ts', 'features/market-pulse/free-point-canvas.tsx', 'components/floating-tools.tsx', 'components/workspace-help.tsx', 'lib/free-point-layout.ts', 'lib/point-help.ts', 'app/styles/point-workspace-v51.css'];
 const featureSources = [];
 for (const path of featurePaths) featureSources.push({ path, sha256: sha(await readFile(resolve(root, path))) });
 const report = {
