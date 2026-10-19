@@ -10,7 +10,8 @@
 
 /* Variations mensuelles : colonnes, octobre 2026 */
 .supplier-column-scroll{overflow-x:auto;overscroll-behavior-x:contain;max-width:100%;border-radius:10px}
-.supplier-column-chart{min-width:0}.supplier-column-chart .supplier-chart-stage{min-height:0}
+.supplier-column-chart{min-width:0}.supplier-column-chart .supplier-chart-stage{min-height:0;height:240px}
+.supplier-column-chart .supplier-chart-stage svg{height:240px;width:100%}
 .supplier-chart-bar.global{fill:var(--aqua)}.supplier-chart-bar.weighted{fill:var(--violet)}
 .supplier-chart-zero{stroke:var(--text);stroke-width:1.7;opacity:.7}
 .supplier-column-highlight{fill:var(--text);opacity:.035;pointer-events:none}

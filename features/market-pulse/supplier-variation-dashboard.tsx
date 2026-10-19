@@ -45,6 +45,18 @@ export function SupplierVariationChart({ points, compact = false, title, subtitl
 function SupplierDetailChart({ points: observations, title, subtitle, supplier }: { points: SupplierVariationPoint[]; title?: string; subtitle?: string; supplier?: { label: string; code: string } }) {
   const helpId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(680);
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const measure = () => setChartWidth(Math.max(680, Math.floor(element.clientWidth)));
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const [imageStatus, setImageStatus] = useState<{ busy: boolean; error: boolean; message: string }>({ busy: false, error: false, message: "" });
 
   const [showGlobal, setShowGlobal] = useState(true);
@@ -60,8 +72,8 @@ function SupplierDetailChart({ points: observations, title, subtitle, supplier }
   ].filter((item) => item.visible) as { key: SeriesKey; label: string; css: string; visible: boolean }[];
   const values = points.flatMap((point) => series.map((item) => point[item.key])).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   const { min, max, ticks } = variationColumnScale(values);
-  const width = Math.max(680, points.length * 92 + 76);
-  const height = 340;
+  const width = Math.max(chartWidth, points.length * 92 + 76);
+  const height = 240;
   const left = 58, right = 18, top = 34, bottom = 54;
   const slot = (width - left - right) / Math.max(1, points.length);
   const barWidth = Math.min(26, slot * .27);
@@ -130,9 +142,9 @@ function SupplierDetailChart({ points: observations, title, subtitle, supplier }
       {imageStatus.message && <span role={imageStatus.error ? "alert" : "status"}>{imageStatus.message}</span>}
     </div>
     <p id={helpId} className="editor-hint">{view === "months" ? "Tous les mois sont espacés régulièrement ; un mois sans donnée reste vide." : "Seuls les mois avec une valeur dans les séries affichées sont présentés."} Colonnes côte à côte · référence à 0 %.</p>
-    <div className="supplier-column-scroll">
+    <div ref={scrollRef} className="supplier-column-scroll">
       <div className="supplier-chart-stage" style={{ minWidth: width }}>
-        <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} role="img" tabIndex={0} aria-describedby={helpId} aria-label={`Variations en colonnes${active ? ` · ${monthLabel(active.period)} · GLOBAL ${percent(active.globalVariation)} · Pondérée ${percent(active.weightedVariation)}` : ""}`} onKeyDown={handleKeyDown} onPointerMove={pointer} onPointerDown={pointer}>
+        <svg ref={svgRef} width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" tabIndex={0} aria-describedby={helpId} aria-label={`Variations en colonnes${active ? ` · ${monthLabel(active.period)} · GLOBAL ${percent(active.globalVariation)} · Pondérée ${percent(active.weightedVariation)}` : ""}`} onKeyDown={handleKeyDown} onPointerMove={pointer} onPointerDown={pointer}>
           {ticks.map((value) => <g key={value}>
             <line x1={left} y1={y(value)} x2={width - right} y2={y(value)} className={value === 0 ? "supplier-chart-zero" : "supplier-chart-grid"}/>
             <text x={left - 8} y={y(value) + 4} textAnchor="end">{percent(Math.abs(value) < 1e-9 ? 0 : value)}</text>
