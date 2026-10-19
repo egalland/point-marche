@@ -65,9 +65,10 @@ test('rich dossiers, comparative snapshot and rules survive point normalization 
   const base = app.initialData(); const snapshot = comparison.buildSimulationComparison([mkTask('a','2025-05')],[market],config);
   const data = app.normalizePointData({...base,simulationComparisonConfig:config,simulationComparisonSnapshot:snapshot,jiraAlertRules:[{id:'r',subcategory:'Flux',warningDays:2,criticalDays:5}],dossiers:[{id:'d',title:'Décision',status:'En cours',richHtml:'<p><strong>Texte enrichi</strong></p>',attachments:[]}],preferences:{...base.preferences,moduleOrder:['dossiers','simulationComparison','jira','operations','promotions','alerts','comparison'],readModules:{...base.preferences.readModules,simulationComparison:true,jira:false},mailModules:{...base.preferences.mailModules,jira:true,simulationComparison:false}}},market.id,market);
   assert.match(data.dossiers[0].richHtml,/<strong>/); assert.equal(data.jiraAlertRules[0].warningDays,2); assert.equal(data.simulationComparisonSnapshot.totalA,1);
-  for (const html of [app.buildMailHtml(data,market,[]),app.buildInteractiveHtml(data,market,[])]) { assert.match(html,/Texte enrichi/); assert.match(html,/Comparatif des simulations/); assert.doesNotMatch(html,/Tickets Jira ·/); assert.ok(html.indexOf('Décision') < html.indexOf('Comparatif des simulations')); }
+  const mail=app.buildMailHtml(data,market,[]);assert.match(mail,/Texte enrichi/);assert.doesNotMatch(mail,/Comparatif des simulations/);assert.match(mail,/Tickets Jira/);
+  data.preferences.htmlModules={...data.preferences.htmlModules,simulationComparison:true,jira:false};const html=app.buildInteractiveHtml(data,market,[]);assert.match(html,/Texte enrichi/);assert.match(html,/Comparatif des simulations/);assert.doesNotMatch(html,/Tickets Jira ·/);assert.ok(html.indexOf('Décision')<html.indexOf('Comparatif des simulations'));
   const ui = renderToStaticMarkup(createElement(app.PreviewDashboard,{data,market,archive:[],tasks:[],markets:[market],editing:true,actions:{updateFreeLayout(){}}}));
-  assert.match(ui,/Ajouter un bloc/); assert.match(ui,/Modifier/);
+  assert.match(ui,/Ajouter un module/); assert.match(ui,/Modifier/);
 });
 const asset = await bundled('app/api/point-assets/route.ts', '\nexport { runWithRuntimeEnv } from "../../../lib/runtime-env";', [{ name:'auth-fixture', setup(build) { build.onLoad({filter:/app\/simple-auth\.ts$/},()=>({contents:'export async function getEditorUser(){return globalThis.assetEditor ?? null}',loader:'ts'})); } }]);
 test('uploaded attachments persist in object storage, require editor access and download as files', async () => {
@@ -85,7 +86,7 @@ test('uploaded attachments persist in object storage, require editor access and 
 
 const actualReact = require('react');
 let canvasHooks = { cursor: 0, slots: [] };
-const interactiveReact = { ...actualReact, useState(initial) { const index = canvasHooks.cursor++; if (!(index in canvasHooks.slots)) canvasHooks.slots[index] = typeof initial === 'function' ? initial() : initial; return [canvasHooks.slots[index], next => { canvasHooks.slots[index] = typeof next === 'function' ? next(canvasHooks.slots[index]) : next; }]; }, useRef(initial) { const index = canvasHooks.cursor++; return canvasHooks.slots[index] ??= { current: initial }; }, useMemo(fn) { return fn(); }, useEffect() {} };
+const interactiveReact = { ...actualReact, useState(initial) { const index = canvasHooks.cursor++; if (!(index in canvasHooks.slots)) canvasHooks.slots[index] = typeof initial === 'function' ? initial() : initial; return [canvasHooks.slots[index], next => { canvasHooks.slots[index] = typeof next === 'function' ? next(canvasHooks.slots[index]) : next; }]; }, useRef(initial) { const index = canvasHooks.cursor++; return canvasHooks.slots[index] ??= { current: initial }; }, useMemo(fn) { return fn(); }, useId() { return "test-canvas"; }, useEffect() {} };
 const interactiveCanvas = await bundled('features/market-pulse/market-pulse-app.tsx', '\nexport { PreviewDashboard };', [], interactiveReact);
 const treeNodes = (value) => Array.isArray(value) ? value.flatMap(treeNodes) : value && typeof value === 'object' ? [value, ...treeNodes(value.props?.children)] : [];
 const freeCanvas = await bundled('features/market-pulse/free-point-canvas.tsx','',[],interactiveReact);
@@ -132,9 +133,9 @@ test('formatted dossier titles persist in normalization, mail and page exports',
 });
 
 test('V51 pointer resize keeps sibling positions and saves both dimensions',()=>{
- canvasHooks={cursor:0,slots:[]};const old=globalThis.window, listeners=new Map();globalThis.window={innerWidth:1400,innerHeight:1000,addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
- try {const data=app.initialData(market.id);data.preferences.freeLayout={enabled:true,snap:true,showGrid:true,blocks:{operations:{x:0,y:0,width:576,height:480},jira:{x:600,y:0,width:576,height:480}},titles:{},copies:[]};const writes=[];
- const props={data,content:{},actions:{updateFreeLayout:l=>writes.push(l)},editingModule:null,onEdit(){}};const render=()=>{canvasHooks.cursor=0;return treeNodes(freeCanvas.FreePointCanvas(props));};let nodes=render();
+ canvasHooks={cursor:0,slots:[]};const old=globalThis.window, listeners=new Map();globalThis.window={scrollY:0,scrollBy(){},innerWidth:1400,innerHeight:1000,addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
+ try {const data=app.initialData(market.id);data.preferences.freeLayout={flow:false,enabled:true,snap:true,showGrid:true,blocks:{operations:{x:0,y:0,width:576,height:480},jira:{x:600,y:0,width:576,height:480}},titles:{},copies:[]};const writes=[];
+ const props={data,content:{},actions:{updateFreeLayout:l=>writes.push(l)},editingModule:null,onEdit(){}};const render=()=>{canvasHooks.cursor=0;return treeNodes(freeCanvas.FreePointCanvas(props));};let nodes=render();nodes.find(n=>n.props?.['aria-label']==='Organiser les blocs').props.onClick();nodes=render();
  const stage=nodes.find(n=>n.props?.className?.startsWith('v51-stage'));stage.props.ref.current={getBoundingClientRect(){return {width:1200};}};
  nodes.find(n=>n.props?.['aria-label']==='Redimensionner Simulations').props.onPointerDown({preventDefault(){},stopPropagation(){},clientX:576,clientY:480});listeners.get('pointermove')({clientX:624,clientY:528,altKey:false});listeners.get('pointerup')();
  assert.equal(writes.at(-1).blocks.operations.width,624);assert.equal(writes.at(-1).blocks.operations.height,528);assert.deepEqual(writes.at(-1).blocks.jira,data.preferences.freeLayout.blocks.jira);

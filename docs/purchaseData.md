@@ -21,3 +21,9 @@ Statistiques > PURCHASES permet les filtres spécialité, fournisseur et article
 Ajouter le module Suivi PURCHASES et passer en modification pour ajouter plusieurs vues indépendantes ou les dupliquer. Paramètres et instantané d’export sont sauvegardés avec le point. Les vues interactives utilisent le registre actif ; les exports utilisent l’instantané enregistré dans la configuration.
 
 Une ligne est identifiée par entité + fournisseur + pièce + numéro de ligne. Une pièce distincte par entité + fournisseur + pièce. Les doublons internes de l’extraction sont fusionnés sans addition des lignes de facture. La date « Première extraction » est la première date connue à l’intérieur de la nouvelle extraction complète. Les semaines débutent le lundi et les périodes vides restent visibles.
+
+## V70 — composition et diffusion
+
+La lecture fluide laisse grandir les modules quand les panneaux se déplient. La disposition libre reste disponible et conserve les positions enregistrées. Les modules disposent d’un mode agrandi avec défilement et retour au bloc ; l’ajout est accessible depuis une bibliothèque recherchable. L’ordre de composition est partagé par les deux exports, chaque format gardant sa sélection de modules.
+
+Les vues PURCHASES enregistrent un rapport compact (indicateurs, séries, mois, comparaison), afin de ne pas dupliquer les 27 000 lignes dans chaque point. Le registre détaillé reste la source des pièces et articles. La page HTML exportée utilise les lignes chargées au moment de sa génération ; le mail reprend les tableaux de synthèse. Si la source est inaccessible, un message indique l’utilisation des instantanés enregistrés. Les anciens points ne sont pas remplacés par cette mise à jour.
