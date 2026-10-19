@@ -19,3 +19,15 @@ test('V72 composition sans chevauchement, ancrage du bloc manipulé et dispositi
  const dragged=arrangePresentationBlocks(['a','b','c'],{...source,b:{...source.b,x:0}},'b');
  assert.equal(dragged.b.y,0);assert.equal(dragged.a.y,504);assert.equal(dragged.c.y,1008);
 });
+test('V73 les huit poignées conservent le bord opposé et respectent les limites',async()=>{
+ const {resizeFromEdge}=await load('lib/free-point-layout.ts');const r={x:240,y:240,width:480,height:480};
+ for(const edge of ['n','s','e','w','ne','nw','se','sw']){const v=resizeFromEdge(r,48,24,edge);assert.equal(v.x,edge.includes('w')?288:240);assert.equal(v.y,edge.includes('n')?264:240);assert.equal(v.width,edge.includes('w')?432:edge.includes('e')?528:480);assert.equal(v.height,edge.includes('n')?456:edge.includes('s')?504:480);}
+ const limited=resizeFromEdge(r,10000,10000,'nw');assert.equal(limited.width,240);assert.equal(limited.height,144);assert.equal(limited.x+limited.width,720);assert.equal(limited.y+limited.height,720);
+});
+test('V73 repères bords et centres, Alt libre et dimensions alignées',async()=>{
+ const {alignPresentationRect}=await load('lib/free-point-layout.ts');const neighbour={x:600,y:100,width:400,height:300};
+ const moved=alignPresentationRect({x:605,y:102,width:240,height:144},[neighbour],null,true);assert.equal(moved.rect.x,600);assert.equal(moved.rect.y,100);assert.deepEqual(moved.guides,{x:600,y:100});
+ const center=alignPresentationRect({x:676,y:500,width:240,height:144},[neighbour],null,true);assert.equal(center.rect.x+120,800);assert.equal(center.guides.x,800);
+ const resized=alignPresentationRect({x:240,y:100,width:365,height:295},[neighbour],'se',true);assert.equal(resized.rect.x+resized.rect.width,600);assert.equal(resized.rect.y+resized.rect.height,400);
+ const raw={x:605,y:106,width:240,height:144};assert.deepEqual(alignPresentationRect(raw,[neighbour],null,false),{rect:raw,guides:{}});
+});
