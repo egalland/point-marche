@@ -167,6 +167,7 @@ test("supplier picker filters and selects by keyboard, with an empty-result stat
   `);
   const hooks = await import(hooksUrl);
   const module = await import(moduleUrl("../../features/market-pulse/supplier-variation-dashboard.tsx", {
+    "./purchaseData-dashboard": sourceUrl("export function PURCHASESDashboard() { return null; }"),
     ...reactImports, react: hooksUrl,
     "@/lib/chart-excel-export": moduleUrl("../../lib/chart-excel-export.ts"),
   "@/lib/chart-image-export": moduleUrl("../../lib/chart-image-export.ts"),

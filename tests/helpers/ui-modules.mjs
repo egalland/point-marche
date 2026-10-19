@@ -1,4 +1,4 @@
-import { moduleUrl } from "./module-url.mjs";
+import { moduleUrl, sourceUrl } from "./module-url.mjs";
 
 export const reactImports = { react: import.meta.resolve("react"), "react-dom": import.meta.resolve("react-dom"), "react/jsx-runtime": import.meta.resolve("react/jsx-runtime") };
 export const isoUrl = moduleUrl("../../lib/iso-week.ts");
@@ -9,6 +9,7 @@ export const miniTrendUrl = moduleUrl("../../lib/supplier-mini-trend.ts");
 export const miniChartUrl = moduleUrl("../../features/market-pulse/supplier-mini-chart.tsx", { ...reactImports, "@/lib/supplier-mini-trend": miniTrendUrl });
 export const supplierChartUrl = moduleUrl("../../features/market-pulse/supplier-variation-dashboard.tsx", {
   ...reactImports,
+  "./purchaseData-dashboard": sourceUrl("export function PURCHASESDashboard() { return null; }"),
   "@/lib/chart-excel-export": moduleUrl("../../lib/chart-excel-export.ts"),
   "@/lib/chart-image-export": moduleUrl("../../lib/chart-image-export.ts"),
   "@/lib/supplier-turnover": moduleUrl("../../lib/supplier-turnover.ts"),
