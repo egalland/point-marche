@@ -1,3 +1,4 @@
+import { moduleUrl } from "./helpers/module-url.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -7,7 +8,7 @@ const source = readFileSync(new URL("../lib/planner-import.ts", import.meta.url)
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-const planner = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
+const planner = await import(moduleUrl("../../lib/planner-import.ts"));
 
 const headers = [
   "ID de tâche",

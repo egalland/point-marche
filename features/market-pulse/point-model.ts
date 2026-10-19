@@ -31,7 +31,7 @@ export type ModuleVisibility = Record<PointModule, boolean>;
 export type PointPreferences = { freeLayout?: FreeLayout; fontScale: FontScale; fontScalePercent: number; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
 export type CarryoverFields = { sourceId?: string; carriedFromYear?: number; carriedFromWeek?: number };
 export type Dossier = RichDossier & CarryoverFields;
-export type PlannerPointSource = { externalId: string; metrics: PlannerTask["metrics"]; supplierLabel?: string; variationHistory?: SupplierVariationPoint[] };
+export type PlannerPointSource = { checklist?: PlannerTask["checklist"]; externalId: string; metrics: PlannerTask["metrics"]; supplierLabel?: string; variationHistory?: SupplierVariationPoint[] };
 export type CommercialOperation = { id: string; kind?: "simulation"; name: string; month: string; state: string; summary: string; steps: [string, string][]; plannerSource?: PlannerPointSource; plannerBase?: MarketSimulationFields; plannerOverride?: MarketSimulationOverride } & CarryoverFields;
 export type Promotion = { id: string; name: string; period: string; purchaseNote: string; salesState: string; action: string; comment: string } & CarryoverFields;
 export type Tariff = { id: string; code: string; supplier: string; month: string; state: string; receptionDate: string; dueDate: string; owner: string; comment: string };
@@ -75,7 +75,7 @@ export const pointModules: { id: PointModule; label: string; detail: string }[] 
   { id: "promotions", label: "Promotions", detail: "Promotions achat et actions commerciales" },
   { id: "alerts", label: "Vigilances", detail: "Alertes dossiers et Jira" },
   { id: "purchaseData", label: "Suivi PURCHASES", detail: "Vues multiples par spécialité et fournisseur" },
-  { id: "simulationComparison", label: "Comparatif de simulations", detail: "Deux périodes, marché ou fournisseur, volume et variations" },
+  { id: "simulationComparison", label: "Comparatif des simulations", detail: "Deux périodes, marché ou fournisseur, volume et variations" },
   { id: "comparison", label: "Comparaison des marchés", detail: "Camembert des tickets Jira ouverts par marché" },
 ];
 export const allModulesVisible = (): ModuleVisibility => ({ jira: true, dossiers: true, operations: true, promotions: true, alerts: true, comparison: false, purchaseData: false, simulationComparison: false });
@@ -284,10 +284,10 @@ export function plannerTaskToOperation(task: PlannerTask, allTasks: PlannerTask[
     id: `planner:${task.externalId}`,
     kind: "simulation",
     ...resolved,
-    steps: task.checklist.map((item) => [item.label, item.nonApplicable ? "Non applicable" : item.date ? "Fait" : "À faire"] as [string, string]),
+    steps: task.checklist.map((item) => [item.label, item.date || (item.nonApplicable ? "Non applicable" : "À faire")] as [string, string]),
     plannerBase,
     ...(hasMarketSimulationOverride(plannerOverride) ? { plannerOverride } : {}),
-    plannerSource: { externalId: task.externalId, metrics: task.metrics, supplierLabel: task.taskName.replace(/^20\d{2}-(?:0[1-9]|1[0-2])-(?:[A-ZÀ-Ÿ]+-)?/i, "").trim() || task.taskName, variationHistory: supplierSeriesForTask(task, allTasks) },
+    plannerSource: { externalId: task.externalId, checklist: task.checklist, metrics: task.metrics, supplierLabel: task.taskName.replace(/^20\d{2}-(?:0[1-9]|1[0-2])-(?:[A-ZÀ-Ÿ]+-)?/i, "").trim() || task.taskName, variationHistory: supplierSeriesForTask(task, allTasks) },
   };
 }
 
@@ -299,7 +299,7 @@ export function plannerTasksForPoint(tasks: PlannerTask[], market: Market, meeti
 
 export function mergePlannerOperations(operations: CommercialOperation[], tasks: PlannerTask[], allTasks = tasks) {
   const previousByExternalId = new Map(operations.filter((operation) => operation.plannerSource?.externalId).map((operation) => [operation.plannerSource!.externalId, operation]));
-  return [...operations.filter((operation) => !operation.plannerSource && !operation.id.startsWith("planner:")), ...tasks.map((task) => plannerTaskToOperation(task, allTasks, previousByExternalId.get(task.externalId)))];
+  return [...operations.filter((operation) => !operation.plannerSource && !operation.id.startsWith("planner:")), ...[...new Map(tasks.map(task => [task.externalId, task])).values()].map((task) => plannerTaskToOperation(task, allTasks, previousByExternalId.get(task.externalId)))];
 }
 
 

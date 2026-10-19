@@ -1,3 +1,4 @@
+import { milestoneKind, elapsedCalendarDays, simulationMilestones } from "./simulation-lifecycle";
 import type { GlobalDirectoryUser } from "./global-directory";
 import type { PlannerChecklistItem, PlannerSpecialty, PlannerTask } from "./planner-import";
 
@@ -33,7 +34,7 @@ export type AnalystContribution = {
   workflowState: PlannerTask["workflowState"];
 };
 
-export type PlannerDelayKind = "receipt" | "simulation" | "marketReturn" | "control";
+export type PlannerDelayKind = "receipt" | "templatePreparation" | "templateReturn" | "simulation" | "marketReturn" | "control";
 
 export type PlannerDelaySample = {
   taskId: string;
@@ -76,6 +77,8 @@ export type AnalystStats = {
 };
 
 const delayDefinitions: { kind: PlannerDelayKind; label: string; definition: string; start: (item: PlannerChecklistItem) => boolean; end: (item: PlannerChecklistItem) => boolean }[] = [
+  { kind: "templatePreparation", label: "Envoi de la trame", definition: "Avis de hausse → Trame envoyée", start: item => milestoneKind(item.label) === "notice", end: item => milestoneKind(item.label) === "templateSent" },
+  { kind: "templateReturn", label: "Retour de la trame fournisseur", definition: "Trame envoyée → Retour fournisseur (Tarif fournisseur si aucune date de retour dédiée)", start: item => milestoneKind(item.label) === "templateSent", end: item => milestoneKind(item.label) === "supplierReceived" },
   { kind: "receipt", label: "Réception fournisseur", definition: "Avis de hausse → Tarif fournisseur", start: (item) => /^avis de hausse\b/.test(normalized(item.label)), end: (item) => /^tarif fournisseur\b/.test(normalized(item.label)) },
   { kind: "simulation", label: "Traitement simulation", definition: "Tarif fournisseur → Simulation", start: (item) => /^tarif fournisseur\b/.test(normalized(item.label)), end: (item) => item.kind === "simulation" },
   { kind: "marketReturn", label: "Retour marché", definition: "Simulation → Validation CDM", start: (item) => item.kind === "simulation", end: (item) => /^validation cdm\b/.test(normalized(item.label)) },
@@ -144,10 +147,7 @@ function checklistDate(task: PlannerTask, matcher: (item: PlannerChecklistItem) 
 }
 
 function calendarDays(startDate: string, endDate: string) {
-  const start = new Date(`${startDate}T12:00:00Z`).valueOf();
-  const end = new Date(`${endDate}T12:00:00Z`).valueOf();
-  const days = Math.round((end - start) / 86400000);
-  return Number.isFinite(days) && days >= 0 ? days : null;
+  return elapsedCalendarDays(startDate, endDate);
 }
 
 function taskAnalystIds(task: PlannerTask, users: GlobalDirectoryUser[]) {
@@ -159,8 +159,9 @@ export function plannerDelaySamples(tasks: PlannerTask[], users: GlobalDirectory
     const marketIds = marketIdsForTask(task, markets);
     const analystIds = taskAnalystIds(task, users);
     return delayDefinitions.flatMap((definition) => {
-      const startDate = checklistDate(task, definition.start);
-      const endDate = checklistDate(task, definition.end);
+      const milestones = simulationMilestones(task.checklist);
+      const startDate = definition.kind === "templatePreparation" ? milestones.notice : definition.kind === "templateReturn" ? milestones.templateSent : checklistDate(task, definition.start);
+      const endDate = definition.kind === "templatePreparation" ? milestones.templateSent : definition.kind === "templateReturn" ? milestones.supplierReceived : checklistDate(task, definition.end);
       if (!startDate || !endDate) return [];
       const days = calendarDays(startDate, endDate);
       if (days === null) return [];

@@ -50,8 +50,9 @@ test("supplier chart exposes keyboard navigation, toggles, and bounded labels", 
   assert.match(html, /tabindex="0"/);
   assert.match(html, /flèches gauche et droite/);
   assert.equal((html.match(/aria-pressed="true"/g) ?? []).length, 2);
-  assert.ok((html.match(/<text /g) ?? []).length <= 12);
-  assert.match(html, /left:82%/);
+  assert.ok((html.match(/<text /g) ?? []).length <= points.length * 3 + 6);
+  assert.match(html, /supplier-column-scroll/);
+  assert.match(html, /supplier-column-summary/);
   const compact = renderToStaticMarkup(createElement(SupplierVariationChart, { points, compact: true }));
   assert.doesNotMatch(compact, /tabindex=|<button/);
 });
@@ -70,9 +71,10 @@ test("supplier table renders only a page but keeps its full dataset in the stati
 
 test("analyst table pagination does not truncate KPI totals", async () => {
   const contribution = { taskId: "task", taskName: "Simulation exemple", purchases12m: 0, date: "2026-08-25", analystName: "Jane DOE", marketIds: [], marketTags: [], specialty: "simulation", stepLabel: "Simulation" };
-  const statsUrl = sourceUrl(`export function buildAnalystStats(){return {totalActivities:12491,distinctTasks:12491,simulations:12491,controls:0,coverageRate:1,movement:0,previousTotal:0,previousContributions:[],monthly:[],byAnalyst:[],delaySummaries:[],unmatchedNames:[],contributions:Array.from({length:12491},(_,index)=>({...${JSON.stringify(contribution)},taskId:String(index)}))}}`);
+  const statsUrl = sourceUrl(`export function buildAnalystStats(){return {totalActivities:12491,distinctTasks:12491,simulations:12491,controls:0,coverageRate:1,movement:0,previousTotal:0,previousContributions:[],monthly:[],byAnalyst:[],delaySummaries:[],delaySamples:[],unmatchedNames:[],contributions:Array.from({length:12491},(_,index)=>({...${JSON.stringify(contribution)},taskId:String(index)}))}}`);
   const { AnalystStatsDashboard } = await import(moduleUrl("../../features/market-pulse/analyst-stats-dashboard.tsx", {
     ...reactImports,
+    "./purchaseData-dashboard": sourceUrl("export function PURCHASESDashboard(){return null;}"),
     "@/lib/analyst-stats": statsUrl,
     "@/lib/supplier-turnover": moduleUrl("../../lib/supplier-turnover.ts"),
     "@/components/table-pagination": paginationUrl,

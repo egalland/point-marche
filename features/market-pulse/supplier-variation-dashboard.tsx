@@ -141,7 +141,7 @@ function SupplierDetailChart({ points: observations, title, subtitle, supplier }
       <button type="button" className="secondary-button" disabled={imageStatus.busy || !observations.some((point) => point.globalVariation !== null || point.weightedVariation !== null)} onClick={exportExcel}>Exporter en Excel</button>
       {imageStatus.message && <span role={imageStatus.error ? "alert" : "status"}>{imageStatus.message}</span>}
     </div>
-    <p id={helpId} className="editor-hint">{view === "months" ? "Tous les mois sont espacés régulièrement ; un mois sans donnée reste vide." : "Seuls les mois avec une valeur dans les séries affichées sont présentés."} Colonnes côte à côte · référence à 0 %.</p>
+    <p id={helpId} className="editor-hint">{view === "months" ? "Tous les mois sont espacés régulièrement ; un mois sans donnée reste vide." : "Seuls les mois avec une valeur dans les séries affichées sont présentés."} Sur le graphique, utilisez les flèches gauche et droite pour parcourir les mois ; Début et Fin pour les extrémités.</p>
     <div ref={scrollRef} className="supplier-column-scroll">
       <div className="supplier-chart-stage" style={{ minWidth: width }}>
         <svg ref={svgRef} width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" tabIndex={0} aria-describedby={helpId} aria-label={`Variations en colonnes${active ? ` · ${monthLabel(active.period)} · GLOBAL ${percent(active.globalVariation)} · Pondérée ${percent(active.weightedVariation)}` : ""}`} onKeyDown={handleKeyDown} onPointerMove={pointer} onPointerDown={pointer}>
