@@ -132,13 +132,13 @@ test('formatted dossier titles persist in normalization, mail and page exports',
   for (const html of [app.buildMailHtml(data,market,[]), app.buildInteractiveHtml(data,market,[])]) assert.match(html, /font-size:24px;color:#123456/);
 });
 
-test('V51 pointer resize keeps sibling positions and saves both dimensions',()=>{
+test('V72 pointer resize saves both dimensions and moves an overlapping neighbour below',()=>{
  canvasHooks={cursor:0,slots:[]};const old=globalThis.window, listeners=new Map();globalThis.window={scrollY:0,scrollBy(){},innerWidth:1400,innerHeight:1000,addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
  try {const data=app.initialData(market.id);data.preferences.freeLayout={flow:false,enabled:true,snap:true,showGrid:true,blocks:{operations:{x:0,y:0,width:576,height:480},jira:{x:600,y:0,width:576,height:480}},titles:{},copies:[]};const writes=[];
  const props={data,content:{},actions:{updateFreeLayout:l=>writes.push(l)},editingModule:null,onEdit(){}};const render=()=>{canvasHooks.cursor=0;return treeNodes(freeCanvas.FreePointCanvas(props));};let nodes=render();nodes.find(n=>n.props?.['aria-label']==='Organiser les blocs').props.onClick();nodes=render();
  const stage=nodes.find(n=>n.props?.className?.startsWith('v51-stage'));stage.props.ref.current={getBoundingClientRect(){return {width:1200};}};
  nodes.find(n=>n.props?.['aria-label']==='Redimensionner Simulations').props.onPointerDown({preventDefault(){},stopPropagation(){},clientX:576,clientY:480});listeners.get('pointermove')({clientX:624,clientY:528,altKey:false});listeners.get('pointerup')();
- assert.equal(writes.at(-1).blocks.operations.width,624);assert.equal(writes.at(-1).blocks.operations.height,528);assert.deepEqual(writes.at(-1).blocks.jira,data.preferences.freeLayout.blocks.jira);
+ assert.equal(writes.at(-1).blocks.operations.width,624);assert.equal(writes.at(-1).blocks.operations.height,528);assert.deepEqual(writes.at(-1).blocks.jira,{...data.preferences.freeLayout.blocks.jira,y:528});
  }finally{globalThis.window=old;}
 });
 test('V71 glisser directement la barre de titre, réduire puis restaurer sans modifier les dimensions',()=>{

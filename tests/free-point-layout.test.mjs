@@ -7,3 +7,15 @@ test('migration des quatre colonnes et conservation de vides après sauvegarde',
 test('recherche dans les étapes et recherche sans accents',()=>{assert.ok(searchHelp('echeance').some(c=>c.id==='dossiers'));assert.ok(searchHelp('Outlook').some(c=>c.id==='exports'));assert.equal(searchHelp('zzzzsansresultat').length,0);assert.equal(helpChapters.length,24);});
 test('V70 ordre stable et ajout dans une zone libre sans écraser un bloc existant',async()=>{const {orderedBlockIds,reorderBlock,placeMissingBlocks}=await load('lib/free-point-layout.ts');assert.deepEqual(orderedBlockIds(['a','b','c'],['c','inconnu','c']),['c','a','b']);assert.deepEqual(reorderBlock(['a','b','c'],'c','a'),['c','a','b']);const saved={a:{x:0,y:500,width:1200,height:400}};const placed=placeMissingBlocks(['a','b'],{a:'full',b:'full'},saved);assert.deepEqual(placed.a,saved.a);assert.ok(placed.b.y>=924);const flow=normalizeFreeLayout({...saved,flow:false,order:['b','a']});assert.equal(flow.flow,false);assert.deepEqual(flow.order,['b','a']);});
 test('V71 fenêtres par défaut, anciennes coordonnées conservées et lecture fluide explicite',()=>{const old={flow:true,blocks:{a:{x:48,y:96,width:576,height:480}},titles:{},copies:[]};const restored=normalizeFreeLayout(old);assert.equal(restored.flow,false);assert.equal(restored.mode,'windows');assert.deepEqual(restored.blocks.a,old.blocks.a);assert.equal(normalizeFreeLayout({...old,mode:'flow'}).flow,true);assert.equal(normalizeFreeLayout(null).flow,false);});
+
+test('V72 composition sans chevauchement, ancrage du bloc manipulé et disposition stable',async()=>{
+ const {arrangePresentationBlocks}=await load('lib/free-point-layout.ts');
+ const source={a:{x:0,y:0,width:576,height:480},b:{x:600,y:0,width:576,height:480},c:{x:0,y:504,width:1200,height:240}};
+ assert.deepEqual(arrangePresentationBlocks(['a','b','c'],source),source);
+ const changed={...source,a:{...source.a,width:1200,height:600}};
+ const result=arrangePresentationBlocks(['a','b','c'],changed,'a');
+ assert.deepEqual(result.a,changed.a);assert.equal(result.b.y,624);assert.equal(result.c.y,1128);
+ assert.deepEqual(arrangePresentationBlocks(['a','b','c'],result),result);assert.equal(source.b.y,0);
+ const dragged=arrangePresentationBlocks(['a','b','c'],{...source,b:{...source.b,x:0}},'b');
+ assert.equal(dragged.b.y,0);assert.equal(dragged.a.y,504);assert.equal(dragged.c.y,1008);
+});

@@ -31,3 +31,6 @@ Les vues PURCHASES enregistrent un rapport compact (indicateurs, séries, mois, 
 ## V71 — fenêtres par défaut
 
 Le point s’ouvre en disposition libre, avec les coordonnées et dimensions déjà enregistrées. Déplacer une fenêtre par sa barre de titre, redimensionner par le coin inférieur droit, cliquer pour la passer devant les autres. La barre de fenêtres permet de retrouver ou restaurer un bloc réduit. Double-cliquer sur un titre agrandit la fenêtre ; la réduire ensuite retrouve sa position et sa taille. Fermer un module le retire du point sans effacer ses données métier. La lecture fluide reste un choix explicite ; les préférences V70 sont migrées vers le mode fenêtres à la première lecture, sans changer leurs coordonnées. Les exports complets de V70 sont conservés.
+
+### V72 — composition de présentation
+Les blocs restent placés sur la grille avec leurs commandes de manipulation. Un bloc déplacé ou agrandi repousse les blocs qui le croisent vers le bas, sans superposition. « Ranger les blocs » recompose une disposition régulière selon les largeurs des modules. La grille est visible sans activer Organiser.
