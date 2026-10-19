@@ -1,5 +1,5 @@
 export type BlockRect = { x: number; y: number; width: number; height: number };
-export type FreeLayout = { flow?: boolean; order?: string[]; enabled: boolean; snap: boolean; showGrid: boolean; blocks: Record<string, BlockRect>; titles: Record<string,string>; copies: { id: string; title: string; html: string }[] };
+export type FreeLayout = { mode?: "windows" | "flow"; flow?: boolean; order?: string[]; enabled: boolean; snap: boolean; showGrid: boolean; blocks: Record<string, BlockRect>; titles: Record<string,string>; copies: { id: string; title: string; html: string }[] };
 export const CANVAS_WIDTH = 1200;
 export const GRID_STEP = 24;
 export function normalizeRect(value: Partial<BlockRect>): BlockRect {
@@ -9,7 +9,7 @@ export function normalizeRect(value: Partial<BlockRect>): BlockRect {
 }
 export function normalizeFreeLayout(value: unknown): FreeLayout {
   const v = value && typeof value === 'object' ? value as Partial<FreeLayout> : {};
-  return { flow: v.flow !== false, order: Array.isArray(v.order) ? [...new Set(v.order.filter(id=>typeof id==='string'))] : [], enabled: v.enabled !== false, snap: v.snap !== false, showGrid: v.showGrid !== false,
+  return { mode: v.mode === "flow" ? "flow" : "windows", flow: v.mode === "flow", order: Array.isArray(v.order) ? [...new Set(v.order.filter(id=>typeof id==='string'))] : [], enabled: v.enabled !== false, snap: v.snap !== false, showGrid: v.showGrid !== false,
     blocks: Object.fromEntries(Object.entries(v.blocks ?? {}).filter(([,r])=>r && typeof r==='object').map(([id,r])=>[id,normalizeRect(r)])),
     titles: Object.fromEntries(Object.entries(v.titles ?? {}).filter(([,t])=>typeof t==='string').map(([id,t])=>[id,t.slice(0,120)])),
     copies: Array.isArray(v.copies) ? v.copies.filter(c=>c && typeof c.id==='string' && typeof c.html==='string').slice(0,40).map(c=>({id:c.id,title:String(c.title||'Copie').slice(0,120),html:c.html})) : [] };
