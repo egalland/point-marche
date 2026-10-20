@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {moduleUrl} from './helpers/module-url.mjs';
 const {queryTable,nextTableSort}=await import(moduleUrl('../../lib/table-query.ts'));
-const {purchaseDataTableColumns,supplierPURCHASESColumns}=await import(moduleUrl('../../lib/purchaseData-table-columns.ts'));
+const {purchaseDataTableColumns,supplierPURCHASESColumns,purchaseDataColumnsWithOccurrences}=await import(moduleUrl('../../lib/purchaseData-table-columns.ts'));
 const row=(id,patch={})=>({id,name:'Équipement',supplier:'A0001',specialty:'Bois',piece:'P'+id,line:id,article:'ART'+id,description:'Panneau chêne',agency:'Paris',invoice:'2026-10-01',extracted:'2026-10-10',entity:'GLOBAL',gap:0,...patch});
 test('PURCHASES sorting covers the full dataset before pagination, naturally and numerically, without source mutation',()=>{
  const rows=Array.from({length:110},(_,i)=>row(String(110-i),{gap:110-i}));const before=rows.map(r=>r.id);
@@ -28,4 +28,15 @@ test('supplier entity and inferred attachment columns support sorting and filter
  const columns=supplierPURCHASESColumns(new Set(['purchaseData:2'])),rows=[row('1'),row('2')];
  assert.deepEqual(queryTable(rows,columns,{match:{text:'nom'}},null).map(r=>r.id),['2']);
  assert.deepEqual(queryTable(rows,columns,{}, {key:'match',direction:'desc'}).map(r=>r.id),['2','1']);
+});
+
+test('article occurrences use the full perimeter, remain stable under column filters, and omit missing article codes',()=>{
+ const rows=[row('1',{article:'A',agency:'Paris'}),row('2',{article:'A',agency:'Lyon'}),row('3',{article:'B'}),row('4',{article:''})];
+ const columns=purchaseDataColumnsWithOccurrences(rows),occurrence=columns.find(c=>c.key==='occurrences');
+ assert.equal(occurrence.value(rows[0]),2);assert.equal(occurrence.value(rows[3]),'');
+ const filtered=queryTable(rows,columns,{agency:{text:'Paris'},occurrences:{min:'2'}},{key:'occurrences',direction:'desc'});
+ assert.deepEqual(filtered.map(r=>r.id),['1']);assert.equal(occurrence.value(filtered[0]),2);
+ const supplierColumns=supplierPURCHASESColumns(new Set(),rows.slice(1));
+ assert.equal(supplierColumns.find(c=>c.key==='occurrences').value(rows[1]),1);
+ assert.equal(queryTable(rows,columns,{}, {key:'occurrences',direction:'desc'}).at(-1).id,'4');
 });
