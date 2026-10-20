@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { buildSupplierCatalog, supplierNotesWithoutTurnover, type SupplierMatch, filterSupplierProfiles, supplierProfileSummary, supplierSelectionUrl, supplierSelectionFromUrl, type SupplierProfile } from "@/lib/supplier-profile";
 import type { PlannerTask } from "@/lib/planner-import";
 import { purchaseDataSummary, type PURCHASESRow } from "@/lib/purchaseData";
@@ -20,27 +20,41 @@ export function SupplierDashboard({ tasks, purchaseDataRows, plannerReady, purch
   const profiles = catalog.profiles;
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const searchId = useId();
   useEffect(() => {
-    const restore = () => setSelected(supplierSelectionFromUrl(window.location.href));
+    const restore = () => { setSelected(supplierSelectionFromUrl(window.location.href)); setQuery(""); setSearchOpen(false); setActive(0); };
     restore();
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, []);
   const options = useMemo(() => filterSupplierProfiles(profiles, query), [profiles, query]);
+  const results = query.trim() ? options.slice(0, 8) : [];
+  const activeResult = Math.min(active, Math.max(0, results.length - 1));
   const profile = profiles.find(item => item.key === selected);
   const choose = (key: string) => {
-    setSelected(key);
+    setSelected(key); setQuery(""); setSearchOpen(false); setActive(0);
     const url = supplierSelectionUrl(window.location.href, key);
     if (url !== window.location.href) window.history.pushState(null, "", url);
   };
   const loading = !plannerReady || (!purchaseDataReady && !purchaseDataError);
   return <main className="supplier-page">
     <header className="supplier-page-header"><span>Référentiel fournisseurs</span><h1>Fournisseurs</h1><p>Une fiche pour retrouver les simulations, les variations, le suivi des trames et les PURCHASES d’un fournisseur.</p></header>
-    <section className="surface supplier-picker" aria-label="Choisir un fournisseur"><label>Rechercher par nom ou Code<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Nom, Code (A9999)…"/></label><label>Fournisseur<select value={profile?.key ?? ""} onChange={event => choose(event.target.value)}><option value="">Choisir un fournisseur</option>{profile && !options.some(item => item.key === profile.key) && <option value={profile.key}>{profile.label} · {profile.code || "Code non renseigné"}</option>}{options.map(item => <option key={item.key} value={item.key}>{item.label} · {item.code || "Code non renseigné"}</option>)}</select></label><small role="status">{options.length} fournisseur{options.length > 1 ? "s" : ""} trouvé{options.length > 1 ? "s" : ""}{query && !options.length ? " · Modifie la recherche pour afficher d’autres résultats." : ""}</small></section>
+    <section className="surface supplier-search" aria-label="Choisir un fournisseur" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSearchOpen(false); }}>
+      <label htmlFor={`${searchId}-input`}>Rechercher un fournisseur</label>
+      <div className="supplier-search-field"><input id={`${searchId}-input`} type="search" role="combobox" aria-autocomplete="list" aria-expanded={Boolean(searchOpen && results.length)} aria-controls={`${searchId}-results`} aria-activedescendant={searchOpen && results.length ? `${searchId}-option-${activeResult}` : undefined} aria-describedby={`${searchId}-help`} autoComplete="off" value={searchOpen ? query : profile ? `${profile.label} · ${profile.code}` : ""} onFocus={() => { setQuery(""); setSearchOpen(true); setActive(0); }} onChange={event => { setQuery(event.target.value); setSearchOpen(true); setActive(0); }} placeholder="Nom ou Code (A9999)…" onKeyDown={event => {
+        if (event.key === "Escape") { event.preventDefault(); setQuery(""); setSearchOpen(false); }
+        else if (results.length && (event.key === "ArrowDown" || event.key === "ArrowUp")) { event.preventDefault(); setActive(Math.max(0, Math.min(results.length - 1, activeResult + (event.key === "ArrowDown" ? 1 : -1)))); }
+        else if (searchOpen && results.length && event.key === "Enter") { event.preventDefault(); choose(results[activeResult].key); }
+      }}/>{profile && <button type="button" className="secondary-button" aria-label="Effacer le fournisseur sélectionné" onClick={() => choose("")}>Effacer</button>}</div>
+      <small id={`${searchId}-help`} role="status">{searchOpen && query.trim() ? `${options.length} fournisseur${options.length > 1 ? "s" : ""} trouvé${options.length > 1 ? "s" : ""}${options.length > 8 ? " · Précise la recherche pour réduire les résultats." : options.length ? " · Choisis un résultat ou appuie sur Entrée." : " · Essaie un autre nom ou Code."}` : "Saisis un nom ou un Code pour ouvrir sa fiche."}</small>
+      {searchOpen && results.length > 0 && <div id={`${searchId}-results`} role="listbox" aria-label="Fournisseurs trouvés" className="supplier-search-results">{results.map((item, index) => <button id={`${searchId}-option-${index}`} key={item.key} type="button" role="option" tabIndex={-1} aria-selected={item.key === selected} className={index === activeResult ? "is-active" : ""} onPointerDown={event => event.preventDefault()} onClick={() => choose(item.key)}><span>{item.label}</span><b>{item.code}</b></button>)}</div>}
+    </section>
     {loading && <LoadingStatus label="Chargement des sources fournisseurs…"/>}
     {(plannerError || purchaseDataError) && <div className="supplier-source-error" role="alert"><strong>Certaines informations sont indisponibles</strong>{plannerError && <p>Planner : {plannerError}</p>}{purchaseDataError && <p>PURCHASES : {purchaseDataError}</p>}<button type="button" className="secondary-button" onClick={onRetry}>Réessayer</button></div>}
     {!loading && <SupplierMatchReview unresolved={catalog.unresolved} correlated={catalog.correlated}/>}
-    {profile ? <SupplierSheet key={profile.key} profile={profile} purchaseDataReady={purchaseDataReady} purchaseDataError={purchaseDataError} plannerReady={plannerReady} plannerError={plannerError}/> : !loading && <section className="surface supplier-empty"><h2>{selected ? "Fournisseur introuvable" : profiles.length ? "Choisis un fournisseur" : "Aucun fournisseur disponible"}</h2><p>{selected ? "Ce fournisseur n’est pas présent dans les sources actuellement chargées. Sélectionne une autre fiche." : profiles.length ? "Utilise le menu déroulant ci-dessus pour ouvrir sa fiche complète." : "Aucun Code valide (une lettre et quatre chiffres) n’a été trouvé. Vérifie les données non rattachées ci-dessus ou importe tes sources."}</p></section>}
+    {profile ? <SupplierSheet key={profile.key} profile={profile} purchaseDataReady={purchaseDataReady} purchaseDataError={purchaseDataError} plannerReady={plannerReady} plannerError={plannerError}/> : !loading && <section className="surface supplier-empty"><h2>{selected ? "Fournisseur introuvable" : profiles.length ? "Choisis un fournisseur" : "Aucun fournisseur disponible"}</h2><p>{selected ? "Ce fournisseur n’est pas présent dans les sources actuellement chargées. Sélectionne une autre fiche." : profiles.length ? "Recherche son nom ou son Code ci-dessus pour ouvrir sa fiche complète." : "Aucun Code valide (une lettre et quatre chiffres) n’a été trouvé. Vérifie les données non rattachées ci-dessus ou importe tes sources."}</p></section>}
     <footer className="supplier-sources"><span>Source Planner : {timestamp(plannerUpdatedAt)}</span><span>Source PURCHASES : {timestamp(purchaseDataUpdatedAt)}</span><small>Les fiches sont regroupées par Code (lettre + 4 chiffres). Sans code valide, seul un nom normalisé correspondant à un unique Code est rattaché. Les cas ambigus restent à part. Jira ne fournit pas encore de lien fournisseur structuré.</small></footer>
   </main>;
 }

@@ -17,6 +17,7 @@ let hooks;
 const react = require("react");
 const reactStub = {
   ...react,
+  useId() { const index = hooks.cursor++; return hooks.slots[index] ??= `test-id-${index}`; },
   useState(initial) { const index = hooks.cursor++; if (!(index in hooks.slots)) hooks.slots[index] = typeof initial === "function" ? initial() : initial; return [hooks.slots[index], (next) => { hooks.slots[index] = typeof next === "function" ? next(hooks.slots[index]) : next; }]; },
   useRef(initial) { const index = hooks.cursor++; return hooks.slots[index] ??= { current: initial }; },
   useMemo(callback, deps) { const index = hooks.cursor++; const previous = hooks.slots[index]; if (!previous || deps.some((dep, i) => !Object.is(dep, previous.deps[i]))) hooks.slots[index] = { deps, value: callback() }; return hooks.slots[index].value; },
@@ -150,15 +151,29 @@ test("supplier navigation preserves the point draft and selection survives a new
   const props = {tasks:[{externalId:"one",taskName:"2026-10-OCTOBRE-TEST",effectiveMonth:"2026-10",metrics:{supplierCode:"A0001"}}],purchaseDataRows:[],plannerReady:true,purchaseDataReady:true,plannerError:"",purchaseDataError:"",plannerUpdatedAt:"",purchaseDataUpdatedAt:"",onRetry(){}};
   hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
   renderComponent = () => app.SupplierDashboard(props); await settle();
-  find(node => node.type === "select").props.onChange({target:{value:"code:A0001"}}); await settle();
+  find(node => node.props?.role === "combobox").props.onChange({target:{value:"A0001"}}); await settle();
+  find(node => node.props?.role === "option").props.onClick(); await settle();
   assert.equal(new URL(window.location.href).searchParams.get("supplier"), "code:A0001");
   assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "A0001");
-  window.history.back(); await settle(); assert.equal(find(node => node.type === "select").props.value, "");
-  window.history.forward(); await settle(); assert.equal(find(node => node.type === "select").props.value, "code:A0001");
+  window.history.back(); await settle(); assert.equal(find(node => node.props?.role === "combobox").props.value, "");
+  window.history.forward(); await settle(); assert.equal(find(node => node.props?.role === "combobox").props.value, "TEST · A0001");
   hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
   await settle();
-  assert.equal(find(node => node.type === "select").props.value, "code:A0001");
+  assert.equal(find(node => node.props?.role === "combobox").props.value, "TEST · A0001");
   assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "A0001");
+});
+
+test("one supplier search bounds results and supports keyboard selection without a second dropdown",async()=>{
+  hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
+  const props = {tasks:Array.from({length:12},(_,i)=>({externalId:String(i),taskName:`2026-10-OCTOBRE-Test ${String(i).padStart(2,"0")}`,effectiveMonth:"2026-10",metrics:{supplierCode:`A${String(i+1).padStart(4,"0")}`}})),purchaseDataRows:[],plannerReady:true,purchaseDataReady:true,plannerError:"",purchaseDataError:"",plannerUpdatedAt:"",purchaseDataUpdatedAt:"",onRetry(){}};
+  renderComponent = () => app.SupplierDashboard(props); await settle();
+  assert.equal(nodes(tree).filter(node => node.type === "select").length,0);
+  find(node=>node.props?.role === "combobox").props.onChange({target:{value:"Test"}});await settle();
+  assert.equal(nodes(tree).filter(node => node.props?.role === "option").length,8);
+  let prevented=false;find(node=>node.props?.role === "combobox").props.onKeyDown({key:"ArrowDown",preventDefault(){prevented=true;}});await settle();
+  assert.equal(prevented,true);find(node=>node.props?.role === "combobox").props.onKeyDown({key:"Enter",preventDefault(){}});await settle();
+  assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code,"A0002");
+  assert.equal(nodes(tree).filter(node => node.props?.role === "option").length,0);
 });
 
 test("all integrated tabs update the URL; browser history restores tabs and keeps the market draft", async () => {
