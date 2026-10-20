@@ -140,16 +140,16 @@ test("supplier navigation preserves the point draft and selection survives a new
   assert.ok(find(node => node.type?.name === "SupplierDashboard"));
   navigation().onSelect("read"); await settle();
   assert.equal(preview().data.priority, "Note conservée pendant la consultation fournisseur");
-  const props = {tasks:[{externalId:"one",taskName:"2026-10-OCTOBRE-TEST",effectiveMonth:"2026-10",metrics:{supplierCode:"F001"}}],purchaseDataRows:[],plannerReady:true,purchaseDataReady:true,plannerError:"",purchaseDataError:"",plannerUpdatedAt:"",purchaseDataUpdatedAt:"",onRetry(){}};
+  const props = {tasks:[{externalId:"one",taskName:"2026-10-OCTOBRE-TEST",effectiveMonth:"2026-10",metrics:{supplierCode:"A0001"}}],purchaseDataRows:[],plannerReady:true,purchaseDataReady:true,plannerError:"",purchaseDataError:"",plannerUpdatedAt:"",purchaseDataUpdatedAt:"",onRetry(){}};
   hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
   renderComponent = () => app.SupplierDashboard(props); await settle();
-  find(node => node.type === "select").props.onChange({target:{value:"code:F001"}}); await settle();
-  assert.equal(new URL(window.location.href).searchParams.get("supplier"), "code:F001");
-  assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "F001");
+  find(node => node.type === "select").props.onChange({target:{value:"code:A0001"}}); await settle();
+  assert.equal(new URL(window.location.href).searchParams.get("supplier"), "code:A0001");
+  assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "A0001");
   hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
   await settle();
-  assert.equal(find(node => node.type === "select").props.value, "code:F001");
-  assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "F001");
+  assert.equal(find(node => node.type === "select").props.value, "code:A0001");
+  assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "A0001");
 });
 
 const analysts = ["a", "b"].map((id) => ({ id, name: `Analyste ${id}`, email: `${id}@example.test`, usercode: id === "a" ? "A1234567" : "B1234567", role: "analyste-tarif-referentiel", marketIds: [] }));
