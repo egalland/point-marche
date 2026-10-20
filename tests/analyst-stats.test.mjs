@@ -1,3 +1,4 @@
+import { moduleUrl } from "./helpers/module-url.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -7,7 +8,7 @@ const source = readFileSync(new URL("../lib/analyst-stats.ts", import.meta.url),
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-const analytics = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
+const analytics = await import(moduleUrl("../../lib/analyst-stats.ts"));
 
 const baseTask = {
   externalId: "task-1",
@@ -81,6 +82,8 @@ test("counts old unnamed activities globally and matches configured Planner alia
   assert.equal(stats.contributions.find((item) => item.analystLabel === "Anaïs")?.analystId, "analyst-1");
   assert.equal(stats.contributions.find((item) => item.analystLabel === "")?.analystName, "Non attribué");
   assert.deepEqual(stats.delaySummaries.map((item) => [item.kind, item.average, item.median, item.sampleCount]), [
+    ["templatePreparation", null, null, 0],
+    ["templateReturn", null, null, 0],
     ["receipt", 5, 5, 1],
     ["simulation", 7, 7, 1],
     ["marketReturn", 3, 3, 1],
@@ -101,7 +104,7 @@ test("supports combined analyst, market and specialty filters", () => {
   assert.equal(stats.simulations, 1);
   assert.equal(stats.controls, 0);
   assert.equal(stats.byAnalyst[0].name, "Anaïs MARTIN");
-  assert.equal(stats.delaySummaries.every((item) => item.sampleCount === 1), true);
+  assert.equal(stats.delaySummaries.filter(item => !item.kind.startsWith("template")).every((item) => item.sampleCount === 1), true);
 });
 
 test("keeps the imported supplier amount on each activity without a cumulative KPI", () => {
@@ -147,5 +150,5 @@ test("ignores incomplete or chronologically inconsistent date pairs without crea
   });
 
   assert.equal(stats.delaySamples.length, 4);
-  assert.equal(stats.delaySummaries.every((item) => item.sampleCount === 1), true);
+  assert.equal(stats.delaySummaries.filter(item => !item.kind.startsWith("template")).every((item) => item.sampleCount === 1), true);
 });

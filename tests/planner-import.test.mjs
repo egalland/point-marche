@@ -1,3 +1,4 @@
+import { moduleUrl } from "./helpers/module-url.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -7,7 +8,7 @@ const source = readFileSync(new URL("../lib/planner-import.ts", import.meta.url)
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-const planner = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
+const planner = await import(moduleUrl("../../lib/planner-import.ts"));
 
 const headers = [
   "ID de tâche",
@@ -201,4 +202,38 @@ test("keeps quoted and unquoted multiline Planner comments in their task row", (
     assert.equal(result.tasks[0].metrics.globalVariation, 2.7);
     assert.equal(result.tasks[0].metrics.weightedVariation, 2.4);
   }
+});
+
+test("recognizes the reversed Isover title month without using integration month", () => {
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-AVRIL-04-ISOVER"), "2026-04");
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-04-AVRIL-ISOVER"), "2026-04");
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-FÉVRIER-02-ISOVER"), "2026-02");
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-AVRIL-05-ISOVER"), "");
+  const data = planner.parsePlannerTasks("ID de tâche\tNom de tâche\tNotes\niso-avr\t2026-AVRIL-04-ISOVER\tCode Fournisseur : A1941 Variation GLOBAL : 5 % Variation pondérée : 5 %");
+  assert.equal(data.tasks[0].effectiveMonth,"2026-04");
+});
+
+test("NOVLEK uses the percentage after agency 3517, not the agency number or the later agency breakdown", () => {
+  const notes = "Achats 12 mG : €\nCode Fournisseur : D3053\nVariation GLOBAL :\n3517 -1.43%\nAGENCES -0.12%\nPONDERE AU CA -1.69%\nStructure tarifaire :";
+  const result = planner.parsePlannerTaskMetrics(notes);
+  assert.equal(result.globalVariation, -1.43);
+  assert.equal(result.weightedVariation, -1.69);
+  assert.equal(result.supplierCode, "D3053");
+  assert.equal(result.purchases12m, null);
+  const repaired = planner.rehydratePlannerTaskMetrics(notes, { ...result, globalVariation: 3517, weightedVariation: null });
+  assert.equal(repaired.globalVariation, -1.43);
+  assert.equal(repaired.weightedVariation, -1.69);
+  const flat = planner.parsePlannerTaskMetrics(notes.replace(/\n/g, " "));
+  assert.equal(flat.globalVariation, -1.43);
+  assert.equal(flat.weightedVariation, -1.69);
+});
+
+test("percentage parsing preserves signs, zero and bare legacy rates without inventing rates from annotations", () => {
+  for (const [text, expected] of [["Agence 3517 : +2,7 %",2.7],["3517 − 1,43 %",-1.43],["3517 : 0 %",0],["-2.3",-2.3],["Agence 3517",null],["3517 : à compléter",null]]) {
+    assert.equal(planner.parsePlannerTaskMetrics(`Variation GLOBAL : ${text}`).globalVariation, expected, text);
+  }
+  assert.equal(planner.parsePlannerTaskMetrics("Variation GLOBAL : 1,2 % Variation pondérée : 1,5 %").weightedVariation, 1.5);
+  const weightedOnly = planner.parsePlannerTaskMetrics("Variation GLOBAL :\nPONDERE AU CA -1.69%");
+  assert.equal(weightedOnly.globalVariation, null);
+  assert.equal(weightedOnly.weightedVariation, -1.69);
 });

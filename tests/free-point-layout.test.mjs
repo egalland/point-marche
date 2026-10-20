@@ -5,3 +5,29 @@ test('placement libre et aimanté indépendants, Alt utilise le mode libre',()=>
 test('redimensionnement horizontal et vertical respecte les limites',()=>{const r={x:0,y:0,width:576,height:480};assert.deepEqual(changeRect(r,24,48,true,true),{x:0,y:0,width:600,height:528});assert.equal(normalizeRect({width:Infinity,height:-10,x:NaN,y:-8}).height,144);assert.equal(normalizeRect({x:1190,width:500}).x,700);});
 test('migration des quatre colonnes et conservation de vides après sauvegarde',()=>{const r=initialRects(['a','b','c'],{a:'half',b:'half',c:'full'});assert.equal(r.b.x,600);assert.equal(r.c.y,504);const l=normalizeFreeLayout(JSON.parse(JSON.stringify({blocks:{a:{x:72,y:720,width:576,height:240}},snap:false,showGrid:true})));assert.equal(l.blocks.a.y,720);assert.equal(l.snap,false);assert.equal(l.showGrid,true);});
 test('recherche dans les étapes et recherche sans accents',()=>{assert.ok(searchHelp('echeance').some(c=>c.id==='dossiers'));assert.ok(searchHelp('Outlook').some(c=>c.id==='exports'));assert.equal(searchHelp('zzzzsansresultat').length,0);assert.equal(helpChapters.length,24);});
+test('V70 ordre stable et ajout dans une zone libre sans écraser un bloc existant',async()=>{const {orderedBlockIds,reorderBlock,placeMissingBlocks}=await load('lib/free-point-layout.ts');assert.deepEqual(orderedBlockIds(['a','b','c'],['c','inconnu','c']),['c','a','b']);assert.deepEqual(reorderBlock(['a','b','c'],'c','a'),['c','a','b']);const saved={a:{x:0,y:500,width:1200,height:400}};const placed=placeMissingBlocks(['a','b'],{a:'full',b:'full'},saved);assert.deepEqual(placed.a,saved.a);assert.ok(placed.b.y>=924);const flow=normalizeFreeLayout({...saved,flow:false,order:['b','a']});assert.equal(flow.flow,false);assert.deepEqual(flow.order,['b','a']);});
+test('V71 fenêtres par défaut, anciennes coordonnées conservées et lecture fluide explicite',()=>{const old={flow:true,blocks:{a:{x:48,y:96,width:576,height:480}},titles:{},copies:[]};const restored=normalizeFreeLayout(old);assert.equal(restored.flow,false);assert.equal(restored.mode,'windows');assert.deepEqual(restored.blocks.a,old.blocks.a);assert.equal(normalizeFreeLayout({...old,mode:'flow'}).flow,true);assert.equal(normalizeFreeLayout(null).flow,false);});
+
+test('V72 composition sans chevauchement, ancrage du bloc manipulé et disposition stable',async()=>{
+ const {arrangePresentationBlocks}=await load('lib/free-point-layout.ts');
+ const source={a:{x:0,y:0,width:576,height:480},b:{x:600,y:0,width:576,height:480},c:{x:0,y:504,width:1200,height:240}};
+ assert.deepEqual(arrangePresentationBlocks(['a','b','c'],source),source);
+ const changed={...source,a:{...source.a,width:1200,height:600}};
+ const result=arrangePresentationBlocks(['a','b','c'],changed,'a');
+ assert.deepEqual(result.a,changed.a);assert.equal(result.b.y,624);assert.equal(result.c.y,1128);
+ assert.deepEqual(arrangePresentationBlocks(['a','b','c'],result),result);assert.equal(source.b.y,0);
+ const dragged=arrangePresentationBlocks(['a','b','c'],{...source,b:{...source.b,x:0}},'b');
+ assert.equal(dragged.b.y,0);assert.equal(dragged.a.y,504);assert.equal(dragged.c.y,1008);
+});
+test('V73 les huit poignées conservent le bord opposé et respectent les limites',async()=>{
+ const {resizeFromEdge}=await load('lib/free-point-layout.ts');const r={x:240,y:240,width:480,height:480};
+ for(const edge of ['n','s','e','w','ne','nw','se','sw']){const v=resizeFromEdge(r,48,24,edge);assert.equal(v.x,edge.includes('w')?288:240);assert.equal(v.y,edge.includes('n')?264:240);assert.equal(v.width,edge.includes('w')?432:edge.includes('e')?528:480);assert.equal(v.height,edge.includes('n')?456:edge.includes('s')?504:480);}
+ const limited=resizeFromEdge(r,10000,10000,'nw');assert.equal(limited.width,240);assert.equal(limited.height,144);assert.equal(limited.x+limited.width,720);assert.equal(limited.y+limited.height,720);
+});
+test('V73 repères bords et centres, Alt libre et dimensions alignées',async()=>{
+ const {alignPresentationRect}=await load('lib/free-point-layout.ts');const neighbour={x:600,y:100,width:400,height:300};
+ const moved=alignPresentationRect({x:605,y:102,width:240,height:144},[neighbour],null,true);assert.equal(moved.rect.x,600);assert.equal(moved.rect.y,100);assert.deepEqual(moved.guides,{x:600,y:100});
+ const center=alignPresentationRect({x:676,y:500,width:240,height:144},[neighbour],null,true);assert.equal(center.rect.x+120,800);assert.equal(center.guides.x,800);
+ const resized=alignPresentationRect({x:240,y:100,width:365,height:295},[neighbour],'se',true);assert.equal(resized.rect.x+resized.rect.width,600);assert.equal(resized.rect.y+resized.rect.height,400);
+ const raw={x:605,y:106,width:240,height:144};assert.deepEqual(alignPresentationRect(raw,[neighbour],null,false),{rect:raw,guides:{}});
+});

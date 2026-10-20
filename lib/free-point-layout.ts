@@ -1,5 +1,5 @@
 export type BlockRect = { x: number; y: number; width: number; height: number };
-export type FreeLayout = { enabled: boolean; snap: boolean; showGrid: boolean; blocks: Record<string, BlockRect>; titles: Record<string,string>; copies: { id: string; title: string; html: string }[] };
+export type FreeLayout = { mode?: "windows" | "flow"; flow?: boolean; order?: string[]; enabled: boolean; snap: boolean; showGrid: boolean; blocks: Record<string, BlockRect>; titles: Record<string,string>; copies: { id: string; title: string; html: string }[] };
 export const CANVAS_WIDTH = 1200;
 export const GRID_STEP = 24;
 export function normalizeRect(value: Partial<BlockRect>): BlockRect {
@@ -9,7 +9,7 @@ export function normalizeRect(value: Partial<BlockRect>): BlockRect {
 }
 export function normalizeFreeLayout(value: unknown): FreeLayout {
   const v = value && typeof value === 'object' ? value as Partial<FreeLayout> : {};
-  return { enabled: v.enabled !== false, snap: v.snap !== false, showGrid: v.showGrid !== false,
+  return { mode: v.mode === "flow" ? "flow" : "windows", flow: v.mode === "flow", order: Array.isArray(v.order) ? [...new Set(v.order.filter(id=>typeof id==='string'))] : [], enabled: v.enabled !== false, snap: v.snap !== false, showGrid: v.showGrid !== false,
     blocks: Object.fromEntries(Object.entries(v.blocks ?? {}).filter(([,r])=>r && typeof r==='object').map(([id,r])=>[id,normalizeRect(r)])),
     titles: Object.fromEntries(Object.entries(v.titles ?? {}).filter(([,t])=>typeof t==='string').map(([id,t])=>[id,t.slice(0,120)])),
     copies: Array.isArray(v.copies) ? v.copies.filter(c=>c && typeof c.id==='string' && typeof c.html==='string').slice(0,40).map(c=>({id:c.id,title:String(c.title||'Copie').slice(0,120),html:c.html})) : [] };
@@ -22,4 +22,47 @@ export function initialRects(ids: string[], widths: Record<string,string>): Reco
  const result:Record<string,BlockRect>={};let x=0,y=0,rowHeight=0;
  for(const id of ids){const span=widths[id]==='quarter'?1:widths[id]==='half'?2:widths[id]==='three-quarters'||widths[id]==='two-thirds'?3:4;const width=span*300;if(x+width>1200){x=0;y+=rowHeight+24;rowHeight=0;}const height=id==='jira'?840:id==='dossiers'?600:480;result[id]=normalizeRect({x,y,width:width-(span===4?0:12),height});x+=width;rowHeight=Math.max(rowHeight,height);}
  return result;
+}
+
+export function orderedBlockIds(ids:string[], order:string[]=[]){const allowed=new Set(ids);return [...new Set([...order.filter(id=>allowed.has(id)),...ids])];}
+export function reorderBlock(ids:string[],id:string,before:string|null){if(id===before||!ids.includes(id))return ids;const rest=ids.filter(v=>v!==id);const at=before?rest.indexOf(before):-1;rest.splice(at<0?rest.length:at,0,id);return rest;}
+export function placeMissingBlocks(ids:string[], widths:Record<string,string>, saved:Record<string,BlockRect>){const defaults=initialRects(ids,widths);const result={...saved};let bottom=Math.max(0,...ids.filter(id=>result[id]).map(id=>result[id].y+result[id].height+24));for(const id of ids)if(!result[id]){result[id]=normalizeRect({...defaults[id],...(Object.keys(saved).length?{x:0,y:bottom}:{})});if(Object.keys(saved).length)bottom=result[id].y+result[id].height+24;}return result;}
+
+// Keep the manipulated block under the pointer; move intersecting neighbours below it.
+export function arrangePresentationBlocks(ids:string[], blocks:Record<string,BlockRect>, anchor?:string):Record<string,BlockRect>{
+ const result={...blocks},placed:BlockRect[]=[];
+ const order=ids.filter(id=>blocks[id]).sort((a,b)=>blocks[a].y-blocks[b].y||blocks[a].x-blocks[b].x||ids.indexOf(a)-ids.indexOf(b));
+ if(anchor&&order.includes(anchor)){order.splice(order.indexOf(anchor),1);order.unshift(anchor);}
+ for(const id of order){const r={...blocks[id]};let hits:BlockRect[];
+  while((hits=placed.filter(p=>r.x<p.x+p.width&&r.x+r.width>p.x&&r.y<p.y+p.height+24&&r.y+r.height+24>p.y)).length)r.y=Math.max(...hits.map(p=>p.y+p.height+24));
+  result[id]=r;placed.push(r);
+ }
+ return result;
+}
+
+export type ResizeEdge='n'|'s'|'e'|'w'|'ne'|'nw'|'se'|'sw';
+export function resizeFromEdge(rect:BlockRect,dx:number,dy:number,edge:ResizeEdge):BlockRect{
+ const right=rect.x+rect.width,bottom=rect.y+rect.height;
+ const x=edge.includes('w')?Math.max(0,Math.min(right-240,rect.x+dx)):rect.x;
+ const y=edge.includes('n')?Math.max(0,Math.min(bottom-144,rect.y+dy)):rect.y;
+ const width=edge.includes('w')?right-x:edge.includes('e')?Math.max(240,Math.min(CANVAS_WIDTH-x,rect.width+dx)):rect.width;
+ const height=edge.includes('n')?bottom-y:edge.includes('s')?Math.max(144,Math.min(10000,rect.height+dy)):rect.height;
+ return normalizeRect({x,y,width,height});
+}
+export function alignPresentationRect(raw:BlockRect,neighbours:BlockRect[],edge:ResizeEdge|null,snap:boolean,threshold=10){
+ let rect={...raw};const guides:{x?:number;y?:number}={};
+ if(!snap)return {rect,guides};
+ for(const axis of ['x','y'] as const){
+  const size=axis==='x'?'width':'height',start=edge?.includes(axis==='x'?'w':'n'),end=edge?.includes(axis==='x'?'e':'s');
+  if(edge&&!start&&!end)continue;
+  const offsets=edge?[start?0:rect[size]]:[0,rect[size]/2,rect[size]];
+  const targets=[...(axis==='x'?[0,CANVAS_WIDTH/2,CANVAS_WIDTH]:[0]),...neighbours.flatMap(p=>[p[axis],p[axis]+p[size]/2,p[axis]+p[size]])];
+  let best:{delta:number;target:number}|null=null;
+  for(const offset of offsets)for(const target of targets){const delta=target-(rect[axis]+offset);if(Math.abs(delta)<=threshold&&(!best||Math.abs(delta)<Math.abs(best.delta)))best={delta,target};}
+  const delta=best?best.delta:Math.round((rect[axis]+(edge&&end?rect[size]:0))/GRID_STEP)*GRID_STEP-(rect[axis]+(edge&&end?rect[size]:0));
+  const proposed=edge?resizeFromEdge(rect,axis==='x'?delta:0,axis==='y'?delta:0,edge):normalizeRect({...rect,[axis]:rect[axis]+delta});
+  const movedEdge=proposed[axis]+(edge&&end?proposed[size]:0),rawEdge=rect[axis]+(edge&&end?rect[size]:0);
+  rect=proposed;if(best&&Math.abs(movedEdge-rawEdge-best.delta)<0.01)guides[axis]=best.target;
+ }
+ return {rect,guides};
 }

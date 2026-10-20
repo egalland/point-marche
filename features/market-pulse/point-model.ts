@@ -1,3 +1,4 @@
+import type { PURCHASESConfig } from "@/lib/purchaseData";
 import { normalizeFreeLayout, type FreeLayout } from "@/lib/free-point-layout";
 
 import { normalizeModuleWidth } from "@/lib/point-grid";
@@ -25,19 +26,19 @@ export type View = WorkspaceView;
 export type Section = "general" | "dossiers" | "operations" | "promotions" | "jira" | "saved" | "markets" | "users" | "mail" | "personalization";
 export type FontScale = "compact" | "standard" | "large";
 export type Density = "compact" | "comfortable" | "airy";
-export type PointModule = "jira" | "dossiers" | "operations" | "promotions" | "alerts" | "comparison" | "simulationComparison";
+export type PointModule = "jira" | "dossiers" | "operations" | "promotions" | "alerts" | "comparison" | "simulationComparison" | "purchaseData";
 export type ModuleVisibility = Record<PointModule, boolean>;
 export type PointPreferences = { freeLayout?: FreeLayout; fontScale: FontScale; fontScalePercent: number; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
 export type CarryoverFields = { sourceId?: string; carriedFromYear?: number; carriedFromWeek?: number };
 export type Dossier = RichDossier & CarryoverFields;
-export type PlannerPointSource = { externalId: string; metrics: PlannerTask["metrics"]; supplierLabel?: string; variationHistory?: SupplierVariationPoint[] };
+export type PlannerPointSource = { labels?: string[]; checklist?: PlannerTask["checklist"]; externalId: string; metrics: PlannerTask["metrics"]; supplierLabel?: string; variationHistory?: SupplierVariationPoint[] };
 export type CommercialOperation = { id: string; kind?: "simulation"; name: string; month: string; state: string; summary: string; steps: [string, string][]; plannerSource?: PlannerPointSource; plannerBase?: MarketSimulationFields; plannerOverride?: MarketSimulationOverride } & CarryoverFields;
 export type Promotion = { id: string; name: string; period: string; purchaseNote: string; salesState: string; action: string; comment: string } & CarryoverFields;
 export type Tariff = { id: string; code: string; supplier: string; month: string; state: string; receptionDate: string; dueDate: string; owner: string; comment: string };
 export type JiraPointFields = { summary: string; status: string; priority: string; assignee: string; lastActivity: string; comment: string; count?: number };
 export type JiraPointOverride = Partial<JiraPointFields> & { updatedAt?: string };
 export type JiraTicket = { category?: string; subcategory?: string; id: string; key: string; internalId?: string; summary: string; status: string; priority: string; assignee: string; assigneeUserCode?: string; createdAt?: string; lastActivity: string; link: string; comment: string; count?: number; importedBase?: JiraPointFields; pointOverride?: JiraPointOverride };
-export type PointData = { jiraAlertRules?: JiraAlertRule[]; simulationComparisonConfig?: ComparisonConfig; simulationComparisonSnapshot?: ComparisonSnapshot; sourceFreshness?: PointSourceFreshness; pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; promotions: Promotion[]; tariffs: Tariff[]; jira: JiraTicket[]; jiraMode: PointSourceMode; plannerMode: PointSourceMode; marketComparison: MarketComparison | null; preferences: PointPreferences; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
+export type PointData = { purchaseDataConfigs?: PURCHASESConfig[]; jiraAlertRules?: JiraAlertRule[]; simulationComparisonConfig?: ComparisonConfig; simulationComparisonSnapshot?: ComparisonSnapshot; sourceFreshness?: PointSourceFreshness; pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; promotions: Promotion[]; tariffs: Tariff[]; jira: JiraTicket[]; jiraMode: PointSourceMode; plannerMode: PointSourceMode; marketComparison: MarketComparison | null; preferences: PointPreferences; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
 export type AlertItem = { title: string; detail: string; severity: "warning" | "danger"; targetId?: string; link?: string; category: "Jira" | "Dossier" };
 export type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
 export type Market = { id: string; name: string; short: string; tone: ThemeKey; colorHex: string; plannerTags: string[]; position: number; jiraWarningDays: number; jiraCriticalDays: number };
@@ -73,12 +74,13 @@ export const pointModules: { id: PointModule; label: string; detail: string }[] 
   { id: "operations", label: "Simulations", detail: "État métier final, importé ou corrigé pendant le point" },
   { id: "promotions", label: "Promotions", detail: "Promotions achat et actions commerciales" },
   { id: "alerts", label: "Vigilances", detail: "Alertes dossiers et Jira" },
-  { id: "simulationComparison", label: "Comparatif de simulations", detail: "Deux périodes, marché ou fournisseur, volume et variations" },
+  { id: "purchaseData", label: "Suivi PURCHASES", detail: "Vues multiples par spécialité et fournisseur" },
+  { id: "simulationComparison", label: "Comparatif des simulations", detail: "Deux périodes, marché ou fournisseur, volume et variations" },
   { id: "comparison", label: "Comparaison des marchés", detail: "Camembert des tickets Jira ouverts par marché" },
 ];
-export const allModulesVisible = (): ModuleVisibility => ({ jira: true, dossiers: true, operations: true, promotions: true, alerts: true, comparison: false, simulationComparison: false });
-export const defaultModuleOrder: PointModule[] = ["jira", "dossiers", "operations", "promotions", "alerts", "comparison", "simulationComparison"];
-export const defaultModuleWidths: Record<PointModule, ModuleWidth> = { jira: "full", dossiers: "full", operations: "full", promotions: "full", alerts: "half", comparison: "full", simulationComparison: "full" };
+export const allModulesVisible = (): ModuleVisibility => ({ jira: true, dossiers: true, operations: true, promotions: true, alerts: true, comparison: false, purchaseData: false, simulationComparison: false });
+export const defaultModuleOrder: PointModule[] = ["jira", "dossiers", "operations", "promotions", "alerts", "comparison", "simulationComparison", "purchaseData"];
+export const defaultModuleWidths: Record<PointModule, ModuleWidth> = { jira: "full", dossiers: "full", operations: "full", promotions: "full", alerts: "half", comparison: "full", purchaseData: "full", simulationComparison: "full" };
 export const defaultPreferences = (): PointPreferences => ({ fontScale: "standard", fontScalePercent: 100, density: "comfortable", readModules: allModulesVisible(), mailModules: allModulesVisible(), htmlModules: allModulesVisible(), moduleOrder: [...defaultModuleOrder], moduleWidths: { ...defaultModuleWidths } });
 export const copyPreferences = (preferences: PointPreferences): PointPreferences => ({ ...preferences, freeLayout: preferences.freeLayout ? structuredClone(preferences.freeLayout) : undefined, readModules: { ...preferences.readModules }, mailModules: { ...preferences.mailModules }, htmlModules: { ...preferences.htmlModules }, moduleOrder: [...preferences.moduleOrder], moduleWidths: { ...preferences.moduleWidths } });
 export const emptyPlannerRegistry = (): PlannerRegistrySummary => ({ imported: 0, archiveCandidates: 0, recovered: 0, enriched: 0, usableVariations: 0, withoutVariation: 0, withoutMonth: 0 });
@@ -101,6 +103,7 @@ export const stringFields = <T extends object, K extends keyof T>(item: T, keys:
 export function initialData(marketId = "revetements-menuiserie", marketOverride?: Market): PointData {
   const market = marketOverride ?? defaultMarkets.find((item) => item.id === marketId) ?? defaultMarkets[0];
   const common = {
+    purchaseDataConfigs: [],
     pointName: "Point marché",
     themeColor: market.tone,
     customColor: market.colorHex,
@@ -161,7 +164,7 @@ export function normalizePointData(value: unknown, marketId: string, marketOverr
   const sourcePreferences = source.preferences && typeof source.preferences === "object" ? source.preferences : defaultPreferences();
   const mergeModules = (value: unknown): ModuleVisibility => {
     const sourceModules = value && typeof value === "object" ? value as Record<string, unknown> : {};
-    return Object.fromEntries(pointModules.map((module) => [module.id, (module.id === "comparison" || module.id === "simulationComparison") ? sourceModules[module.id] === true : sourceModules[module.id] !== false])) as ModuleVisibility;
+    return Object.fromEntries(pointModules.map((module) => [module.id, (module.id === "purchaseData" || module.id === "comparison" || module.id === "simulationComparison") ? sourceModules[module.id] === true : sourceModules[module.id] !== false])) as ModuleVisibility;
   };
   const legacyOperations = objectRows<CommercialOperation>(Array.isArray(source.operations) ? source.operations : source.simulations);
   const hasSeparatedPromotions = Array.isArray(source.promotions);
@@ -173,6 +176,7 @@ export function normalizePointData(value: unknown, marketId: string, marketOverr
   const fontScalePercent = Math.max(85, Math.min(130, Math.round(Number(sourcePreferences.fontScalePercent) || legacyFontPercent)));
   const fontScale: FontScale = fontScalePercent < 98 ? "compact" : fontScalePercent > 107 ? "large" : "standard";
   return {
+    purchaseDataConfigs: Array.isArray(source.purchaseDataConfigs) ? source.purchaseDataConfigs : [],
     pointName: "Point marché",
     jiraAlertRules: normalizeJiraRules(source.jiraAlertRules),
     simulationComparisonConfig: normalizeComparison(source.simulationComparisonConfig, marketId),
@@ -280,10 +284,10 @@ export function plannerTaskToOperation(task: PlannerTask, allTasks: PlannerTask[
     id: `planner:${task.externalId}`,
     kind: "simulation",
     ...resolved,
-    steps: task.checklist.map((item) => [item.label, item.nonApplicable ? "Non applicable" : item.date ? "Fait" : "À faire"] as [string, string]),
+    steps: task.checklist.map((item) => [item.label, item.date || (item.nonApplicable ? "Non applicable" : "À faire")] as [string, string]),
     plannerBase,
     ...(hasMarketSimulationOverride(plannerOverride) ? { plannerOverride } : {}),
-    plannerSource: { externalId: task.externalId, metrics: task.metrics, supplierLabel: task.taskName.replace(/^20\d{2}-(?:0[1-9]|1[0-2])-(?:[A-ZÀ-Ÿ]+-)?/i, "").trim() || task.taskName, variationHistory: supplierSeriesForTask(task, allTasks) },
+    plannerSource: { externalId: task.externalId, labels: task.labels, checklist: task.checklist, metrics: task.metrics, supplierLabel: task.taskName.replace(/^20\d{2}-(?:0[1-9]|1[0-2])-(?:[A-ZÀ-Ÿ]+-)?/i, "").trim() || task.taskName, variationHistory: supplierSeriesForTask(task, allTasks) },
   };
 }
 
@@ -295,7 +299,7 @@ export function plannerTasksForPoint(tasks: PlannerTask[], market: Market, meeti
 
 export function mergePlannerOperations(operations: CommercialOperation[], tasks: PlannerTask[], allTasks = tasks) {
   const previousByExternalId = new Map(operations.filter((operation) => operation.plannerSource?.externalId).map((operation) => [operation.plannerSource!.externalId, operation]));
-  return [...operations.filter((operation) => !operation.plannerSource && !operation.id.startsWith("planner:")), ...tasks.map((task) => plannerTaskToOperation(task, allTasks, previousByExternalId.get(task.externalId)))];
+  return [...operations.filter((operation) => !operation.plannerSource && !operation.id.startsWith("planner:")), ...[...new Map(tasks.map(task => [task.externalId, task])).values()].map((task) => plannerTaskToOperation(task, allTasks, previousByExternalId.get(task.externalId)))];
 }
 
 
