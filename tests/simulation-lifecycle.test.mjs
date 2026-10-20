@@ -56,3 +56,30 @@ test('Planner enrichment never inserts the same external task twice',async()=>{
  assert.equal(point.operations.length,1);
  assert.equal(point.operations[0].plannerSource.checklist[1].date,'2026-10-04');
 });
+test('template eligibility uses Planner tags or applicable checklist labels, not every simulation',()=>{
+ assert.equal(lifecycle.hasTemplateTracking({labels:['REV-PB'],checklist:[step('Avis de hausse','2026-10-01')]}),false);
+ assert.equal(lifecycle.hasTemplateTracking({labels:['Trame WORKSPACE'],checklist:[]}),true);
+ assert.equal(lifecycle.hasTemplateTracking({labels:['Sans trame'],checklist:[]}),false);
+ assert.equal(lifecycle.hasTemplateTracking({labels:[],checklist:[step('Trame WORKSPACE envoyée')]}),true);
+ assert.equal(lifecycle.hasTemplateTracking({labels:[],checklist:[{...step('Trame WORKSPACE envoyée'),nonApplicable:true}]}),false);
+ const excluded=lifecycle.simulationLifecycle({notice:'2026-10-01',templateSent:'',supplierReceived:'2026-10-03'},false);
+ assert.equal(excluded.templateDone,null);assert.equal(excluded.noticeToTemplate,null);assert.equal(excluded.templateToSupplier,null);
+});
+test('an untracked simulation adds no artificial zero to supplier denominators or delay samples',async()=>{
+ const {buildSupplierProfiles,supplierProfileSummary}=await import(moduleUrl('../../lib/supplier-profile.ts'));
+ const tracked={...task,externalId:'tracked',taskName:'2026-10-OCTOBRE-Test',effectiveMonth:'2026-10',category:'1 - À faire',goal:'',plannerStatus:'',labels:['REV-PB'],metrics:{supplierCode:'A0001',globalVariation:null,weightedVariation:null}};
+ const untracked={...tracked,externalId:'untracked',checklist:[step('Avis de hausse','2026-10-01'),step('Tarif fournisseur','2026-10-03')]};
+ const summary=supplierProfileSummary(buildSupplierProfiles([tracked,untracked],[])[0]);
+ assert.equal(summary.total,2);assert.equal(summary.tracked,1);assert.equal(summary.sent,1);assert.deepEqual(summary.preparation,{days:3,count:1});assert.deepEqual(summary.supplierReturn,{days:6,count:1});
+ const sample=plannerDelaySamples([untracked],[],[]);assert.ok(sample.every(item=>!item.kind.startsWith('template')));
+ const zero={...tracked,externalId:'zero',checklist:[step('Avis de hausse','2026-10-04'),step('Trame WORKSPACE envoyée','2026-10-04'),step('Tarif fournisseur','2026-10-04')]};
+ assert.equal(plannerDelaySamples([zero],[],[]).find(item=>item.kind==='templatePreparation').days,0);
+});
+test('untracked point exports do not present a template as unsent and tag metadata survives JSON',async()=>{
+ const {operationExportDetails}=await import(moduleUrl('../../lib/point-export-data.ts'));
+ const item={steps:[['Avis de hausse','2026-10-01'],['Tarif fournisseur','2026-10-03']],summary:''};
+ assert.equal(operationLifecycle(item).templateApplicable,false);
+ for(const mail of [true,false])assert.doesNotMatch(operationExportDetails(item,mail),/Trame non datée|Avis → trame|Trame → retour|0 j/);
+ const tagged=JSON.parse(JSON.stringify({...item,plannerSource:{externalId:'x',labels:['TRAME WORKSPACE']}}));
+ assert.equal(operationLifecycle(tagged).templateApplicable,true);assert.equal(operationLifecycle(tagged).noticeToTemplate,null);
+});

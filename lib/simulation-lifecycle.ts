@@ -31,11 +31,18 @@ export function elapsedCalendarDays(start: string, end: string): number | null {
   const days = Math.round((Date.parse(`${end}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) / 86400000);
   return days >= 0 ? days : null;
 }
-export function simulationLifecycle(dates: SimulationMilestones) {
-  const noticeToTemplate = elapsedCalendarDays(dates.notice, dates.templateSent);
-  const templateToSupplier = elapsedCalendarDays(dates.templateSent, dates.supplierReceived);
-  const invalidOrder = Boolean((dates.notice && dates.templateSent && noticeToTemplate === null) || (dates.templateSent && dates.supplierReceived && templateToSupplier === null));
-  return { ...dates, templateDone: validMilestoneDate(dates.templateSent), noticeToTemplate, templateToSupplier, invalidOrder };
+export function hasTemplateTracking(source: { labels?: string[]; checklist?: { label: string; date?: string; nonApplicable?: boolean }[] }) {
+  const mentionsTemplate = (value: string) => {
+    const text = normalized(value);
+    return /\btrames?\b/.test(text) && !/\b(?:sans|aucune|pas de) trames?\b|trames? non applicable/.test(text);
+  };
+  return Boolean(source.labels?.some(mentionsTemplate) || source.checklist?.some(item => mentionsTemplate(item.label) && (!item.nonApplicable || validMilestoneDate(item.date))));
+}
+export function simulationLifecycle(dates: SimulationMilestones, templateApplicable = true) {
+  const noticeToTemplate = templateApplicable ? elapsedCalendarDays(dates.notice, dates.templateSent) : null;
+  const templateToSupplier = templateApplicable ? elapsedCalendarDays(dates.templateSent, dates.supplierReceived) : null;
+  const invalidOrder = templateApplicable && Boolean((dates.notice && dates.templateSent && noticeToTemplate === null) || (dates.templateSent && dates.supplierReceived && templateToSupplier === null));
+  return { ...dates, templateApplicable, templateDone: templateApplicable ? validMilestoneDate(dates.templateSent) : null, noticeToTemplate, templateToSupplier, invalidOrder };
 }
 export function milestonesFromSteps(steps: [string, string][]) {
   return simulationMilestones(steps.map(([label, date]) => ({ label, date })));

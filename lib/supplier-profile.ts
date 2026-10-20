@@ -2,7 +2,7 @@ import type { PlannerTask } from "./planner-import";
 import type { PURCHASESRow } from "./purchaseData";
 import { supplierLabelFromTask, buildSupplierVariations } from "./supplier-variations";
 import { marketSimulationState } from "./market-simulation";
-import { simulationMilestones, simulationLifecycle } from "./simulation-lifecycle";
+import { simulationMilestones, simulationLifecycle, hasTemplateTracking } from "./simulation-lifecycle";
 
 export type SupplierMatch = { source: "planner" | "purchaseData"; id: string; name: string; rawCode: string; code: string; reason: "name" | "missing" | "ambiguous-name" | "ambiguous-code"; candidates: string[] };
 export type SupplierProfile = { key: string; code: string; label: string; aliases: string[]; nameVariants: { name: string; count: number }[]; labelCount: number; labelTotal: number; correlations: SupplierMatch[]; tasks: PlannerTask[]; purchaseData: PURCHASESRow[] };
@@ -70,7 +70,7 @@ export function buildSupplierCatalog(tasks: PlannerTask[], rows: PURCHASESRow[])
 }
 export function buildSupplierProfiles(tasks: PlannerTask[], rows: PURCHASESRow[]) { return buildSupplierCatalog(tasks, rows).profiles; }
 export function supplierProfileSummary(profile: SupplierProfile) {
-  const dated = profile.tasks.map(task => simulationLifecycle(simulationMilestones(task.checklist)));
+  const dated = profile.tasks.map(task => simulationLifecycle(simulationMilestones(task.checklist), hasTemplateTracking(task)));
   const average = (key: "noticeToTemplate" | "templateToSupplier") => {
     const values = dated.map(item => item[key]).filter((value): value is number => value !== null);
     return { days: values.length ? Math.round(values.reduce((a,b) => a+b,0) / values.length * 10) / 10 : null, count: values.length };
@@ -79,7 +79,7 @@ export function supplierProfileSummary(profile: SupplierProfile) {
   return { total: profile.tasks.length, done: profile.tasks.filter(task => marketSimulationState(task) === "Faite").length,
     active: profile.tasks.filter(task => !["Faite", "Non finalisée"].includes(marketSimulationState(task))).length,
     stopped: profile.tasks.filter(task => marketSimulationState(task) === "Non finalisée").length,
-    sent: dated.filter(item => item.templateDone).length, dateIssues: dated.filter(item => item.invalidOrder).length,
+    tracked: dated.filter(item => item.templateApplicable).length, sent: dated.filter(item => item.templateDone === true).length, dateIssues: dated.filter(item => item.invalidOrder).length,
     preparation: average("noticeToTemplate"), supplierReturn: average("templateToSupplier"), latestVariation,
     variations: buildSupplierVariations(profile.tasks).map(({ purchases12m: _omitted, ...point }) => ({ ...point, supplierKey: profile.code, supplierCode: profile.code, supplierLabel: profile.label })), tags: [...new Set(profile.tasks.flatMap(task => task.labels))].sort(),
   };
