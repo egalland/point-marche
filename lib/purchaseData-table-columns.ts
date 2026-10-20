@@ -12,9 +12,16 @@ export const purchaseDataTableColumns: QueryColumn<PURCHASESRow>[] = [
   {key:'extracted',label:'Extraction',value:row=>row.extracted,kind:'date'},
   {key:'gap',label:'Écart €',value:row=>row.gap,kind:'number'},
 ];
-export function supplierPURCHASESColumns(inferred: Set<string>): QueryColumn<PURCHASESRow>[] {
-  const byKey = new Map(purchaseDataTableColumns.map(column=>[column.key,column]));
+// Count within the source perimeter, before table-only filters and pagination.
+export function purchaseDataColumnsWithOccurrences(rows: PURCHASESRow[]): QueryColumn<PURCHASESRow>[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) if (row.article) counts.set(row.article, (counts.get(row.article) ?? 0) + 1);
+  const occurrence: QueryColumn<PURCHASESRow> = {key:'occurrences',label:'Occurrences article',kind:'number',value:row=>row.article ? counts.get(row.article) ?? 0 : ''};
+  return purchaseDataTableColumns.flatMap(column=>column.key === 'article' ? [column,occurrence] : [column]);
+}
+export function supplierPURCHASESColumns(inferred: Set<string>, rows: PURCHASESRow[] = []): QueryColumn<PURCHASESRow>[] {
+  const byKey = new Map(purchaseDataColumnsWithOccurrences(rows).map(column=>[column.key,column]));
   return [{key:'entity',label:'Entité',value:row=>row.entity},
-    ...['piece','line','article','description','specialty','agency','invoice','extracted','gap'].map(key=>({...byKey.get(key)!, ...(key === 'specialty' ? {label:'Spécialité'} : {})})),
+    ...['piece','line','article','occurrences','description','specialty','agency','invoice','extracted','gap'].map(key=>({...byKey.get(key)!, ...(key === 'specialty' ? {label:'Spécialité'} : {})})),
     {key:'match',label:'Rattachement',value:row=>inferred.has(`purchaseData:${row.id}`)?'Nom unique':'Code'}];
 }
