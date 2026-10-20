@@ -20,12 +20,18 @@ export function SupplierDashboard({ tasks, purchaseDataRows, plannerReady, purch
   const profiles = catalog.profiles;
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState("");
-  useEffect(() => { setSelected(supplierSelectionFromUrl(window.location.href)); }, []);
+  useEffect(() => {
+    const restore = () => setSelected(supplierSelectionFromUrl(window.location.href));
+    restore();
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
   const options = useMemo(() => filterSupplierProfiles(profiles, query), [profiles, query]);
   const profile = profiles.find(item => item.key === selected);
   const choose = (key: string) => {
     setSelected(key);
-    window.history.replaceState(null, "", supplierSelectionUrl(window.location.href, key));
+    const url = supplierSelectionUrl(window.location.href, key);
+    if (url !== window.location.href) window.history.pushState(null, "", url);
   };
   const loading = !plannerReady || (!purchaseDataReady && !purchaseDataError);
   return <main className="supplier-page">
