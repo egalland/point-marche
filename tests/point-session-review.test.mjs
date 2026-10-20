@@ -47,7 +47,14 @@ test.beforeEach(async () => {
   app.clearSessionDrafts(); renderComponent = app.MarketPulseWorkspace; hooks = { slots: [], effects: [], cursor: 0 }; timers = new Map(); autoTimers = new Map(); let timerId = 0; post = null; failedMarket = "";
   draftRecords = new Map();
   records = new Map(app.defaultMarkets.map((market) => [market.id, [pointRecord(market.id)]]));
-  globalThis.window = { location: { href: "https://test.invalid/", search: "" }, history: { replaceState(_state, _unused, value) { const url = new URL(value); window.location.href = url.href; window.location.search = url.search; } }, scrollTo() {}, addEventListener() {}, removeEventListener() {}, setTimeout(callback, delay) { const id = ++timerId; if (!delay) timers.set(id, callback); else if (delay === 1200) autoTimers.set(id, callback); return id; }, clearTimeout(id) { timers.delete(id); autoTimers.delete(id); } };
+  const listeners = new Map(), historyEntries = ["https://test.invalid/"]; let historyIndex = 0;
+  const changeUrl = value => { const url = new URL(value); window.location.href = url.href; window.location.search = url.search; };
+  const traverse = amount => { const next = historyIndex + amount; if (next < 0 || next >= historyEntries.length) return; historyIndex = next; changeUrl(historyEntries[historyIndex]); for (const fn of listeners.get("popstate") || []) fn({type:"popstate"}); };
+  globalThis.window = { location: { href: historyEntries[0], search: "" }, history: {
+    replaceState(_state, _unused, value) { changeUrl(value); historyEntries[historyIndex] = window.location.href; },
+    pushState(_state, _unused, value) { changeUrl(value); historyEntries.splice(historyIndex+1); historyEntries.push(window.location.href); historyIndex++; },
+    back() { traverse(-1); }, forward() { traverse(1); }, get length() { return historyEntries.length; }
+  }, scrollTo() {}, addEventListener(name,fn) { if (!listeners.has(name)) listeners.set(name,new Set()); listeners.get(name).add(fn); }, removeEventListener(name,fn) { listeners.get(name)?.delete(fn); }, setTimeout(callback, delay) { const id = ++timerId; if (!delay) timers.set(id, callback); else if (delay === 1200) autoTimers.set(id, callback); return id; }, clearTimeout(id) { timers.delete(id); autoTimers.delete(id); } };
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input), "https://test.invalid");
     if (url.pathname === "/api/point-drafts") {
@@ -146,10 +153,34 @@ test("supplier navigation preserves the point draft and selection survives a new
   find(node => node.type === "select").props.onChange({target:{value:"code:A0001"}}); await settle();
   assert.equal(new URL(window.location.href).searchParams.get("supplier"), "code:A0001");
   assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "A0001");
+  window.history.back(); await settle(); assert.equal(find(node => node.type === "select").props.value, "");
+  window.history.forward(); await settle(); assert.equal(find(node => node.type === "select").props.value, "code:A0001");
   hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
   await settle();
   assert.equal(find(node => node.type === "select").props.value, "code:A0001");
   assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "A0001");
+});
+
+test("all integrated tabs update the URL; browser history restores tabs and keeps the market draft", async () => {
+  preview().actions.updatePriority("Brouillon conservé avec l’historique"); await settle();
+  for (const view of ["analyst","stats","suppliers","imports","mail","settings"]) {
+    navigation().onSelect(view); await settle();
+    assert.equal(new URL(window.location.href).searchParams.get("mode"), view);
+    assert.equal(navigation().view, view);
+  }
+  const length = window.history.length; navigation().onSelect("settings"); await settle(); assert.equal(window.history.length,length);
+  window.history.back(); await settle(); assert.equal(navigation().view,"mail");
+  window.history.back(); await settle(); assert.equal(navigation().view,"imports");
+  window.history.forward(); await settle(); assert.equal(navigation().view,"mail");
+  navigation().onSelect("read"); await settle(); assert.equal(new URL(window.location.href).searchParams.get("mode"),null);
+  assert.equal(preview().data.priority,"Brouillon conservé avec l’historique");
+});
+
+test("reloading restores a mail deep link inside the same workspace",async()=>{
+  window.history.replaceState(null,"","https://test.invalid/?mode=mail");
+  hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
+  await settle();assert.equal(navigation().view,"mail");
+  assert.equal(new URL(window.location.href).searchParams.get("mode"),"mail");
 });
 
 const analysts = ["a", "b"].map((id) => ({ id, name: `Analyste ${id}`, email: `${id}@example.test`, usercode: id === "a" ? "A1234567" : "B1234567", role: "analyste-tarif-referentiel", marketIds: [] }));

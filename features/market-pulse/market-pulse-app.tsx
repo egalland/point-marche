@@ -1,4 +1,5 @@
 "use client";
+import { useWorkspaceRoute } from "./use-workspace-route";
 import { usePointExports } from "./use-point-exports";
 import { LoadingStatus } from "@/components/loading-status";
 import {usePURCHASES} from "./purchaseData-dashboard";
@@ -58,7 +59,7 @@ function MarketPulseWorkspace() {
   const [marketOptions, setMarketOptions] = useState<Market[]>(defaultMarkets);
   const [marketId, setMarketId] = useState("revetements-menuiserie");
   const [data, setData] = useState<PointData>(() => initialData());
-  const [view, setView] = useState<View>("read");
+  const [view, setView] = useWorkspaceRoute();
   const [section, setSection] = useState<Section>("general");
   const [ready, setReady] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -87,6 +88,11 @@ function MarketPulseWorkspace() {
   const [carryoverSelection, setCarryoverSelection] = useState<Record<string, boolean>>({});
   const [calendarExpanded, setCalendarExpanded] = useState(false);
   const [meetingEditing, setMeetingEditing] = useState(false);
+  useEffect(() => {
+    const leaveEditing = () => setMeetingEditing(false);
+    window.addEventListener("popstate", leaveEditing);
+    return () => window.removeEventListener("popstate", leaveEditing);
+  }, []);
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [refreshingImports, setRefreshingImports] = useState(false);
@@ -211,8 +217,7 @@ function MarketPulseWorkspace() {
       setSession(currentSession);
       if (currentSession.user) {
         const requestedMode = new URLSearchParams(window.location.search).get("mode");
-        if (requestedMode === "edit") { setView("read"); setMeetingEditing(true); }
-        else if (requestedMode === "analyst" || requestedMode === "stats" || requestedMode === "suppliers" || requestedMode === "imports" || requestedMode === "settings") setView(requestedMode);
+        if (requestedMode === "edit") setMeetingEditing(true);
       }
       const options = loadedMarkets.length ? loadedMarkets : defaultMarkets;
       setMarketOptions(options);
@@ -360,10 +365,6 @@ function MarketPulseWorkspace() {
     setMeetingEditing(false);
     if (nextView === "settings") setSection("personalization");
     if (nextView === "edit") { setView("read"); setMeetingEditing(true); return; }
-    const url = new URL(window.location.href);
-    if (nextView === "suppliers") url.searchParams.set("mode", "suppliers");
-    else if (url.searchParams.get("mode") === "suppliers") { url.searchParams.delete("mode"); url.searchParams.delete("supplier"); }
-    window.history.replaceState(null, "", url);
     setView(nextView);
   };
 
