@@ -59,6 +59,7 @@ export function enrichPointPlannerHistory(payload: unknown, tasks: PlannerTask[]
         ...source,
         externalId,
         checklist: task.checklist,
+        labels: task.labels,
         metrics: mergeMetrics(task.metrics, existingMetrics(source.metrics)),
         supplierLabel: text(source.supplierLabel) || supplierLabelFromTask(task.taskName),
         variationHistory: history.length ? history : Array.isArray(source.variationHistory) ? source.variationHistory : [],
@@ -78,6 +79,7 @@ function pointOperation(task: PlannerTask, tasks: PlannerTask[]) {
     plannerSource: {
       externalId: task.externalId,
       checklist: task.checklist,
+        labels: task.labels,
       metrics: task.metrics,
       supplierLabel: supplierLabelFromTask(task.taskName),
       variationHistory: supplierSeriesForTask(task, tasks),

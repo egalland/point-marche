@@ -1,4 +1,4 @@
-import { milestoneKind, elapsedCalendarDays, simulationMilestones } from "./simulation-lifecycle";
+import { milestoneKind, elapsedCalendarDays, simulationMilestones, hasTemplateTracking } from "./simulation-lifecycle";
 import type { GlobalDirectoryUser } from "./global-directory";
 import type { PlannerChecklistItem, PlannerSpecialty, PlannerTask } from "./planner-import";
 
@@ -159,6 +159,7 @@ export function plannerDelaySamples(tasks: PlannerTask[], users: GlobalDirectory
     const marketIds = marketIdsForTask(task, markets);
     const analystIds = taskAnalystIds(task, users);
     return delayDefinitions.flatMap((definition) => {
+      if ((definition.kind === "templatePreparation" || definition.kind === "templateReturn") && !hasTemplateTracking(task)) return [];
       const milestones = simulationMilestones(task.checklist);
       const startDate = definition.kind === "templatePreparation" ? milestones.notice : definition.kind === "templateReturn" ? milestones.templateSent : checklistDate(task, definition.start);
       const endDate = definition.kind === "templatePreparation" ? milestones.templateSent : definition.kind === "templateReturn" ? milestones.supplierReceived : checklistDate(task, definition.end);
