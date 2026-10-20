@@ -3,10 +3,10 @@
 .supplier-page-header>span{font-size:12px;font-weight:650;color:var(--accent)}
 .supplier-page-header h1{font-size:clamp(28px,4vw,40px);margin:8px 0;letter-spacing:-.04em}
 .supplier-page-header p,.supplier-section header p{color:var(--muted);font-size:14px;line-height:1.6;margin:6px 0 0}
-.supplier-picker{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:16px;padding:22px;margin-bottom:22px;border:1px solid var(--line);border-radius:14px}
-.supplier-picker label{display:grid;gap:8px;font-size:13px;font-weight:600;min-width:0}
-.supplier-picker input,.supplier-picker select{width:100%;min-width:0;min-height:46px;padding:10px 12px;border:1px solid var(--line-strong);border-radius:9px;background:var(--field-bg);color:var(--text);font:inherit}
-.supplier-picker>small{grid-column:1/-1;color:var(--muted);font-size:12px}
+.supplier-search{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:22px;margin-bottom:22px;border:1px solid var(--line);border-radius:14px}
+.supplier-search label{display:grid;gap:8px;font-size:13px;font-weight:600;min-width:0}
+.supplier-search input{width:100%;min-width:0;min-height:46px;padding:10px 12px;border:1px solid var(--line-strong);border-radius:9px;background:var(--field-bg);color:var(--text);font:inherit}
+.supplier-search>small{grid-column:1/-1;color:var(--muted);font-size:12px}
 .supplier-sheet{display:grid;gap:22px}
 .supplier-identity,.supplier-section,.supplier-empty{padding:24px;border:1px solid var(--line);border-radius:14px;min-width:0}
 .supplier-identity{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
@@ -55,10 +55,19 @@
 .supplier-empty h2{font-size:20px;margin:0 0 12px}
 .supplier-empty p{font-size:14px;color:var(--muted);line-height:1.6}
 .supplier-page :is(input,select,summary):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-@media(max-width:700px){.supplier-picker{grid-template-columns:1fr;padding:18px}.supplier-identity,.supplier-section,.supplier-empty{padding:18px}.supplier-kpis,.supplier-delay-grid{grid-template-columns:1fr}.supplier-simulation>summary{align-items:flex-start;flex-direction:column;gap:10px}.supplier-simulation-body{padding:16px}.supplier-task-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.supplier-search{grid-template-columns:1fr;padding:18px}.supplier-identity,.supplier-section,.supplier-empty{padding:18px}.supplier-kpis,.supplier-delay-grid{grid-template-columns:1fr}.supplier-simulation>summary{align-items:flex-start;flex-direction:column;gap:10px}.supplier-simulation-body{padding:16px}.supplier-task-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 .supplier-match-review{padding:18px;margin-bottom:22px;border:1px solid var(--line);border-radius:12px}
 .supplier-match-review>summary,.supplier-name-evidence>summary{cursor:pointer;font-size:13px;font-weight:650;min-height:36px;line-height:1.6}
 .supplier-match-review>p,.supplier-name-evidence p{font-size:12px;line-height:1.6;color:var(--muted)}
 .supplier-name-evidence ul{padding-left:20px;font-size:13px;line-height:1.8}
 .supplier-name-evidence li>b{margin-left:12px;font-variant-numeric:tabular-nums}
+
+.supplier-search-field{display:flex;gap:10px;align-items:center;min-width:0}
+.supplier-search-field input{flex:1;min-width:0}
+.supplier-search-results{display:grid;gap:6px;max-height:none;overflow:visible}
+.supplier-search-results button{display:flex;justify-content:space-between;align-items:center;gap:14px;text-align:left;min-height:46px;padding:12px 14px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--text);font:inherit;cursor:pointer}
+.supplier-search-results button>span{font-size:14px;overflow-wrap:anywhere}
+.supplier-search-results button>b{font-size:12px;color:var(--muted);white-space:nowrap}
+.supplier-search-results button.is-active,.supplier-search-results button:hover{border-color:var(--accent);background:var(--accent-soft)}
+.supplier-search-results button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
