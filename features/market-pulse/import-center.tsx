@@ -2,7 +2,7 @@
 
 import { appFetch as fetch } from "@/lib/app-transport";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { buildGlobalJiraImportJql, type GlobalDirectoryUser } from "@/lib/global-directory";
+import { type GlobalDirectoryUser } from "@/lib/global-directory";
 import { decodeJiraCsv, parseJiraCsv, type JiraCsvParseResult } from "@/lib/jira-csv";
 import type { PlannerTask } from "@/lib/planner-import";
 import type { PlannerRegistrySummary } from "@/lib/planner-registry";
@@ -61,13 +61,10 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("");
-  const [queryCopied, setQueryCopied] = useState(false);
-  const [queryError, setQueryError] = useState("");
   const [batches, setBatches] = useState<ImportBatch[]>([]);
   const [registry, setRegistry] = useState<{ ticketCount: number | null; participantCount: number | null }>({ ticketCount: null, participantCount: null });
   const [historyLoading, setHistoryLoading] = useState(true);
   const knownUserCodes = useMemo(() => new Set(users.map((user) => user.usercode.trim().toUpperCase()).filter(Boolean)), [users]);
-  const globalJql = useMemo(() => buildGlobalJiraImportJql(), []);
   const unknownUserCodes = useMemo(() => {
     if (!preview) return [];
     const all = new Set(preview.tickets.flatMap((ticket) => [ticket.assigneeUserCode, ...ticket.participants.map((participant) => participant.usercode)]).filter(Boolean));
@@ -157,17 +154,6 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
     if (inputRef.current) inputRef.current.value = "";
   };
 
-  const copyQuery = async () => {
-    setQueryError("");
-    try {
-      await navigator.clipboard.writeText(globalJql);
-      setQueryCopied(true);
-      window.setTimeout(() => setQueryCopied(false), 2200);
-    } catch {
-      setQueryError("Copie automatique indisponible. Sélectionne la requête ci-dessous pour la copier.");
-    }
-  };
-
   return <main className="import-center-page">
     <section className="import-center-hero">
       <div><span>Sources centralisées</span><h1>Centre d’import</h1><p>Un seul registre alimente les points marché, les points analystes et les statistiques.</p></div>
@@ -175,10 +161,11 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
     </section>
 
     {onManual && <section className="manual-import-fallback"><div><strong>Continuer sans import</strong><p>Prépare le marché actif en saisie manuelle si le fichier est indisponible ou si l’import échoue.</p></div><div><button type="button" className="secondary-button" onClick={() => onManual("jira")}>Saisir Jira manuellement</button><button type="button" className="secondary-button" onClick={() => onManual("planner")}>Saisir les simulations</button></div></section>}
+    <nav className="import-source-nav" aria-label="Sources à importer"><a href="#import-jira"><b>01</b><span>Jira<small>Tickets et participants</small></span></a><a href="#import-planner"><b>02</b><span>Planner<small>Simulations tarifaires</small></span></a><a href="#import-purchaseData"><b>03</b><span>PURCHASES<small>Extraction fournisseurs</small></span></a></nav>
     <div className="import-source-grid">
-      <section className="surface jira-source-card">
-        <header><div><span>Source 01 · Jira</span><h2>Tickets et participants</h2><p>Dépose le CSV UTF-8 exporté depuis Jira. Les fichiers de plus de 12 000 lignes sont envoyés au registre par lots.</p></div><b>CSV</b></header>
-        <section className="jira-query-card import-jira-query"><div className="jira-query-heading"><div><span>Requête globale prête à copier</span><strong>Tickets ouverts + terminés depuis le début de l’année précédente</strong></div><button type="button" className="secondary-button" onClick={() => { void copyQuery(); }}>{queryCopied ? "Requête copiée" : "Copier la requête"}</button></div>{queryError && <p role="status" className="import-feedback">{queryError}</p>}<pre tabIndex={0} aria-label="Requête Jira à copier" className="jira-query-code">{globalJql}</pre><p>Dans l’export CSV, conserve : Clé, ID, État, Résumé, Création, Personne assignée, <strong>Mise à jour</strong> et toutes les colonnes Participants à la requête. La date de résolution reste facultative.</p></section>
+      <section id="import-jira" aria-labelledby="import-jira-title" className="surface import-source-card jira-source-card">
+        <header><div><span>Source 01 · Jira</span><h2 id="import-jira-title">Tickets et participants</h2><p>Dépose ton export CSV, vérifie les données détectées puis lance l’import.</p></div><b>CSV</b></header>
+        <details className="import-file-guide"><summary>Colonnes à conserver dans le CSV</summary><p>Clé, ID, État, Résumé, Création, Personne assignée, Mise à jour et les colonnes Participants à la requête. La date de résolution reste facultative.</p></details>
         <input ref={inputRef} type="file" disabled={loadingFile || importing} accept=".csv,text/csv,text/plain" hidden onChange={(event) => { const nextFile = event.target.files?.[0]; if (nextFile) void readFile(nextFile); }}/>
         {!file ? <button type="button" className="jira-file-drop" disabled={loadingFile || importing} onClick={() => inputRef.current?.click()} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); const dropped = event.dataTransfer.files?.[0]; if (dropped) void readFile(dropped); }}><span>CSV</span><strong>{loadingFile ? "Lecture du fichier…" : "Déposer le fichier Jira"}</strong><small>ou cliquer pour sélectionner un CSV</small></button> : <div className="jira-file-selected"><div><span>{encoding}</span><strong>{file.name}</strong><small>{formatBytes(file.size)} · {preview?.rows ?? 0} lignes lues</small></div><button type="button" className="secondary-button" disabled={importing || loadingFile} onClick={clearFile}>Changer de fichier</button></div>}
         {!preview && message && <p className="import-feedback" role="alert">{message}</p>}
@@ -191,15 +178,15 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
             <article className={unknownUserCodes.length ? "warning" : ""}><span>USERCODE inconnus</span><strong>{unknownUserCodes.length}</strong></article>
             <article className={preview.rejectedRows || preview.invalidDateRows ? "danger" : ""}><span>Lignes à vérifier</span><strong>{preview.rejectedRows + preview.invalidDateRows}</strong></article>
           </div>
-          {preview.missingColumns.length ? <div className="import-quality-alert danger"><strong>Import bloqué</strong><span>Colonnes manquantes : {preview.missingColumns.join(", ")}.</span></div> : !preview.closedTicketCount ? <div className="import-quality-alert warning"><strong>Aucun ticket terminé dans le fichier</strong><span>Vérifie que la requête copiée a bien été utilisée : un export limité à « statusCategory != Done » ne peut pas alimenter les terminés hebdomadaires.</span></div> : <div className={`import-quality-alert ${preview.invalidDateRows ? "warning" : "ok"}`}><strong>{preview.invalidDateRows ? `${preview.invalidDateRows} date(s) illisible(s)` : "Structure complète reconnue"}</strong><span>{preview.closedTicketCount} ticket{preview.closedTicketCount > 1 ? "s" : ""} terminé{preview.closedTicketCount > 1 ? "s" : ""} exploitable{preview.closedTicketCount > 1 ? "s" : ""} via la dernière modification. {repairedTextCount ? `${repairedTextCount} séquence(s) d’accents réparée(s). ` : ""}{preview.duplicateKeys ? `${preview.duplicateKeys} doublon(s) fusionné(s).` : "Aucun doublon détecté."}</span></div>}
+          {preview.missingColumns.length ? <div className="import-quality-alert danger"><strong>Import bloqué</strong><span>Colonnes manquantes : {preview.missingColumns.join(", ")}.</span></div> : !preview.closedTicketCount ? <div className="import-quality-alert warning"><strong>Aucun ticket terminé dans le fichier</strong><span>Le fichier contient uniquement des tickets non terminés. Pour alimenter les terminés hebdomadaires, ajoute aussi les tickets terminés au périmètre de ton export Jira.</span></div> : <div className={`import-quality-alert ${preview.invalidDateRows ? "warning" : "ok"}`}><strong>{preview.invalidDateRows ? `${preview.invalidDateRows} date(s) illisible(s)` : "Structure complète reconnue"}</strong><span>{preview.closedTicketCount} ticket{preview.closedTicketCount > 1 ? "s" : ""} terminé{preview.closedTicketCount > 1 ? "s" : ""} exploitable{preview.closedTicketCount > 1 ? "s" : ""} via la dernière modification. {repairedTextCount ? `${repairedTextCount} séquence(s) d’accents réparée(s). ` : ""}{preview.duplicateKeys ? `${preview.duplicateKeys} doublon(s) fusionné(s).` : "Aucun doublon détecté."}</span></div>}
           {unknownUserCodes.length > 0 && <div className="unknown-usercode-list"><span>À rapprocher dans l’annuaire</span><div>{unknownUserCodes.slice(0, 12).map((usercode) => <b key={usercode}>{usercode}</b>)}{unknownUserCodes.length > 12 && <b>+{unknownUserCodes.length - 12}</b>}</div></div>}
           {preview.tickets.length > 0 && <div className="jira-csv-preview"><table><thead><tr><th>Ticket</th><th>État</th><th>Résumé</th><th>Assigné</th><th>Participants</th><th>Catégorie</th><th>Sous-catégorie</th><th>Mise à jour</th></tr></thead><tbody>{preview.tickets.slice(0, 25).map((ticket) => <tr key={ticket.key}><td><a href={ticket.link} target="_blank" rel="noreferrer">{ticket.key}</a></td><td>{ticket.status}</td><td>{ticket.summary}</td><td>{ticket.assigneeUserCode || "—"}</td><td>{ticket.participants.map((participant) => participant.usercode).join(" · ") || "—"}</td><td>{ticket.category || "—"}</td><td>{ticket.subcategory || "—"}</td><td>{ticket.updatedAt ? ticket.updatedAt.slice(0, 16).replace("T", " ") : "—"}</td></tr>)}</tbody></table>{preview.tickets.length > 25 && <small>Prévisualisation limitée à 25 lignes · {preview.tickets.length - 25} autres tickets seront importés.</small>}</div>}
           <div className="jira-import-progress"><div><span style={{ width: `${progress}%` }}/></div><footer><span role="status">{message}</span><button type="button" className="primary-button" disabled={importing || !preview.tickets.length || Boolean(preview.missingColumns.length)} onClick={() => { void importFile(); }}>{importing ? `Import ${progress}%` : `Importer ${preview.tickets.length} tickets`}</button></footer></div>
         </>}
       </section>
 
-      <section className="surface planner-source-card">
-        <header><div><span>Source 02 · Planner</span><h2>Simulations tarifaires</h2><p>Le copier-coller reste le mode d’import. Le fichier pourra être ajouté plus tard sans changer le registre.</p></div><b>COLLER</b></header>
+      <section id="import-planner" aria-labelledby="import-planner-title" className="surface import-source-card planner-source-card">
+        <header><div><span>Source 02 · Planner</span><h2 id="import-planner-title">Simulations tarifaires</h2><p>Colle ton tableau Planner, vérifie les simulations détectées puis confirme l’import.</p></div><b>TABLEAU COPIÉ</b></header>
         <div className="planner-source-status"><article><span>Tâches enregistrées</span><strong>{plannerTasks.length}</strong></article><article><span>Variations exploitables</span><strong>{plannerRegistry.usableVariations}</strong></article><article><span>Dernière source</span><strong>{plannerUpdatedAt ? dateLabel(plannerUpdatedAt) : "Jamais"}</strong></article></div>
         <div className="planner-source-action"><div><strong>Import Planner actuel</strong><span>Prévisualisation des tags, analystes et variations avant enregistrement.</span></div><PlannerImportDialog markets={markets} onImport={onPlannerImport}/></div>
       </section>
@@ -207,7 +194,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
     </div>
 
     <section className="surface import-history">
-      <header><div><span>Traçabilité technique</span><h2>Derniers imports Jira</h2><p>Ce journal sécurise les imports sans réintroduire le versioning fonctionnel des points.</p></div></header>
+      <header><div><span>Historique</span><h2>Derniers imports Jira</h2><p>Retrouve les fichiers importés, leur date et le résultat de leur traitement.</p></div></header>
       {historyLoading ? <div className="import-history-empty">Chargement de l’historique…</div> : batches.length ? <div className="import-history-list">{batches.map((batch) => <article key={batch.id} className={`is-${batch.status}`}><span>{batch.status === "completed" ? "✓" : "!"}</span><div><strong>{batch.filename || "Export Jira"}</strong><small>{dateLabel(batch.completedAt ?? batch.createdAt)} · {batch.rowCount} lignes</small></div><div><b>{batch.ticketCount}</b><small>tickets</small></div><div><b>{batch.participantCount}</b><small>participants</small></div><div><b>{batch.unknownUserCodeCount}</b><small>USERCODE inconnus</small></div><em>{statusLabel(batch.status)}</em></article>)}</div> : <div className="import-history-empty">Aucun import Jira centralisé pour le moment.</div>}
     </section>
   </main>;
