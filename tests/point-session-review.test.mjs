@@ -163,13 +163,17 @@ test("supplier navigation preserves the point draft and selection survives a new
   assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "A0001");
 });
 
-test("one supplier search bounds results and supports keyboard selection without a second dropdown",async()=>{
+test("empty supplier search browses all options; typing filters and bounds the same control",async()=>{
   hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
   const props = {tasks:Array.from({length:12},(_,i)=>({externalId:String(i),taskName:`2026-10-OCTOBRE-Test ${String(i).padStart(2,"0")}`,effectiveMonth:"2026-10",metrics:{supplierCode:`A${String(i+1).padStart(4,"0")}`}})),purchaseDataRows:[],plannerReady:true,purchaseDataReady:true,plannerError:"",purchaseDataError:"",plannerUpdatedAt:"",purchaseDataUpdatedAt:"",onRetry(){}};
   renderComponent = () => app.SupplierDashboard(props); await settle();
   assert.equal(nodes(tree).filter(node => node.type === "select").length,0);
+  find(node=>node.props?.role === "combobox").props.onFocus();await settle();
+  assert.equal(nodes(tree).filter(node=>node.props?.role === "option").length,12);
+  assert.ok(find(node=>node.props?.role === "listbox").props.className.includes("is-browsing"));
   find(node=>node.props?.role === "combobox").props.onChange({target:{value:"Test"}});await settle();
   assert.equal(nodes(tree).filter(node => node.props?.role === "option").length,8);
+  assert.equal(find(node=>node.props?.role === "listbox").props.className.includes("is-browsing"),false);
   let prevented=false;find(node=>node.props?.role === "combobox").props.onKeyDown({key:"ArrowDown",preventDefault(){prevented=true;}});await settle();
   assert.equal(prevented,true);find(node=>node.props?.role === "combobox").props.onKeyDown({key:"Enter",preventDefault(){}});await settle();
   assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code,"A0002");
