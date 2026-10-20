@@ -7,7 +7,7 @@ import { decodeJiraCsv, parseJiraCsv, type JiraCsvParseResult } from "@/lib/jira
 import type { PlannerTask } from "@/lib/planner-import";
 import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 import { PURCHASESImportPlaceholder } from "./purchaseData-import-placeholder";
-import { ImportSourceLocation } from "./import-source-location";
+import { ImportSourceRefreshPanel } from "./import-source-location";
 import { PlannerImportDialog } from "./planner-import-dialog";
 
 type Market = { id: string; name: string; plannerTags: string[] };
@@ -161,12 +161,13 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
       <div className="import-registry-kpis"><article><span>Tickets en registre</span><strong>{historyLoading ? "…" : registry.ticketCount ?? "—"}</strong></article><article><span>Liens participants</span><strong>{historyLoading ? "…" : registry.participantCount ?? "—"}</strong></article><article><span>Simulations Planner</span><strong>{plannerTasks.length}</strong></article></div>
     </section>
 
+    <ImportSourceRefreshPanel/>
+    <div className="import-manual-heading"><h2>Imports manuels</h2><p>Importer un fichier ou coller les données source par source.</p></div>
     {onManual && <section className="manual-import-fallback"><div><strong>Continuer sans import</strong><p>Prépare le marché actif en saisie manuelle si le fichier est indisponible ou si l’import échoue.</p></div><div><button type="button" className="secondary-button" onClick={() => onManual("jira")}>Saisir Jira manuellement</button><button type="button" className="secondary-button" onClick={() => onManual("planner")}>Saisir les simulations</button></div></section>}
     <nav className="import-source-nav" aria-label="Sources à importer"><a href="#import-jira"><b>01</b><span>Jira<small>Tickets et participants</small></span></a><a href="#import-planner"><b>02</b><span>Planner<small>Simulations tarifaires</small></span></a><a href="#import-purchaseData"><b>03</b><span>PURCHASES<small>Extraction fournisseurs</small></span></a></nav>
     <div className="import-source-grid">
       <section id="import-jira" aria-labelledby="import-jira-title" className="surface import-source-card jira-source-card">
         <header><div><span>Source 01 · Jira</span><h2 id="import-jira-title">Tickets et participants</h2><p>Dépose ton export CSV, vérifie les données détectées puis lance l’import.</p></div><b>CSV</b></header>
-        <ImportSourceLocation source="jira"/>
         <details className="import-file-guide"><summary>Colonnes à conserver dans le CSV</summary><p>Clé, ID, État, Résumé, Création, Personne assignée, Mise à jour et les colonnes Participants à la requête. La date de résolution reste facultative.</p></details>
         <input ref={inputRef} type="file" disabled={loadingFile || importing} accept=".csv,text/csv,text/plain" hidden onChange={(event) => { const nextFile = event.target.files?.[0]; if (nextFile) void readFile(nextFile); }}/>
         {!file ? <button type="button" className="jira-file-drop" disabled={loadingFile || importing} onClick={() => inputRef.current?.click()} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); const dropped = event.dataTransfer.files?.[0]; if (dropped) void readFile(dropped); }}><span>CSV</span><strong>{loadingFile ? "Lecture du fichier…" : "Déposer le fichier Jira"}</strong><small>ou cliquer pour sélectionner un CSV</small></button> : <div className="jira-file-selected"><div><span>{encoding}</span><strong>{file.name}</strong><small>{formatBytes(file.size)} · {preview?.rows ?? 0} lignes lues</small></div><button type="button" className="secondary-button" disabled={importing || loadingFile} onClick={clearFile}>Changer de fichier</button></div>}
@@ -189,7 +190,6 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
 
       <section id="import-planner" aria-labelledby="import-planner-title" className="surface import-source-card planner-source-card">
         <header><div><span>Source 02 · Planner</span><h2 id="import-planner-title">Simulations tarifaires</h2><p>Colle ton tableau Planner, vérifie les simulations détectées puis confirme l’import.</p></div><b>TABLEAU COPIÉ</b></header>
-        <ImportSourceLocation source="planner"/>
         <div className="planner-source-status"><article><span>Tâches enregistrées</span><strong>{plannerTasks.length}</strong></article><article><span>Variations exploitables</span><strong>{plannerRegistry.usableVariations}</strong></article><article><span>Dernière source</span><strong>{plannerUpdatedAt ? dateLabel(plannerUpdatedAt) : "Jamais"}</strong></article></div>
         <div className="planner-source-action"><div><strong>Import Planner actuel</strong><span>Prévisualisation des tags, analystes et variations avant enregistrement.</span></div><PlannerImportDialog markets={markets} onImport={onPlannerImport}/></div>
       </section>

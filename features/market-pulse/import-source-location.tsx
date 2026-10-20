@@ -2,23 +2,15 @@
 
 import { useId } from "react";
 
-type Source = "purchaseData" | "jira" | "planner";
-const sources = {
-  purchaseData: { title: "Importer depuis un fichier", label: "Chemin du fichier ou URL", placeholder: "Chemin complet vers le fichier Excel (.xlsx)" },
-  jira: { title: "Importer depuis un flux RSS", label: "Lien du flux RSS Jira", placeholder: "https://…/flux-rss" },
-  planner: { title: "Importer depuis Planner", label: "Lien du plan Planner", placeholder: "https://…/planner/…" },
-};
-
-export function ImportSourceLocation({ source }: { source: Source }) {
+export function ImportSourceRefreshPanel() {
   const id = useId();
-  const config = sources[source];
-  return <section className="import-source-location" aria-labelledby={`${id}-title`}>
-    <div className="import-source-location-heading"><h3 id={`${id}-title`}>{config.title}</h3><span>À venir</span></div>
-    <div className={`import-source-location-fields${source === "purchaseData" ? " has-sheet" : ""}`}>
-      <label htmlFor={`${id}-location`}>{config.label}<input id={`${id}-location`} type={source === "purchaseData" ? "text" : "url"} placeholder={config.placeholder} autoComplete="off" spellCheck={false} aria-describedby={`${id}-help`}/></label>
-      {source === "purchaseData" && <label htmlFor={`${id}-sheet`}>Nom de la feuille Excel<input id={`${id}-sheet`} type="text" placeholder="Ex. : Extraction PURCHASES" autoComplete="off" aria-describedby={`${id}-help`}/></label>}
-      <button type="button" className="secondary-button" disabled aria-describedby={`${id}-help`}>Importer</button>
+  return <section className="surface import-refresh-panel" aria-labelledby={`${id}-title`}>
+    <header><div><h2 id={`${id}-title`}>Actualiser les sources</h2><p>PURCHASES, tickets Jira et simulations Planner réunis au même endroit.</p></div></header>
+    <div className="import-refresh-sources">
+      <div className="import-refresh-source"><div><strong>PURCHASES</strong><small>Fichier Excel</small></div><div className="import-refresh-fields has-sheet"><label htmlFor={`${id}-purchaseData`}>Chemin du fichier ou URL<input id={`${id}-purchaseData`} type="text" placeholder="Chemin complet vers le fichier Excel (.xlsx)" autoComplete="off" spellCheck={false}/></label><label htmlFor={`${id}-sheet`}>Nom de la feuille Excel<input id={`${id}-sheet`} type="text" placeholder="Ex. : Extraction PURCHASES" autoComplete="off"/></label></div></div>
+      <div className="import-refresh-source"><div><strong>Jira</strong><small>Tickets et participants</small></div><div className="import-refresh-fields"><label htmlFor={`${id}-jira`}>Lien du flux RSS<input id={`${id}-jira`} type="url" placeholder="https://…/flux-rss" autoComplete="off" spellCheck={false}/></label></div></div>
+      <div className="import-refresh-source"><div><strong>Simulations</strong><small>Planner</small></div><div className="import-refresh-fields"><label htmlFor={`${id}-planner`}>Lien du plan Planner<input id={`${id}-planner`} type="url" placeholder="https://…/planner/…" autoComplete="off" spellCheck={false}/></label></div></div>
     </div>
-    <p id={`${id}-help`}>Import non activé pour le moment. Les modalités seront ajoutées prochainement.</p>
+    <footer><p id={`${id}-help`}>L’actualisation groupée sera activée prochainement. Les imports manuels sont disponibles ci-dessous.</p><button type="button" className="primary-button" disabled aria-describedby={`${id}-help`}>Tout actualiser</button></footer>
   </section>;
 }
