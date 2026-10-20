@@ -6,9 +6,9 @@ import { isLocalWorkspace, openLocalFiles } from "@/lib/app-transport";
 import { AppDialog } from "@/components/app-dialog";
 import { AppIcon } from "@/components/app-icon";
 
-export type WorkspaceView = "read" | "edit" | "analyst" | "stats" | "imports" | "mail" | "settings";
+export type WorkspaceView = "read" | "edit" | "analyst" | "stats" | "suppliers" | "imports" | "mail" | "settings";
 export const workspaceTitles: Record<WorkspaceView, string> = {
-  read: "Point marché", edit: "Point marché", analyst: "Point analyste", stats: "Statistiques", imports: "Centre d’import", mail: "Mail du marché", settings: "Paramètres",
+  read: "Point marché", edit: "Point marché", analyst: "Point analyste", stats: "Statistiques", suppliers: "Fournisseurs", imports: "Centre d’import", mail: "Mail du marché", settings: "Paramètres",
 };
 
 const groups = [
@@ -18,6 +18,7 @@ const groups = [
   ] },
   { label: "Données et suivi", items: [
     { id: "stats", icon: "trend", label: "Statistiques" },
+    { id: "suppliers", icon: "database", label: "Fournisseurs" },
     { id: "imports", icon: "upload", label: "Centre d’import" },
   ] },
   { label: "Diffusion et réglages", items: [
