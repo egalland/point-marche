@@ -25,6 +25,7 @@ import { type PlannerTask } from "@/lib/planner-import";
 import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 import { AnalystPointDashboard } from "./analyst-point-dashboard";
 import { AnalystStatsDashboard } from "./analyst-stats-dashboard";
+import { SupplierDashboard } from "./supplier-dashboard";
 import { ImportCenter } from "./import-center";
 import { PlannerImportDialog } from "./planner-import-dialog";
 import { WorkspaceNavigation, workspaceTitles } from "./workspace-navigation";
@@ -72,6 +73,7 @@ function MarketPulseWorkspace() {
   const [directoryReady, setDirectoryReady] = useState(false);
   const [plannerTasks, setPlannerTasks] = useState<PlannerTask[]>([]);
   const [plannerReady, setPlannerReady] = useState(false);
+  const [plannerError, setPlannerError] = useState("");
   const [plannerUpdatedAt, setPlannerUpdatedAt] = useState("");
   const [plannerRegistry, setPlannerRegistry] = useState<PlannerRegistrySummary>(() => emptyPlannerRegistry());
   const [directorySavingId, setDirectorySavingId] = useState("");
@@ -210,7 +212,7 @@ function MarketPulseWorkspace() {
       if (currentSession.user) {
         const requestedMode = new URLSearchParams(window.location.search).get("mode");
         if (requestedMode === "edit") { setView("read"); setMeetingEditing(true); }
-        else if (requestedMode === "analyst" || requestedMode === "stats" || requestedMode === "imports" || requestedMode === "settings") setView(requestedMode);
+        else if (requestedMode === "analyst" || requestedMode === "stats" || requestedMode === "suppliers" || requestedMode === "imports" || requestedMode === "settings") setView(requestedMode);
       }
       const options = loadedMarkets.length ? loadedMarkets : defaultMarkets;
       setMarketOptions(options);
@@ -240,9 +242,11 @@ function MarketPulseWorkspace() {
     try {
       const payload = await fetchPlannerTasks();
       setPlannerTasks(payload.tasks);
+      setPlannerError("");
       setPlannerRegistry(payload.registry);
       setPlannerUpdatedAt(payload.updatedAt);
     } catch (error) {
+      setPlannerError(error instanceof Error ? error.message : "Impossible de charger les simulations Planner.");
       setPlannerTasks([]);
       setPlannerRegistry(emptyPlannerRegistry());
       setToast(error instanceof Error ? error.message : "Impossible de charger les simulations Planner.");
@@ -356,6 +360,10 @@ function MarketPulseWorkspace() {
     setMeetingEditing(false);
     if (nextView === "settings") setSection("personalization");
     if (nextView === "edit") { setView("read"); setMeetingEditing(true); return; }
+    const url = new URL(window.location.href);
+    if (nextView === "suppliers") url.searchParams.set("mode", "suppliers");
+    else if (url.searchParams.get("mode") === "suppliers") { url.searchParams.delete("mode"); url.searchParams.delete("supplier"); }
+    window.history.replaceState(null, "", url);
     setView(nextView);
   };
 
@@ -452,6 +460,7 @@ function MarketPulseWorkspace() {
     const payload = await response.json() as { imported?: number; ignoredRows?: number; error?: string };
     if (!response.ok) throw new Error(payload.error || "Import Planner impossible.");
     const refreshed = await fetchPlannerTasks();
+    setPlannerError("");
     setPlannerTasks(refreshed.tasks);
     setPlannerRegistry(refreshed.registry);
     setPlannerUpdatedAt(refreshed.updatedAt);
@@ -1075,7 +1084,7 @@ function MarketPulseWorkspace() {
     {archiveLoading && <LoadingStatus label="Chargement du point…"/>}
     <div id="workspace-content" className="workspace-content" tabIndex={-1} inert={archiveLoading} aria-busy={archiveLoading}>
     <div id="top" className="workspace-context">
-      <span>{view === "read" || view === "edit" || view === "mail" ? market.name : view === "analyst" ? "Jira · Simulations · Dossiers" : view === "stats" ? "Activité analystes et variations fournisseurs" : view === "imports" ? "Registres Jira et Planner" : "Application et points"}</span>
+      <span>{view === "read" || view === "edit" || view === "mail" ? market.name : view === "analyst" ? "Jira · Simulations · Dossiers" : view === "stats" ? "Activité analystes et variations fournisseurs" : view === "suppliers" ? "Simulations · Variations · Trames · PURCHASES" : view === "imports" ? "Registres Jira, Planner et PURCHASES" : "Application et points"}</span>
       {(view === "read" || view === "edit" || view === "mail") && <span className="workspace-week">S{String(currentWeek).padStart(2, "0")} · {currentWeekYear}</span>}
       {session.user && (view === "read" || view === "edit" || view === "mail") && <span className={`workspace-draft ${isDirty ? "is-dirty" : ""}`}>{autoSaveError ? "Sauvegarde interrompue" : isDirty ? "Synchronisation en cours" : activeRecordId ? "Point enregistré" : "Nouveau point"}</span>}
     </div>
@@ -1087,6 +1096,7 @@ function MarketPulseWorkspace() {
     {view === "read" && <main className="preview-page"><div className={`preview-toolbar ${meetingEditing ? "editing" : ""}`}><div><span>{"Point marché"}</span><strong>{session.user ? "Ajoute les modules, ouvre-les en grand ou organise leur ordre. Sauvegarde automatique." : "Choisis le marché et la semaine dans le calendrier ci-dessus."}</strong></div><div className="meeting-toolbar-actions">{session.user && <><button type="button" className="secondary-button" disabled={!previousPoint} onClick={openCarryover}><Icon name="copy"/> Reprendre le point précédent</button><button type="button" className="secondary-button" disabled={refreshingImports} onClick={() => { void refreshImports(); }}><Icon name="spark"/> {refreshingImports ? "Actualisation…" : "Actualiser les imports"}</button><button type="button" className="secondary-button" onClick={() => setComparisonOpen(true)}><Icon name="trend"/> Comparer les marchés</button></>}</div></div>{session.user && <details className="point-display-settings"><summary>Réglages d’affichage</summary><div className="point-layout-toolbar" role="toolbar" aria-label="Affichage du point"><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent - 5)}>A−</button><output>{data.preferences.fontScalePercent}%</output><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent + 5)}>A+</button>{(["compact", "comfortable", "airy"] as Density[]).map((density) => <button type="button" key={density} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, density } }))}>{density === "compact" ? "Compacte" : density === "airy" ? "Aérée" : "Normale"}</button>)}<label>Couleur<input type="color" value={accent} onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/></label><button type="button" onClick={resetCanvasLayout}>Structure initiale</button></div></details>}{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Complète ce point : les modifications sont sauvegardées automatiquement." : "Aucun brouillon n’est affiché publiquement. L’espace partagé est en cours de chargement."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard tasks={plannerTasks} markets={marketOptions} plannerUpdatedAt={plannerUpdatedAt} data={preparedData} market={market} archive={archive} editing={false} actions={session.user ? canvasActions : undefined}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou complète ce point dans l’espace partagé.</p></div>}</main>}
     {view === "stats" && session.user && (plannerReady && directoryReady ? <AnalystStatsDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} registry={plannerRegistry} updatedAt={plannerUpdatedAt} onImport={importPlannerData}/> : <main className="analyst-stats-page"><div className="surface stats-loading"><LoadingStatus label="Chargement de la source Planner et de l’annuaire GLOBAL…"/></div></main>)}
     {view === "analyst" && session.user && (plannerReady && directoryReady ? <AnalystPointDashboard onReconnect={retryWorkspace} tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData}/> : <main className="analyst-point-page"><div className="surface stats-loading"><LoadingStatus label="Chargement du point analyste, de Planner et de l’annuaire GLOBAL…"/></div></main>)}
+    {view === "suppliers" && session.user && <SupplierDashboard tasks={plannerTasks} purchaseDataRows={purchaseDataRows} plannerReady={plannerReady} purchaseDataReady={purchaseDataLoaded} plannerError={plannerError} purchaseDataError={purchaseDataSourceError} plannerUpdatedAt={plannerUpdatedAt} purchaseDataUpdatedAt={purchaseDataUpdatedAt} onRetry={() => { void loadPlanner(); window.dispatchEvent(new Event("purchaseData-updated")); }}/>}
     {view === "imports" && session.user && (plannerReady && directoryReady ? <ImportCenter users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerTasks={plannerTasks} plannerRegistry={plannerRegistry} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData} onJiraImported={refreshJiraFromRegistry} onManual={useManualImport}/> : <main className="import-center-page"><div className="surface stats-loading"><LoadingStatus label="Chargement des registres et de l’annuaire GLOBAL…"/></div></main>)}
     {view === "mail" && <main className="mail-page">
       {(exportSourcePending || exportPreparing)&&<LoadingStatus label={exportSourcePending ? "Actualisation des données PURCHASES pour les exports…" : "Préparation du mail et du point HTML…"}/>} {exportError && <p role="alert" className="v70-status">{exportError}</p>}{purchaseDataSourceError&&!!data.purchaseDataConfigs?.length&&<p role="alert" className="v70-status">Source PURCHASES indisponible : les exports utilisent les derniers instantanés enregistrés.</p>}<div className="mail-toolbar"><div><span>Kit Outlook</span><strong>Le mail reste lisible seul, la pièce jointe conserve les interactions.</strong><small>{data.mail.to ? `À : ${data.mail.to}` : "Destinataires à compléter dans Paramètres du mail"}</small></div><div><button className="secondary-button" onClick={() => { setSection("mail"); setView("settings"); }}><Icon name={session.user ? "edit" : "lock"}/> Paramètres</button><button className="secondary-button" disabled={exportsPending} onClick={copyMail}><Icon name="copy"/> Copier le corps du mail</button><button className="primary-button" disabled={exportsPending} onClick={downloadMailDraft}><Icon name="mail"/> Préparer le mail + la page</button></div></div>

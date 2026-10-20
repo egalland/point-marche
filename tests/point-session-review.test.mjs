@@ -9,7 +9,7 @@ import { setImmediate } from "node:timers/promises";
 const require = createRequire(import.meta.url);
 const sourcefile = resolve("features/market-pulse/market-pulse-app.tsx");
 const bundled = await build({
-  stdin: { contents: await readFile(sourcefile, "utf8") + '\nexport { MarketPulseWorkspace, AnalystPointDashboard, initialData, defaultMarkets };\nexport { initialAnalystPoint } from "@/lib/analyst-point";\nexport { clearSessionDrafts, readLocalDraft, hasUnsavedSessionDrafts, hostedPointDrafts } from "@/lib/app-transport";', sourcefile, resolveDir: resolve("features/market-pulse"), loader: "tsx" },
+  stdin: { contents: await readFile(sourcefile, "utf8") + '\nexport { MarketPulseWorkspace, AnalystPointDashboard, SupplierDashboard, initialData, defaultMarkets };\nexport { initialAnalystPoint } from "@/lib/analyst-point";\nexport { clearSessionDrafts, readLocalDraft, hasUnsavedSessionDrafts, hostedPointDrafts } from "@/lib/app-transport";', sourcefile, resolveDir: resolve("features/market-pulse"), loader: "tsx" },
   tsconfig: resolve("tsconfig.json"), bundle: true, packages: "external", format: "cjs", platform: "node", write: false, logLevel: "silent",
 });
 const exportsHolder = { exports: {} };
@@ -47,7 +47,7 @@ test.beforeEach(async () => {
   app.clearSessionDrafts(); renderComponent = app.MarketPulseWorkspace; hooks = { slots: [], effects: [], cursor: 0 }; timers = new Map(); autoTimers = new Map(); let timerId = 0; post = null; failedMarket = "";
   draftRecords = new Map();
   records = new Map(app.defaultMarkets.map((market) => [market.id, [pointRecord(market.id)]]));
-  globalThis.window = { location: { search: "" }, scrollTo() {}, addEventListener() {}, removeEventListener() {}, setTimeout(callback, delay) { const id = ++timerId; if (!delay) timers.set(id, callback); else if (delay === 1200) autoTimers.set(id, callback); return id; }, clearTimeout(id) { timers.delete(id); autoTimers.delete(id); } };
+  globalThis.window = { location: { href: "https://test.invalid/", search: "" }, history: { replaceState(_state, _unused, value) { const url = new URL(value); window.location.href = url.href; window.location.search = url.search; } }, scrollTo() {}, addEventListener() {}, removeEventListener() {}, setTimeout(callback, delay) { const id = ++timerId; if (!delay) timers.set(id, callback); else if (delay === 1200) autoTimers.set(id, callback); return id; }, clearTimeout(id) { timers.delete(id); autoTimers.delete(id); } };
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input), "https://test.invalid");
     if (url.pathname === "/api/point-drafts") {
@@ -131,6 +131,25 @@ test("a draft survives switching away from the market point", async () => {
   navigation().onSelect("imports"); await settle();
   navigation().onSelect("read"); await settle();
   assert.equal(preview().data.priority, "Note de réunion");
+});
+
+test("supplier navigation preserves the point draft and selection survives a new page instance", async () => {
+  preview().actions.updatePriority("Note conservée pendant la consultation fournisseur"); await settle();
+  navigation().onSelect("suppliers"); await settle();
+  assert.equal(new URL(window.location.href).searchParams.get("mode"), "suppliers");
+  assert.ok(find(node => node.type?.name === "SupplierDashboard"));
+  navigation().onSelect("read"); await settle();
+  assert.equal(preview().data.priority, "Note conservée pendant la consultation fournisseur");
+  const props = {tasks:[{externalId:"one",taskName:"2026-10-OCTOBRE-TEST",effectiveMonth:"2026-10",metrics:{supplierCode:"F001"}}],purchaseDataRows:[],plannerReady:true,purchaseDataReady:true,plannerError:"",purchaseDataError:"",plannerUpdatedAt:"",purchaseDataUpdatedAt:"",onRetry(){}};
+  hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
+  renderComponent = () => app.SupplierDashboard(props); await settle();
+  find(node => node.type === "select").props.onChange({target:{value:"code:F001"}}); await settle();
+  assert.equal(new URL(window.location.href).searchParams.get("supplier"), "code:F001");
+  assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "F001");
+  hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
+  await settle();
+  assert.equal(find(node => node.type === "select").props.value, "code:F001");
+  assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "F001");
 });
 
 const analysts = ["a", "b"].map((id) => ({ id, name: `Analyste ${id}`, email: `${id}@example.test`, usercode: id === "a" ? "A1234567" : "B1234567", role: "analyste-tarif-referentiel", marketIds: [] }));
