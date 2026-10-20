@@ -13,6 +13,7 @@ export type RuntimeEnv = {
   MARKET_PULSE_PASSWORD?: string;
   MARKET_PULSE_SESSION_SECRET?: string;
   FILES?: {
+    list(options: {prefix: string; cursor?: string}): Promise<{objects: {key:string}[]; truncated:boolean; cursor?:string}>;
     put(key: string, value: Uint8Array, options: { httpMetadata: { contentType: string }; customMetadata: { name: string } }): Promise<unknown>;
     get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string }; customMetadata?: { name?: string } } | null>;
   };

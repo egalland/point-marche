@@ -1,3 +1,5 @@
+import { milestoneKind, validMilestoneDate } from "./simulation-lifecycle";
+
 export type PlannerSpecialty = "simulation" | "control";
 
 export type PlannerChecklistItem = {
@@ -42,6 +44,8 @@ export type PlannerTask = {
   comments: string;
   metrics: PlannerTaskMetrics;
   workflowState: "active" | "completed" | "stopped" | "needs-closure";
+  importedAt?: string;
+  integratedAt?: string;
   registrySource?: "planner-import" | "point-recovery";
 };
 
@@ -179,16 +183,20 @@ function numberValue(value: string) {
   return match ? Number(match[0]) : null;
 }
 
-function effectiveMonth(taskName: string) {
+export function plannerTaskEffectiveMonth(taskName: string) {
   const match = cleanCell(taskName).match(/^(20\d{2})-(0[1-9]|1[0-2])(?:-|\b)/);
-  return match ? `${match[1]}-${match[2]}` : "";
+  if (match) return `${match[1]}-${match[2]}`;
+  const namedMonths = ["janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "decembre"];
+  const reversed = normalized(taskName).match(/^(20\d{2})\s+([a-z]+)\s+(0?[1-9]|1[0-2])(?:\s|$)/);
+  if (!reversed || namedMonths.indexOf(reversed[2]) + 1 !== Number(reversed[3])) return "";
+  return `${reversed[1]}-${reversed[3].padStart(2, "0")}`;
 }
 
 function checklistKind(label: string): PlannerChecklistItem["kind"] {
   const value = normalized(label);
   if (/^simulation\b/.test(value)) return "simulation";
   if (/^controle\b/.test(value)) return "control";
-  if (/trame workspace envoyee/.test(value)) return "trame";
+  if (milestoneKind(label) === "templateSent") return "trame";
   return "other";
 }
 
@@ -199,8 +207,8 @@ function checklistAnalyst(label: string, kind: PlannerChecklistItem["kind"]) {
 
 function parseChecklist(value: string) {
   return cleanCell(value).split(";").map((segment) => segment.trim()).filter(Boolean).map((segment) => {
-    const orderMatch = segment.match(/^\s*(\d+)\s*-/);
-    const withoutOrder = segment.replace(/^\s*\d+\s*-\s*/, "");
+    const orderMatch = segment.match(/^\s*(\d+)\s*[-.)]/);
+    const withoutOrder = segment.replace(/^\s*\d+\s*[-.)]\s*/, "");
     const dateMatch = withoutOrder.match(/:\s*(XX\/XX\/XXXX|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})\s*$/i);
     const label = cleanCell(dateMatch ? withoutOrder.slice(0, dateMatch.index) : withoutOrder);
     const kind = checklistKind(label);
@@ -208,7 +216,7 @@ function parseChecklist(value: string) {
     return {
       order: orderMatch ? Number(orderMatch[1]) : null,
       label,
-      date: dateMatch && !placeholder ? isoDate(dateMatch[1]) : "",
+      date: dateMatch && !placeholder && validMilestoneDate(isoDate(dateMatch[1])) ? isoDate(dateMatch[1]) : "",
       kind,
       analystName: checklistAnalyst(label, kind),
       nonApplicable: kind === "trame" && placeholder,
@@ -226,7 +234,7 @@ const metricPatterns = {
   supplierCode: String.raw`code\s+fournisseur`,
   announcedVariation: String.raw`annonc(?:e|é|ée)`,
   globalVariation: String.raw`variation\s+global`,
-  weightedVariation: String.raw`variation\s+pond[ée]r[ée]e`,
+  weightedVariation: String.raw`(?:variation\s+pond[ée]r[ée]e|pond[ée]r[ée]\s+au\s+ca)`,
   tariffStructure: String.raw`structure\s+tarifaire`,
 };
 
@@ -234,18 +242,42 @@ const metricBoundary = `(?:${Object.values(metricPatterns).join("|")})`;
 
 function metricValue(comments: string, pattern: string) {
   const compact = cleanCell(comments).replace(/\n/g, " ");
-  return compact.match(new RegExp(`${pattern}\\s*:\\s*(.*?)(?=\\s*${metricBoundary}\\s*:|$)`, "i"))?.[1]?.trim() ?? "";
+  const value = compact.match(new RegExp(`${pattern}\\s*:\\s*(.*?)(?=\\s*(?:${metricBoundary}\\s*:|pond[ée]r[ée]\\s+au\\s+ca\\b)|$)`, "i"))?.[1]?.trim();
+  if (value !== undefined) return value;
+  // Some notes label the weighted rate "PONDERE AU CA -1.69%", without a colon.
+  return pattern === metricPatterns.weightedVariation ? compact.match(/pond[ée]r[ée]\s+au\s+ca\s+([+−-]?\s*\d+(?:[.,]\d+)?\s*%)/i)?.[1] ?? "" : "";
+}
+
+function variationValue(value: string) {
+  const clean = cleanCell(value).replace(/−/g, "-");
+  // Agency identifiers and other annotations are not percentages.
+  const percentages = [...clean.matchAll(/([+-]?\s*\d+(?:[.,]\d+)?)\s*%/g)];
+  // The leading percentage is the reported rate; later agency breakdowns are not averaged.
+  if (percentages.length) return Number(percentages[0][1].replace(/\s/g, "").replace(",", "."));
+  // Legacy exports also contain a bare numeric field, without a percent sign.
+  return /^[+-]?\s*\d+(?:[.,]\d+)?$/.test(clean) ? Number(clean.replace(/\s/g, "").replace(",", ".")) : null;
 }
 
 export function parsePlannerTaskMetrics(comments: string): PlannerTaskMetrics {
   return {
     purchases12m: numberValue(metricValue(comments, metricPatterns.purchases12m)),
     supplierCode: metricValue(comments, metricPatterns.supplierCode).toUpperCase(),
-    announcedVariation: numberValue(metricValue(comments, metricPatterns.announcedVariation)),
-    globalVariation: numberValue(metricValue(comments, metricPatterns.globalVariation)),
-    weightedVariation: numberValue(metricValue(comments, metricPatterns.weightedVariation)),
+    announcedVariation: variationValue(metricValue(comments, metricPatterns.announcedVariation)),
+    globalVariation: variationValue(metricValue(comments, metricPatterns.globalVariation)),
+    weightedVariation: variationValue(metricValue(comments, metricPatterns.weightedVariation)),
     tariffStructure: metricValue(comments, metricPatterns.tariffStructure),
   };
+}
+
+/** Repair legacy parsed rates from their original notes without requiring another import. */
+export function rehydratePlannerTaskMetrics(comments: string, current: PlannerTaskMetrics): PlannerTaskMetrics {
+  if (!comments?.trim()) return current;
+  const parsed = parsePlannerTaskMetrics(comments);
+  const result = { ...current };
+  for (const key of ["announcedVariation", "globalVariation", "weightedVariation"] as const) {
+    if (metricValue(comments, metricPatterns[key])) result[key] = parsed[key];
+  }
+  return result;
 }
 
 function workflowState(status: string, checklist: PlannerChecklistItem[]): PlannerTask["workflowState"] {
@@ -308,7 +340,7 @@ export function parsePlannerTasks(text: string): PlannerImport {
     return {
       externalId,
       taskName,
-      effectiveMonth: effectiveMonth(taskName),
+      effectiveMonth: plannerTaskEffectiveMonth(taskName),
       category: cell(row, columns.category),
       goal: cell(row, columns.goal),
       plannerStatus: cell(row, columns.status),

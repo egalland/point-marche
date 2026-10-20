@@ -181,8 +181,8 @@ export function createLocalApi(store: WorkspaceStore): AppTransport {
           const parsed = parsePlannerTasks(rawText);
           if (!parsed.tasks.length) throw new LocalApiError("Le tableau Planner n’a pas été reconnu.");
           const tasks = new Map(data.plannerTasks.map((task) => [task.externalId, task]));
-          parsed.tasks.forEach((task) => tasks.set(task.externalId, task));
           const updatedAt = now();
+          parsed.tasks.forEach((task) => tasks.set(task.externalId, { ...task, importedAt: updatedAt }));
           store.update((current) => ({ ...current, plannerTasks: Array.from(tasks.values()), plannerUpdatedAt: updatedAt }));
           return json({ tasks: parsed.tasks, imported: parsed.tasks.length, ignoredRows: parsed.ignoredRows, updatedAt }, 201);
         }

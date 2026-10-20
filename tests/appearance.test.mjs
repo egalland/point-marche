@@ -72,7 +72,7 @@ test("renders theme controls and an accessible current destination without clien
   assert.match(html, /Système/);
   assert.match(html, /aria-pressed="true"/);
   assert.match(html, /fond blanc des mails/);
-  const { WorkspaceNavigation } = await import(moduleUrl("../../features/market-pulse/workspace-navigation.tsx", { ...reactImports, ...transportImports, "@/components/app-dialog": dialogUrl, "@/components/app-icon": iconUrl }));
+  const { WorkspaceNavigation } = await import(moduleUrl("../../features/market-pulse/workspace-navigation.tsx", { ...reactImports, ...transportImports, "@/components/app-dialog": dialogUrl, "@/components/app-icon": iconUrl, "@/lib/app-version": moduleUrl("../../lib/app-version.ts") }));
   const nav = renderToStaticMarkup(createElement(WorkspaceNavigation, { view: "imports", userName: null, onSelect() {}, onLogin() {}, onLogout() {} }));
   assert.equal((nav.match(/aria-current="page"/g) ?? []).length, 1);
   assert.match(nav, /Centre d’import/);

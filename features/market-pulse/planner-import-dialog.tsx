@@ -1,4 +1,5 @@
 "use client";
+import { LoadingStatus } from "@/components/loading-status";
 
 import { useMemo, useState } from "react";
 import { AppDialog } from "@/components/app-dialog";
@@ -47,7 +48,7 @@ export function PlannerImportDialog({ markets, onImport }: Props) {
   return <>
     <button className="primary-button" type="button" onClick={() => setOpen(true)}>Importer Planner</button>
     <AppDialog open={open} onClose={() => setOpen(false)} busy={saving} labelledBy="planner-import-title" className="planner-import-dialog">
-      <div className="dialog-heading"><span className="planner-import-emblem">P</span><div><span>Source des simulations</span><h2 id="planner-import-title">Importer l’export Planner</h2><p>Colle le tableau complet. Les tâches existantes seront mises à jour grâce à leur identifiant.</p></div></div>
+      <div className="dialog-heading"><span className="planner-import-emblem">P</span><div><span>Source des simulations</span>{saving && <LoadingStatus label="Enregistrement des simulations Planner…"/>}<h2 id="planner-import-title">Importer l’export Planner</h2><p>Colle le tableau complet. Les tâches existantes seront mises à jour grâce à leur identifiant.</p></div></div>
       <textarea data-autofocus value={rawText} onChange={(event) => { setRawText(event.target.value); setMessage(""); }} placeholder="Colle ici l’export Planner tabulé ou le tableau copié…"/>
       <div className="planner-import-summary">
         <article><span>Tâches reconnues</span><strong>{parsed.tasks.length}</strong></article>

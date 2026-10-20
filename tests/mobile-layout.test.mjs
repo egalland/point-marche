@@ -18,7 +18,7 @@ test("loads the shared mobile layer last and keeps every responsive selector val
 });
 
 test("mobile point editing keeps one touch-friendly layout control", () => {
-  assert.match(appSource, /className="v51-block-tools"/);
+  assert.match(appSource, /className="v51-block-tools(?: [^"]*)?"/);
   assert.match(appSource, /aria-haspopup="menu"/);
   assert.doesNotMatch(appSource, /className="surface market-layout-settings"/);
   assert.doesNotMatch(appSource, /<ModuleLayoutEditor modules=\{pointModules\}/);

@@ -9,7 +9,7 @@ import { setImmediate } from "node:timers/promises";
 const require = createRequire(import.meta.url);
 const sourcefile = resolve("features/market-pulse/market-pulse-app.tsx");
 const bundled = await build({
-  stdin: { contents: await readFile(sourcefile, "utf8") + '\nexport { MarketPulseWorkspace, AnalystPointDashboard, initialData, defaultMarkets };\nexport { initialAnalystPoint } from "@/lib/analyst-point";\nexport { clearSessionDrafts, readLocalDraft, hasUnsavedSessionDrafts, hostedPointDrafts } from "@/lib/app-transport";', sourcefile, resolveDir: resolve("features/market-pulse"), loader: "tsx" },
+  stdin: { contents: await readFile(sourcefile, "utf8") + '\nexport { MarketPulseWorkspace, AnalystPointDashboard, SupplierDashboard, initialData, defaultMarkets };\nexport { initialAnalystPoint } from "@/lib/analyst-point";\nexport { clearSessionDrafts, readLocalDraft, hasUnsavedSessionDrafts, hostedPointDrafts } from "@/lib/app-transport";', sourcefile, resolveDir: resolve("features/market-pulse"), loader: "tsx" },
   tsconfig: resolve("tsconfig.json"), bundle: true, packages: "external", format: "cjs", platform: "node", write: false, logLevel: "silent",
 });
 const exportsHolder = { exports: {} };
@@ -17,6 +17,7 @@ let hooks;
 const react = require("react");
 const reactStub = {
   ...react,
+  useId() { const index = hooks.cursor++; return hooks.slots[index] ??= `test-id-${index}`; },
   useState(initial) { const index = hooks.cursor++; if (!(index in hooks.slots)) hooks.slots[index] = typeof initial === "function" ? initial() : initial; return [hooks.slots[index], (next) => { hooks.slots[index] = typeof next === "function" ? next(hooks.slots[index]) : next; }]; },
   useRef(initial) { const index = hooks.cursor++; return hooks.slots[index] ??= { current: initial }; },
   useMemo(callback, deps) { const index = hooks.cursor++; const previous = hooks.slots[index]; if (!previous || deps.some((dep, i) => !Object.is(dep, previous.deps[i]))) hooks.slots[index] = { deps, value: callback() }; return hooks.slots[index].value; },
@@ -47,7 +48,14 @@ test.beforeEach(async () => {
   app.clearSessionDrafts(); renderComponent = app.MarketPulseWorkspace; hooks = { slots: [], effects: [], cursor: 0 }; timers = new Map(); autoTimers = new Map(); let timerId = 0; post = null; failedMarket = "";
   draftRecords = new Map();
   records = new Map(app.defaultMarkets.map((market) => [market.id, [pointRecord(market.id)]]));
-  globalThis.window = { location: { search: "" }, scrollTo() {}, addEventListener() {}, removeEventListener() {}, setTimeout(callback, delay) { const id = ++timerId; if (!delay) timers.set(id, callback); else if (delay === 1200) autoTimers.set(id, callback); return id; }, clearTimeout(id) { timers.delete(id); autoTimers.delete(id); } };
+  const listeners = new Map(), historyEntries = ["https://test.invalid/"]; let historyIndex = 0;
+  const changeUrl = value => { const url = new URL(value); window.location.href = url.href; window.location.search = url.search; };
+  const traverse = amount => { const next = historyIndex + amount; if (next < 0 || next >= historyEntries.length) return; historyIndex = next; changeUrl(historyEntries[historyIndex]); for (const fn of listeners.get("popstate") || []) fn({type:"popstate"}); };
+  globalThis.window = { location: { href: historyEntries[0], search: "" }, history: {
+    replaceState(_state, _unused, value) { changeUrl(value); historyEntries[historyIndex] = window.location.href; },
+    pushState(_state, _unused, value) { changeUrl(value); historyEntries.splice(historyIndex+1); historyEntries.push(window.location.href); historyIndex++; },
+    back() { traverse(-1); }, forward() { traverse(1); }, get length() { return historyEntries.length; }
+  }, scrollTo() {}, addEventListener(name,fn) { if (!listeners.has(name)) listeners.set(name,new Set()); listeners.get(name).add(fn); }, removeEventListener(name,fn) { listeners.get(name)?.delete(fn); }, setTimeout(callback, delay) { const id = ++timerId; if (!delay) timers.set(id, callback); else if (delay === 1200) autoTimers.set(id, callback); return id; }, clearTimeout(id) { timers.delete(id); autoTimers.delete(id); } };
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input), "https://test.invalid");
     if (url.pathname === "/api/point-drafts") {
@@ -131,6 +139,67 @@ test("a draft survives switching away from the market point", async () => {
   navigation().onSelect("imports"); await settle();
   navigation().onSelect("read"); await settle();
   assert.equal(preview().data.priority, "Note de réunion");
+});
+
+test("supplier navigation preserves the point draft and selection survives a new page instance", async () => {
+  preview().actions.updatePriority("Note conservée pendant la consultation fournisseur"); await settle();
+  navigation().onSelect("suppliers"); await settle();
+  assert.equal(new URL(window.location.href).searchParams.get("mode"), "suppliers");
+  assert.ok(find(node => node.type?.name === "SupplierDashboard"));
+  navigation().onSelect("read"); await settle();
+  assert.equal(preview().data.priority, "Note conservée pendant la consultation fournisseur");
+  const props = {tasks:[{externalId:"one",taskName:"2026-10-OCTOBRE-TEST",effectiveMonth:"2026-10",metrics:{supplierCode:"A0001"}}],purchaseDataRows:[],plannerReady:true,purchaseDataReady:true,plannerError:"",purchaseDataError:"",plannerUpdatedAt:"",purchaseDataUpdatedAt:"",onRetry(){}};
+  hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
+  renderComponent = () => app.SupplierDashboard(props); await settle();
+  find(node => node.props?.role === "combobox").props.onChange({target:{value:"A0001"}}); await settle();
+  find(node => node.props?.role === "option").props.onClick(); await settle();
+  assert.equal(new URL(window.location.href).searchParams.get("supplier"), "code:A0001");
+  assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "A0001");
+  window.history.back(); await settle(); assert.equal(find(node => node.props?.role === "combobox").props.value, "");
+  window.history.forward(); await settle(); assert.equal(find(node => node.props?.role === "combobox").props.value, "TEST · A0001");
+  hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
+  await settle();
+  assert.equal(find(node => node.props?.role === "combobox").props.value, "TEST · A0001");
+  assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code, "A0001");
+});
+
+test("empty supplier search browses all options; typing filters and bounds the same control",async()=>{
+  hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
+  const props = {tasks:Array.from({length:12},(_,i)=>({externalId:String(i),taskName:`2026-10-OCTOBRE-Test ${String(i).padStart(2,"0")}`,effectiveMonth:"2026-10",metrics:{supplierCode:`A${String(i+1).padStart(4,"0")}`}})),purchaseDataRows:[],plannerReady:true,purchaseDataReady:true,plannerError:"",purchaseDataError:"",plannerUpdatedAt:"",purchaseDataUpdatedAt:"",onRetry(){}};
+  renderComponent = () => app.SupplierDashboard(props); await settle();
+  assert.equal(nodes(tree).filter(node => node.type === "select").length,0);
+  find(node=>node.props?.role === "combobox").props.onFocus();await settle();
+  assert.equal(nodes(tree).filter(node=>node.props?.role === "option").length,12);
+  assert.ok(find(node=>node.props?.role === "listbox").props.className.includes("is-browsing"));
+  find(node=>node.props?.role === "combobox").props.onChange({target:{value:"Test"}});await settle();
+  assert.equal(nodes(tree).filter(node => node.props?.role === "option").length,8);
+  assert.equal(find(node=>node.props?.role === "listbox").props.className.includes("is-browsing"),false);
+  let prevented=false;find(node=>node.props?.role === "combobox").props.onKeyDown({key:"ArrowDown",preventDefault(){prevented=true;}});await settle();
+  assert.equal(prevented,true);find(node=>node.props?.role === "combobox").props.onKeyDown({key:"Enter",preventDefault(){}});await settle();
+  assert.equal(find(node => node.type?.name === "SupplierSheet").props.profile.code,"A0002");
+  assert.equal(nodes(tree).filter(node => node.props?.role === "option").length,0);
+});
+
+test("all integrated tabs update the URL; browser history restores tabs and keeps the market draft", async () => {
+  preview().actions.updatePriority("Brouillon conservé avec l’historique"); await settle();
+  for (const view of ["analyst","stats","suppliers","imports","mail","settings"]) {
+    navigation().onSelect(view); await settle();
+    assert.equal(new URL(window.location.href).searchParams.get("mode"), view);
+    assert.equal(navigation().view, view);
+  }
+  const length = window.history.length; navigation().onSelect("settings"); await settle(); assert.equal(window.history.length,length);
+  window.history.back(); await settle(); assert.equal(navigation().view,"mail");
+  window.history.back(); await settle(); assert.equal(navigation().view,"imports");
+  window.history.forward(); await settle(); assert.equal(navigation().view,"mail");
+  navigation().onSelect("read"); await settle(); assert.equal(new URL(window.location.href).searchParams.get("mode"),null);
+  assert.equal(preview().data.priority,"Brouillon conservé avec l’historique");
+});
+
+test("reloading restores a mail deep link inside the same workspace",async()=>{
+  window.history.replaceState(null,"","https://test.invalid/?mode=mail");
+  hooks.slots.forEach(slot => slot?.cleanup?.()); hooks = { slots: [], effects: [], cursor: 0 }; timers.clear();
+  await settle();assert.equal(navigation().view,"mail");
+  assert.equal(new URL(window.location.href).searchParams.get("mode"),"mail");
 });
 
 const analysts = ["a", "b"].map((id) => ({ id, name: `Analyste ${id}`, email: `${id}@example.test`, usercode: id === "a" ? "A1234567" : "B1234567", role: "analyste-tarif-referentiel", marketIds: [] }));

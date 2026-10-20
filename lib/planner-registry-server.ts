@@ -1,7 +1,7 @@
 import { desc } from "drizzle-orm";
 import { getDb } from "../db";
 import { marketDefinitions, plannerTasks, weeklyPoints } from "../db/schema";
-import { parsePlannerTaskMetrics, type PlannerTask, type PlannerTaskMetrics } from "./planner-import";
+import { parsePlannerTaskMetrics, plannerTaskEffectiveMonth, rehydratePlannerTaskMetrics, type PlannerTask, type PlannerTaskMetrics } from "./planner-import";
 import { mergePlannerTaskRegistry, recoverPlannerTasksFromPoints } from "./planner-registry";
 
 function plannerTags(value: string) {
@@ -25,7 +25,7 @@ function mergeMetrics(current: PlannerTaskMetrics, recovered: PlannerTaskMetrics
 }
 
 function rehydrateMetrics(task: PlannerTask): PlannerTask {
-  return { ...task, metrics: mergeMetrics(task.metrics, parsePlannerTaskMetrics(task.comments)) };
+  return { ...task, effectiveMonth: task.effectiveMonth || plannerTaskEffectiveMonth(task.taskName), metrics: rehydratePlannerTaskMetrics(task.comments, mergeMetrics(task.metrics, parsePlannerTaskMetrics(task.comments))) };
 }
 
 export async function loadPlannerRegistry() {
@@ -36,7 +36,7 @@ export async function loadPlannerRegistry() {
     db.select({ id: marketDefinitions.id, plannerTags: marketDefinitions.plannerTags }).from(marketDefinitions),
   ]);
   const tagsByMarket = Object.fromEntries(marketRows.map((market) => [market.id, plannerTags(market.plannerTags)]));
-  const imported = rows.map((row) => rehydrateMetrics(JSON.parse(row.payload) as PlannerTask));
+  const imported = rows.map((row) => rehydrateMetrics({ ...JSON.parse(row.payload) as PlannerTask, importedAt: row.updatedAt }));
   const recovered = recoverPlannerTasksFromPoints(pointRows, tagsByMarket);
   const registry = mergePlannerTaskRegistry(imported, recovered);
   return {

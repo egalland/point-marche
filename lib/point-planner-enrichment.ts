@@ -58,6 +58,8 @@ export function enrichPointPlannerHistory(payload: unknown, tasks: PlannerTask[]
       plannerSource: {
         ...source,
         externalId,
+        checklist: task.checklist,
+        labels: task.labels,
         metrics: mergeMetrics(task.metrics, existingMetrics(source.metrics)),
         supplierLabel: text(source.supplierLabel) || supplierLabelFromTask(task.taskName),
         variationHistory: history.length ? history : Array.isArray(source.variationHistory) ? source.variationHistory : [],
@@ -72,10 +74,12 @@ function pointOperation(task: PlannerTask, tasks: PlannerTask[]) {
   return {
     id: `planner:${task.externalId}`,
     ...plannerBase,
-    steps: task.checklist.map((item) => [item.label, item.nonApplicable ? "Non applicable" : item.date ? "Fait" : "À faire"]),
+    steps: task.checklist.map((item) => [item.label, item.date || (item.nonApplicable ? "Non applicable" : "À faire")]),
     plannerBase,
     plannerSource: {
       externalId: task.externalId,
+      checklist: task.checklist,
+        labels: task.labels,
       metrics: task.metrics,
       supplierLabel: supplierLabelFromTask(task.taskName),
       variationHistory: supplierSeriesForTask(task, tasks),
@@ -107,7 +111,7 @@ export function enrichMarketPointFromPlanner(payload: unknown, tasks: PlannerTas
   const existing = new Set(operations.map(plannerExternalId).filter(Boolean));
   const relevant = tasks.filter((task) => task.registrySource !== "point-recovery" && months.has(task.effectiveMonth) && task.labels.some((label) => tags.has(label.trim().toUpperCase())));
   relevant.forEach((task) => {
-    if (!existing.has(task.externalId)) operations.push(pointOperation(task, tasks));
+    if (!existing.has(task.externalId)) { operations.push(pointOperation(task, tasks)); existing.add(task.externalId); }
   });
   return { ...enriched, operations };
 }

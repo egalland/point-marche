@@ -1,4 +1,4 @@
-import type { PlannerTask, PlannerTaskMetrics } from "./planner-import";
+import { rehydratePlannerTaskMetrics, type PlannerTask, type PlannerTaskMetrics } from "./planner-import";
 
 export type PlannerArchivePoint = {
   marketId: string;
@@ -92,6 +92,8 @@ function effectiveMonth(taskName: string, monthLabel: string, preferred = "") {
   if (/^20\d{2}-(?:0[1-9]|1[0-2])$/.test(preferred)) return preferred;
   const taskMatch = taskName.match(/^(20\d{2})-(0[1-9]|1[0-2])(?:-|\b)/);
   if (taskMatch) return `${taskMatch[1]}-${taskMatch[2]}`;
+  const reversed = normalized(taskName).match(/^(20\d{2})[-\s]+([a-z]+)[-\s]+(0?[1-9]|1[0-2])(?:[-\s]|$)/);
+  if (reversed && frenchMonths[reversed[2]] === reversed[3].padStart(2, "0")) return `${reversed[1]}-${reversed[3].padStart(2, "0")}`;
   const labelMatch = normalized(monthLabel).match(/\b(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)\s+(20\d{2})\b/);
   return labelMatch ? `${labelMatch[2]}-${frenchMonths[labelMatch[1]]}` : "";
 }
@@ -103,6 +105,9 @@ function recoveredTask(input: {
   labels: string[];
   metrics: PlannerTaskMetrics;
   state?: string;
+  createdAt?: string;
+  importedAt?: string;
+  integratedAt?: string;
 }): PlannerTask {
   const completed = /(?:clotur|termin|finalis)/.test(normalized(input.state ?? ""));
   return {
@@ -115,7 +120,9 @@ function recoveredTask(input: {
     priority: "",
     assignedTo: "",
     createdBy: "",
-    createdAt: "",
+    createdAt: input.createdAt ?? "",
+    importedAt: input.importedAt,
+    integratedAt: input.integratedAt,
     dueDate: "",
     startDate: "",
     recurring: false,
@@ -137,6 +144,9 @@ function mergeTask(primary: PlannerTask, fallback: PlannerTask): PlannerTask {
   return {
     ...fallback,
     ...primary,
+    createdAt: primary.createdAt || fallback.createdAt,
+    importedAt: primary.importedAt || fallback.importedAt,
+    integratedAt: primary.integratedAt || fallback.integratedAt,
     taskName: primary.taskName || fallback.taskName,
     effectiveMonth: primary.effectiveMonth || fallback.effectiveMonth,
     category: primary.category || fallback.category,
@@ -197,6 +207,9 @@ export function recoverPlannerTasksFromPoints(points: PlannerArchivePoint[], mar
         if (!externalId) return;
         register(recoveredTask({
           externalId,
+          createdAt: text(item.createdAt),
+          importedAt: text(item.importedAt),
+          integratedAt: text(item.integratedAt),
           taskName: text(item.taskName) || operationName,
           effectiveMonth: effectiveMonth(text(item.taskName) || operationName, operationMonth, text(item.period)),
           labels: uniqueLabels(item.labels).length ? uniqueLabels(item.labels) : labels,
@@ -217,7 +230,7 @@ export function recoverPlannerTasksFromPoints(points: PlannerArchivePoint[], mar
 }
 
 export function mergePlannerTaskRegistry(importedTasks: PlannerTask[], recoveredTasks: PlannerTask[]) {
-  const imported = new Map<string, PlannerTask>(importedTasks.map((task) => [task.externalId, { ...task, registrySource: task.registrySource === "point-recovery" ? "point-recovery" : "planner-import" }]));
+  const imported = new Map<string, PlannerTask>(importedTasks.map((task) => [task.externalId, { ...task, effectiveMonth: task.effectiveMonth || effectiveMonth(task.taskName, ""), registrySource: task.registrySource === "point-recovery" ? "point-recovery" : "planner-import" }]));
   let enriched = 0;
   let recovered = 0;
 
@@ -233,7 +246,7 @@ export function mergePlannerTaskRegistry(importedTasks: PlannerTask[], recovered
     imported.set(task.externalId, merged);
   });
 
-  const tasks = Array.from(imported.values()).sort((left, right) => right.effectiveMonth.localeCompare(left.effectiveMonth) || left.taskName.localeCompare(right.taskName, "fr"));
+  const tasks = Array.from(imported.values()).map((task) => ({ ...task, metrics: rehydratePlannerTaskMetrics(task.comments, task.metrics) })).sort((left, right) => right.effectiveMonth.localeCompare(left.effectiveMonth) || left.taskName.localeCompare(right.taskName, "fr"));
   const summary: PlannerRegistrySummary = {
     imported: importedTasks.length,
     archiveCandidates: recoveredTasks.length,

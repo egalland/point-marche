@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import postcss from "postcss";
 import { moduleUrl, sourceUrl } from "./helpers/module-url.mjs";
-import { miniTrendUrl, supplierChartUrl, reactImports } from "./helpers/ui-modules.mjs";
+import { miniTrendUrl, supplierChartUrl, reactImports, dialogUrl, safeDateUrl, paginationUrl } from "./helpers/ui-modules.mjs";
 
 const { supplierMiniTrend } = await import(miniTrendUrl);
 const { SupplierSparkline, SupplierVariationChart } = await import(supplierChartUrl);
@@ -85,6 +85,7 @@ test("click opens the detailed two-series dialog and closing returns to the mini
     const state = []; let cursor = 0;
     export const beginRender = () => { cursor = 0; };
     export const useId = () => "supplier-history-test";
+    export const useMemo = fn => fn();
     export const useState = initial => {
       const index = cursor++;
       if (!(index in state)) state[index] = typeof initial === "function" ? initial() : initial;
@@ -104,7 +105,9 @@ test("click opens the detailed two-series dialog and closing returns to the mini
   const html = renderToStaticMarkup(opened);
   assert.match(html, /aria-expanded="true"/);
   assert.match(html, /role="dialog" aria-modal="true" aria-labelledby="supplier-history-test"/);
-  assert.match(html, /viewBox="0 0 760 300"/);
+  assert.match(html, /class="supplier-chart-bar global"/);
+  assert.match(html, /class="supplier-chart-bar weighted"/);
+  assert.match(html, /class="supplier-chart-zero"/);
   assert.equal((html.match(/aria-pressed="true"/g) ?? []).length, 2);
   assert.match(html, /Variation GLOBAL/);
   assert.match(html, /Variation pondérée/);
@@ -146,4 +149,53 @@ test("simulation steps use readable surface and text tokens in both themes", () 
   });
   const globals = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.ok(globals.indexOf('"./styles/simulations.css"') > globals.indexOf('"./styles/workspace.css"'));
+});
+
+test("supplier picker filters and selects by keyboard, with an empty-result state", async () => {
+  const hooksUrl = sourceUrl(`
+    export * from "${reactImports.react}";
+    const state = []; let cursor = 0;
+    export const beginRender = () => { cursor = 0; };
+    export const useId = () => "supplier-picker-test";
+    export const useEffect = () => {};
+    export const useRef = () => ({current: null});
+    export const useState = initial => {
+      const index = cursor++;
+      if (!(index in state)) state[index] = typeof initial === "function" ? initial() : initial;
+      return [state[index], value => {state[index] = typeof value === "function" ? value(state[index]) : value;}];
+    };
+  `);
+  const hooks = await import(hooksUrl);
+  const module = await import(moduleUrl("../../features/market-pulse/supplier-variation-dashboard.tsx", {
+    "./purchaseData-dashboard": sourceUrl("export function PURCHASESDashboard() { return null; }"),
+    ...reactImports, react: hooksUrl,
+    "@/lib/chart-excel-export": moduleUrl("../../lib/chart-excel-export.ts"),
+  "@/lib/chart-image-export": moduleUrl("../../lib/chart-image-export.ts"),
+    "@/lib/supplier-turnover": moduleUrl("../../lib/supplier-turnover.ts"),
+    "@/lib/supplier-variations": moduleUrl("../../lib/supplier-variations.ts"),
+    "@/components/app-dialog": dialogUrl,
+    "@/components/safe-date-input": safeDateUrl,
+    "@/components/table-pagination": paginationUrl,
+    "@/lib/supplier-mini-trend": miniTrendUrl,
+    "./supplier-mini-chart": moduleUrl("../../features/market-pulse/supplier-mini-chart.tsx", { ...reactImports, "@/lib/supplier-mini-trend": miniTrendUrl }),
+  }));
+  let chosen = "all";
+  const suppliers = [{key:"a", label:"Chêne", code:"F01"}, {key:"b", label:"Bois", code:"F02"}];
+  const render = () => { hooks.beginRender(); return module.SupplierPicker({suppliers, value:chosen, onChange:key=>{chosen=key;}}); };
+  const nodes = tree => !tree || typeof tree !== "object" ? [] : [tree, ...[tree.props?.children].flat(Infinity).flatMap(nodes)];
+  let tree = render();
+  nodes(tree).find(n=>n.props?.className === "supplier-picker-trigger").props.onClick();
+  tree=render();
+  let input=nodes(tree).find(n=>n.props?.role === "combobox");
+  input.props.onChange({target:{value:"f02"}});
+  tree=render();
+  assert.equal(nodes(tree).filter(n=>n.props?.role === "option").length, 1);
+  input=nodes(tree).find(n=>n.props?.role === "combobox");
+  input.props.onKeyDown({key:"Enter",preventDefault(){}});
+  assert.equal(chosen,"b");
+  tree=render();
+  assert(!nodes(tree).some(n=>n.props?.role === "combobox"));
+  nodes(tree).find(n=>n.props?.className === "supplier-picker-trigger").props.onClick();
+  tree=render();nodes(tree).find(n=>n.props?.role === "combobox").props.onChange({target:{value:"introuvable"}});
+  tree=render();assert(nodes(tree).some(n=>n.props?.role === "status" && n.props.children === "Aucun fournisseur trouvé."));
 });
