@@ -9,6 +9,8 @@ export function AppIcon({ name, size = 18 }: { name: string; size?: number }) {
     resize: <><path d="M4 10V4h6M14 20h6v-6M4 4l16 16M4 20l16-16"/></>,
     grid: <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></>,
     magnet: <><path d="M5 3v10a7 7 0 0 0 14 0V3h-5v10a2 2 0 0 1-4 0V3Z"/><path d="M5 7h5M14 7h5"/></>,
+    bug: <><rect x="7" y="7" width="10" height="14" rx="5"/><path d="M9 7V5a3 3 0 0 1 6 0v2M3 9l4 2M21 9l-4 2M3 15h4M17 15h4M4 21l4-3M20 21l-4-3M12 9v10"/></>,
+    idea: <><path d="M9 18h6M9 21h6M9 15c0-2-4-3-4-7a7 7 0 0 1 14 0c0 4-4 5-4 7Z"/></>,
     help: <><circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 1 1 4 3c-1 .5-1 1-1 2M12 17h.01"/></>,
     menu: <path d="M4 6h16M4 12h16M4 18h16"/>,
     sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></>,
