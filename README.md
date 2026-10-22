@@ -1,8 +1,9 @@
 # Point marché
 
-Application GLOBAL pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
+Application pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
 **Version des sources : V92** · Interface en français · Ordinateur et mobile
+
 
 
 ## Fonctionnalités
