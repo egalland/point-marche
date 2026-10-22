@@ -1,3 +1,4 @@
+import { validFeedbackEmail } from "../lib/feedback";
 import type { AppTransport } from "../lib/app-transport";
 import { isGlobalRole, roleMailMode, roleUsesAutomaticJira, type GlobalDirectoryUser } from "../lib/global-directory";
 import { canonicalJiraStatus, isAbandonedJiraStatus, isClosedJiraStatus, jiraSummaryFromDetailedTickets, type JiraDetailedTicket } from "../lib/jira-import";
@@ -101,6 +102,15 @@ export function createLocalApi(store: WorkspaceStore): AppTransport {
       const path = url.pathname;
       if (["/api/session", "/api/login", "/api/logout"].includes(path)) return json({ user: { username: "GLOBAL", displayName: "GLOBAL" }, local: true });
 
+      if (path === "/api/feedback-settings") {
+        if (method === "GET") return json({ email: data.preferences.feedbackEmail ?? "" });
+        if (method === "PUT") {
+          const email = typeof body.email === "string" ? body.email.trim() : "";
+          if (typeof body.email !== "string" || (email && !validFeedbackEmail(email))) throw new LocalApiError("Adresse mail invalide.");
+          store.update(current => ({ ...current, preferences: { ...current.preferences, feedbackEmail: email } }));
+          return json({ email });
+        }
+      }
       if (path === "/api/markets") {
         if (method === "GET") return json({ markets: activeMarkets(data) });
         if (method === "POST" || method === "PATCH") {

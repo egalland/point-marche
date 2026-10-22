@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { moduleUrl, sourceUrl } from './helpers/module-url.mjs';
+const feedbackUrl = moduleUrl('../../lib/feedback.ts');
+const { feedbackMail, validFeedbackEmail } = await import(feedbackUrl);
+test('mail preserves accents and multiline details without injecting recipients or headers', () => {
+  const mail = feedbackMail('support+test@example.fr', 'bug', 'Écran & filtre\r\nBcc: test', 'Étape 1\nÉchec & résultat', 'Rubrique : Fournisseurs');
+  const url = new URL(mail.url);
+  assert.equal(decodeURIComponent(url.pathname), 'support+test@example.fr');
+  assert.equal(url.searchParams.size, 2);
+  assert.equal(url.searchParams.get('subject').includes('\n'), false);
+  assert.match(url.searchParams.get('body'), /Étape 1\nÉchec & résultat/);
+  for (const invalid of ['a@b.fr?cc=c@d.fr', 'a@b.fr\r\nBcc:x@y.fr', 'a@b.fr,c@d.fr', '']) assert.equal(validFeedbackEmail(invalid), false);
+});
+const state = { json: null, fail: false, editor: true };
+globalThis.__feedbackTest = state;
+const runtime = sourceUrl(`export function getRuntimeEnv() { const s=globalThis.__feedbackTest; return {FILES:{async get(){if(s.fail)throw Error();return s.json?{body:JSON.stringify(s.json)}:null;},async put(key,value){if(s.fail)throw Error();s.json=JSON.parse(new TextDecoder().decode(value));}}}; }`);
+const auth = sourceUrl('export async function getEditorUser(){return globalThis.__feedbackTest.editor;}');
+const { GET, PUT } = await import(moduleUrl('../../app/api/feedback-settings/route.ts', { '@/lib/runtime-env': runtime, '@/lib/feedback': feedbackUrl, '../../simple-auth': auth }));
+const request = email => new Request('https://example.test/api/feedback-settings', { method: 'PUT', body: JSON.stringify({ email }) });
+test('shared contact survives reads, rejects invalid changes and reports storage failures', async () => {
+  assert.deepEqual(await (await GET()).json(), { email: '' });
+  assert.equal((await PUT(request('contact@example.fr'))).status, 200);
+  assert.deepEqual(await (await GET()).json(), { email: 'contact@example.fr' });
+  assert.equal((await PUT(request('bad'))).status, 400);
+  assert.deepEqual(await (await GET()).json(), { email: 'contact@example.fr' });
+  state.fail = true;
+  assert.equal((await PUT(request('other@example.fr'))).status, 503);
+  state.fail = false; state.editor = false;
+  assert.equal((await PUT(request('other@example.fr'))).status, 401);
+});

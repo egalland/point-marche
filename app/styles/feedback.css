@@ -1,0 +1,24 @@
+.feedback-settings { padding: 24px; margin-bottom: 24px; }
+.feedback-settings h2, .feedback-dialog h2 { margin: 0 0 12px; }
+.feedback-settings p, .feedback-dialog p, .feedback-dialog small { color: var(--muted); }
+.feedback-settings .field { max-width: 560px; }
+.feedback-dialog { width: min(620px, 100%); }
+.feedback-dialog form { display: grid; gap: 16px; }
+.feedback-dialog textarea { resize: vertical; min-height: 140px; }
+.feedback-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; }
+.workspace-menu-size { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 42px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); cursor: pointer; font-size: .8125rem; }
+.workspace-sidebar.is-compact { padding-inline: 10px; }
+.is-compact .workspace-brand { justify-content: center; padding: 0 0 18px; }
+.is-compact .workspace-brand > span:last-child,
+.is-compact .workspace-nav-group > span,
+.is-compact .workspace-nav-group > button > span,
+.is-compact .workspace-nav-group > button > i,
+.is-compact .workspace-menu-size > span,
+.is-compact .workspace-account > div > span:last-child,
+.is-compact .workspace-account > button > span { display: none; }
+.is-compact .workspace-nav { gap: 18px; }
+.is-compact .workspace-nav-group > button { justify-content: center; padding: 10px; }
+.is-compact .workspace-account { padding-inline: 0; }
+.is-compact .workspace-account > div { justify-content: center; }
+.workspace-menu-dialog.is-compact { width: 110px; padding-inline: 16px; padding-top: 60px; }
+@media (min-width: 1121px) { .app-shell:has(> .workspace-sidebar.is-compact) { --sidebar-width: 76px; } }
