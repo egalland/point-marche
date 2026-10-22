@@ -1,4 +1,4 @@
-import { validFeedbackEmail } from "../lib/feedback";
+import { validFeedbackRecipients, parseFeedbackRequest, feedbackSummary, updateFeedbackStatus, type FeedbackRequest } from "../lib/feedback";
 import type { AppTransport } from "../lib/app-transport";
 import { isGlobalRole, roleMailMode, roleUsesAutomaticJira, type GlobalDirectoryUser } from "../lib/global-directory";
 import { canonicalJiraStatus, isAbandonedJiraStatus, isClosedJiraStatus, jiraSummaryFromDetailedTickets, type JiraDetailedTicket } from "../lib/jira-import";
@@ -102,11 +102,40 @@ export function createLocalApi(store: WorkspaceStore): AppTransport {
       const path = url.pathname;
       if (["/api/session", "/api/login", "/api/logout"].includes(path)) return json({ user: { username: "GLOBAL", displayName: "GLOBAL" }, local: true });
 
+      if (path === "/api/feedback") {
+        const inbox = JSON.parse(data.preferences.feedbackInbox || "[]") as FeedbackRequest[];
+        if (method === "GET") {
+          const selected = url.searchParams.get("id");
+          if (selected) { const item = inbox.find(item => item.id === selected); return item ? json({ item }) : json({ error: "Demande introuvable." }, 404); }
+          return json({ items: inbox.map(feedbackSummary).reverse() });
+        }
+        if (method === "PATCH") {
+          const previous = inbox.find(item => item.id === body.id);
+          if (!previous) return json({ error: "Demande introuvable." }, 404);
+          if (body.expectedUpdatedAt !== previous.updatedAt) return json({ error: "Cette demande a été modifiée. Actualise avant de réessayer." }, 409);
+          const item = updateFeedbackStatus(previous, body.status, body.by, body.expectedUpdatedAt);
+          store.update(current => {
+            const currentInbox = JSON.parse(current.preferences.feedbackInbox || "[]") as FeedbackRequest[];
+            return { ...current, preferences: { ...current.preferences, feedbackInbox: JSON.stringify(currentInbox.map(entry => entry.id === item.id ? item : entry)) } };
+          });
+          return json({ item });
+        }
+        if (method === "POST") {
+          const item = parseFeedbackRequest(body);
+          const existing = inbox.find(entry => entry.id === item.id);
+          if (existing) return json({ item: feedbackSummary(existing) });
+          store.update(current => {
+            const currentInbox = JSON.parse(current.preferences.feedbackInbox || "[]") as FeedbackRequest[];
+            return { ...current, preferences: { ...current.preferences, feedbackInbox: JSON.stringify([...currentInbox.filter(entry => entry.id !== item.id), item]) } };
+          });
+          return json({ item: feedbackSummary(item) }, 201);
+        }
+      }
       if (path === "/api/feedback-settings") {
         if (method === "GET") return json({ email: data.preferences.feedbackEmail ?? "" });
         if (method === "PUT") {
           const email = typeof body.email === "string" ? body.email.trim() : "";
-          if (typeof body.email !== "string" || (email && !validFeedbackEmail(email))) throw new LocalApiError("Adresse mail invalide.");
+          if (typeof body.email !== "string" || (email && !validFeedbackRecipients(email))) throw new LocalApiError("Adresse mail invalide.");
           store.update(current => ({ ...current, preferences: { ...current.preferences, feedbackEmail: email } }));
           return json({ email });
         }
