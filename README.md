@@ -1,60 +1,123 @@
-# Projet Point marché
+# Point marché
 
-Application de préparation, présentation et diffusion des points hebdomadaires GLOBAL. Le site et l’application HTML autonome utilisent les mêmes composants React, styles et règles métier.
+Application GLOBAL pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-## Dossier de projet
+**Version des sources : V91** · Interface en français · Ordinateur et mobile
 
 
-Sources de la V51, développée à partir de la V50. La cible HTML autonome sur le réseau interne et les adaptations restantes sont décrites dans le dossier. PURCHASES et la synchronisation multi-utilisateur sur fichiers réseau ne constituent pas des fonctions livrées de cette cible.
+## Fonctionnalités
 
-Le répertoire technique historique `features/market-pulse/` est conservé pour préserver les imports du code. Le nom du projet est « Projet Point marché ».
+| Espace | Fonctionnement |
+| --- | --- |
+| Point marché | Sélection du marché et de la semaine, calendrier, reprise sélective du point précédent et édition directe des blocs. |
+| Mise en page | Placement et redimensionnement des modules, aide à l’alignement, réglages de densité et de taille du texte. |
+| Point analyste | Suivi individuel des activités et préparation des points à partir des données importées. |
+| Centre d’import | Imports Jira, Planner et PURCHASES, suivi des sources et des dates d’actualisation. |
+| Fournisseurs | Recherche, profils, simulations, variations, trames et consultation des données PURCHASES. |
+| Statistiques | Indicateurs d’activité, délais, tendances et comparaisons de périodes. |
+| Diffusion | Préparation du mail Outlook et de sa page HTML jointe, exports et téléchargements. |
+| Bugs et idées | Boîte de réception, USERCODE du déclarant, captures d’écran, statuts et dates de suivi. |
 
-## Utilisation
+L’interface propose les thèmes clair, sombre et système. Le menu latéral peut afficher les textes ou uniquement les pictogrammes. Sur mobile, le point marché utilise toute la largeur disponible.
 
-1. Importer Jira et Planner dans le Centre d’import, puis vérifier l’annuaire et les marchés.
-2. Choisir le marché ou l’analyste et la semaine.
-3. Activer « Modifier le point » pour modifier les blocs directement pendant la réunion.
-4. Enregistrer le point, puis préparer le mail avec sa page HTML jointe.
+## Parcours d’utilisation
 
-Les corrections apportées aux données importées restent dans le point. Une nouvelle semaine utilise les sources importées ; la reprise du point précédent reste une action explicite. La trame facultative ne bloque pas une simulation dont le contrôle est fait ou dont la catégorie dépasse l’étape 6 ; la catégorie d’abandon 11 reste non finalisée.
+1. Vérifier les marchés et l’annuaire dans les paramètres.
+2. Charger les sources nécessaires dans le Centre d’import.
+3. Choisir le marché ou l’analyste, puis la semaine du point.
+4. Ajouter, organiser et modifier les blocs ; reprendre si nécessaire les éléments du point précédent.
+5. Contrôler les indicateurs et les dates des sources, puis préparer le mail et sa page HTML.
 
-Sur le site, les brouillons marché et analyste se sauvegardent automatiquement sur le serveur après une seconde sans saisie. Ils sont repris après réouverture et restent distincts du point partagé, mis à jour avec « Enregistrer ». Les copies concurrentes sont comparées avant tout remplacement. Un état persistant signale les erreurs de connexion et les conflits ; quitter la page avertit si des saisies restent à synchroniser.
+Les modifications bénéficient d’une sauvegarde automatique avec un état de synchronisation visible. Les erreurs de connexion et les conflits de copies sont signalés dans l’interface. La reprise d’un point précédent reste une action explicite.
 
-Le compte GLOBAL est commun : les personnes connectées partagent les brouillons du compte. Les brouillons ne sont jamais affichés dans la lecture publique. Les dates du bandeau indiquent les imports effectivement utilisés dans le point ; une date historique inconnue reste inconnue.
+Les corrections des données importées sont conservées dans le point concerné. Les dates des sources correspondent aux imports effectivement utilisés ; une date historique inconnue n’est pas inventée.
 
-L’export autonome a été recompilé pour la V51 avec la disposition libre et l’aide intégrée. Les fichiers `.marketpulse.json` et la récupération locale conservent leur fonctionnement.
+## Signaler un bug ou proposer une idée
 
-## Structure
+Les entrées **Signaler un bug**, **Soumettre une idée** et **Boîte Bugs & idées** sont accessibles dans la navigation.
 
-- `features/market-pulse/` : points marché et analystes, imports, statistiques, graphiques.
-- `components/` : contrôles partagés, fenêtres, thèmes, disposition.
-- `lib/` : règles métier, normalisation, exports, transport, file de sauvegarde automatique et comparaison des copies.
-- `app/api/`, `db/`, `drizzle/` : API du site, base D1 et migrations.
-- `offline/` : application autonome, fichier de données et adaptateur des mêmes API.
-- `tests/` : tests métier, sauvegardes et scénarios de navigation asynchrone.
+Une demande contient un titre, une description, le USERCODE du déclarant et, si nécessaire, des captures d’écran. Son statut et ses dates permettent de suivre son traitement.
 
-## Développement et validation
+Dans **Paramètres → Bugs et idées**, renseigner les destinataires de notification, séparés par des points-virgules, dans la limite de dix adresses. La case **Signaler par mail** prépare un message dans la messagerie par défaut, notamment Outlook si configuré. L’utilisateur vérifie et envoie le message ; il ne s’agit pas d’un envoi automatique en arrière-plan.
 
-Utiliser les dépendances verrouillées du dépôt et Node 22.13 ou supérieur.
+## Site et version HTML autonome
+
+Le site et la cible HTML autonome réutilisent les composants React, les styles et les règles métier. L’adaptateur local remplace les appels aux API du site pour les usages hors hébergement.
+
+La version autonome se génère depuis les sources. Sans données initiales, elle ouvre un espace vide, prêt à importer des données ou à ouvrir un fichier existant. Les fichiers de travail utilisent notamment le format `.marketpulse.json`.
+
+Le stockage partagé dépend du mode d’exécution : un simple dossier réseau ne fournit pas les API ni les services serveur du site hébergé.
+
+## Dernières mises à jour
+
+| Version | Évolution |
+| --- | --- |
+| V91 | Reprise du sprite original de l’oie de Redline et de ses huit poses animées. |
+| V90 | Ajout d’une oie discrète dans le footer et de sa séquence animée. |
+| V89 | Point marché bord à bord sur mobile, sans padding extérieur latéral. |
+| V88 | Harmonisation des alignements, des espacements, du calendrier et du menu mobile. |
+| V86–V87 | Signalement des bugs et idées, destinataires configurables, captures d’écran et suivi des demandes. |
+
+<details>
+<summary>🪿 Une oie dans le footer ?</summary>
+
+Un clic ouvre une séquence d’environ 43 secondes : danse, changements de couleurs, dédoublements, gros plan avec la main du Penseur, reprise de la danse, puis pause contemplative.
+
+La tête reste immobile pendant dix secondes, suivies de « qu'est ce que je fais ici » pendant cinq secondes, « ... » pendant cinq secondes, puis « bref ». Une dernière danse précède le départ rapide de l’oie et le retour automatique à l’application.
+
+La croix et la touche Échap permettent de revenir immédiatement au Point marché. La séquence conserve le travail en cours et respecte la préférence de réduction des animations.
+
+</details>
+
+## Structure du dépôt
+
+| Dossier | Contenu |
+| --- | --- |
+| `features/market-pulse/` | Points marché et analystes, imports, fournisseurs, statistiques et gestion des demandes. |
+| `components/` | Contrôles partagés, fenêtres, aide et oie cachée. |
+| `app/styles/` | Styles des modules, thèmes et adaptations responsive. |
+| `lib/` | Règles métier, normalisation, calculs, exports et sauvegardes. |
+| `app/api/`, `db/`, `drizzle/` | API du site, accès aux données et migrations. |
+| `offline/` | Application autonome et adaptateur des API locales. |
+| `scripts/` | Compilation, préparation et vérification des livrables. |
+| `tests/` | Tests métier, données, sauvegardes, dialogues et séquences. |
+| `docs/` | Dossier de projet, modes opératoires et notes techniques historiques. |
+
+Le chemin technique historique `features/market-pulse/` est conservé pour la compatibilité des imports.
+
+## Développement
+
+Node.js **22.13 ou supérieur** et dépendances verrouillées du dépôt.
 
 ```sh
+npm run install:ci
 npm run dev
+```
+
+Compilation et contrôles :
+
+```sh
 npm run build
 node --test tests/*.test.mjs
 npx tsc --noEmit --incremental false
+```
+
+Génération et vérification du HTML autonome :
+
+```sh
 npm run build:offline -- MARKET_PULSE_LOCAL.html
 node scripts/verify-offline.mjs MARKET_PULSE_LOCAL.html VERIFICATION.json
 ```
 
-L’export sans données initiales ouvre une application vide, prête pour les imports ou l’ouverture d’un fichier existant. Aucun CSV historique n’est nécessaire. Le script de vérification contrôle le JavaScript, les styles, les polices intégrées et les composants communs ; il ne prétend pas effectuer une comparaison visuelle dans un navigateur ni une ouverture dans Outlook.
+Le vérificateur du HTML autonome contrôle notamment les scripts, les styles, les polices intégrées et les composants communs. Il ne remplace pas une vérification visuelle dans un navigateur ou une ouverture du mail dans Outlook.
 
-Voir `docs/review-20260908.md` pour les corrections de la revue complète.
+Pour la V91, la compilation du site, TypeScript et les tests de chronologie de l’oie ont été validés. Le rendu visuel de cette séquence n’a pas été vérifié dans le navigateur de l’environnement de développement.
 
-Voir `docs/site-drafts-20260908.md` pour le fonctionnement des brouillons persistants et des conflits.
+## Documentation
 
-## V51 — interface et aide
+- [Données PURCHASES](docs/purchaseData.md)
+- [Brouillons persistants et conflits](docs/site-drafts-20260908.md)
+- [Historique GitHub](docs/Synchronisation_GitHub.md)
+- [Aide historique V51](docs/v51.md) et [mode opératoire V51](docs/Mode_Operatoire_V51.md)
 
-Disposition libre sur deux axes, aimantation facultative, édition avec palette flottante et menu de bloc, helpers et manuel illustré de 24 chapitres avec recherche. Voir [les changements et limites](docs/v51.md) et [le mode opératoire](docs/Mode_Operatoire_V51.md). La page `/aide` permet d’ouvrir le manuel.
-
-Validation : 216 tests passants, TypeScript, build Worker et vérification du HTML autonome. Rendu navigateur et Outlook non vérifié dans cet environnement.
-
+Les documents associés à une ancienne version décrivent l’état de cette version ; le code et le présent README reflètent les évolutions plus récentes.
