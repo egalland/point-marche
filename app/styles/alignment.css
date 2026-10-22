@@ -94,3 +94,14 @@
   .form-grid, .general-grid { padding: var(--panel-padding); gap: 16px; }
   .feedback-actions > button { flex: 1 1 140px; }
 }
+
+/* Give the mobile point the entire viewport; retain spacing inside its cards. */
+@media screen and (max-width: 760px) {
+  .workspace-content:has(> .preview-page) { padding-inline: 0; }
+  .workspace-content:has(> .preview-page) > :is(.workspace-context, .point-sync-status, .point-source-status) { margin-inline: var(--page-gutter); }
+  .workspace-content:has(> .preview-page) > .period-navigator { width: calc(100% - 2 * var(--page-gutter)); margin-inline: var(--page-gutter); }
+  .preview-page > :is(.preview-toolbar, .point-display-settings, .reader-empty-banner, .reader-empty-state) { margin-inline: var(--page-gutter); }
+  .preview-page, .preview-page .report-canvas, .preview-page .report-module-grid { width: 100%; max-width: none; margin-inline: 0; padding-inline: 0; }
+  .preview-page .report-hero { padding-inline: var(--page-gutter); }
+  .preview-page .report-module-grid > .report-module-item { grid-column: 1 / -1; }
+}
