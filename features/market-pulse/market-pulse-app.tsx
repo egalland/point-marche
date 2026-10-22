@@ -6,7 +6,7 @@ import {usePURCHASES} from "./purchaseData-dashboard";
 import {filterPURCHASES,createPURCHASESReport} from "@/lib/purchaseData";
 import {buildSimulationComparison,normalizeComparison} from "@/lib/simulation-comparison";
 import { WorkspaceHelp } from "@/components/workspace-help";
-import { FeedbackSettings, FeedbackDialog, useFeedbackContact } from "./feedback-center";
+import { FeedbackSettings, FeedbackDialog, FeedbackInbox, useFeedbackContact } from "./feedback-center";
 import { APP_VERSION } from "@/lib/app-version";
 import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft, saveLocalFile, markPointSaved, hasUnsavedSessionDrafts, configureHostedDrafts, loadPointDraft, preparePointSave, finishPointSave, hostedPointDrafts } from "@/lib/app-transport";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type ReactNode } from "react";
@@ -949,6 +949,7 @@ function MarketPulseWorkspace() {
     {section === "personalization" && <section className="editor-section">
       <AppearanceSettings/>
       <FeedbackSettings contact={feedbackContact}/>
+      <FeedbackInbox/>
       <SectionTitle eyebrow="Paramètres du point actif" title="Personnaliser l’affichage" detail="Ici, règle le confort de lecture et les contenus diffusés. L’ordre et la largeur des blocs se modifient directement dans le point."/>
       <div className="surface personalization-card">
         <div className="personalization-choice"><div><strong>Taille du texte</strong><span>Réglage libre de 85 à 130 %, enregistré avec le point.</span></div><div className="font-scale-control"><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent - 5)} aria-label="Réduire le texte">A−</button><input type="range" min="85" max="130" step="5" value={data.preferences.fontScalePercent} aria-label="Taille du texte" onChange={(event) => updateFontScalePercent(Number(event.target.value))}/><output>{data.preferences.fontScalePercent}%</output><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent + 5)} aria-label="Agrandir le texte">A+</button><button type="button" onClick={() => updateFontScalePercent(100)}>100%</button></div></div>
@@ -1071,7 +1072,7 @@ function MarketPulseWorkspace() {
 
   return <div className={`app-shell font-${data.preferences.fontScale} density-${data.preferences.density}`} style={themeStyle}>
     <a className="skip-link" href="#workspace-content">Aller au contenu</a>
-    <WorkspaceNavigation view={view} userName={session.user?.displayName ?? null} onSelect={chooseView} onFeedback={setFeedbackKind}/>
+    <WorkspaceNavigation view={view} userName={session.user?.displayName ?? null} onSelect={chooseView} onFeedback={setFeedbackKind} onInbox={() => { chooseView("settings"); setTimeout(() => document.getElementById("feedback-inbox-title")?.scrollIntoView({ block: "start" }), 100); }}/>
     <FeedbackDialog kind={feedbackKind} email={feedbackContact.email} ready={feedbackContact.ready} context={`Marché : ${market.name}\r\nRubrique : ${workspaceTitles[view]}`} onClose={() => setFeedbackKind(null)} onSettings={() => { setFeedbackKind(null); chooseView("settings"); }}/>
     <header className="app-header">
       <WorkspaceHelp/><div className="workspace-location"><span>Espace de travail</span><strong>{workspaceTitles[view]} <small className="app-version">{APP_VERSION}</small></strong></div>

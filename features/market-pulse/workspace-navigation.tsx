@@ -31,10 +31,11 @@ type Props = {
   view: WorkspaceView;
   userName: string | null;
   onSelect: (view: WorkspaceView) => void;
+  onInbox: () => void;
   onFeedback: (kind: "bug" | "idea") => void;
 };
 
-export function WorkspaceNavigation({ view, userName, onSelect, onFeedback }: Props) {
+export function WorkspaceNavigation({ view, userName, onSelect, onFeedback, onInbox }: Props) {
   const [open, setOpen] = useState(false);
   const [compact, setCompact] = useState(false);
   useEffect(() => { try { setCompact(localStorage.getItem("market-pulse:compact-menu") === "true"); } catch {} }, []);
@@ -45,7 +46,7 @@ export function WorkspaceNavigation({ view, userName, onSelect, onFeedback }: Pr
     <button type="button" className="workspace-menu-size" onClick={toggleCompact} aria-expanded={!compact} aria-label={compact ? "Développer le menu avec les textes" : "Réduire le menu aux pictogrammes"} title={compact ? "Afficher les textes" : "Pictogrammes seuls"}><AppIcon name="menu"/><span>{compact ? "Afficher les textes" : "Réduire le menu"}</span></button>
     <nav className="workspace-nav" aria-label="Navigation principale">
       {groups.map((group) => <div className="workspace-nav-group" key={group.label}><span>{group.label}</span>{group.items.map((item) => <button key={item.id} type="button" className={view === item.id ? "active" : ""} aria-label={item.label} title={item.label} aria-current={view === item.id ? "page" : undefined} onClick={() => select(item.id)}><AppIcon name={item.icon} size={20}/><span>{item.label}</span>{view === item.id && <i aria-hidden="true"/>}</button>)}</div>)}
-      <div className="workspace-nav-group workspace-feedback"><span>Votre avis</span><button type="button" aria-label="Signaler un bug" title="Signaler un bug" onClick={() => { setOpen(false); onFeedback("bug"); }}><AppIcon name="bug" size={20}/><span>Signaler un bug</span></button><button type="button" aria-label="Soumettre une idée" title="Soumettre une idée" onClick={() => { setOpen(false); onFeedback("idea"); }}><AppIcon name="idea" size={20}/><span>Soumettre une idée</span></button></div>
+      <div className="workspace-nav-group workspace-feedback"><span>Votre avis</span><button type="button" aria-label="Boîte Bugs & idées" title="Boîte Bugs & idées" onClick={() => { setOpen(false); onInbox(); }}><AppIcon name="mail" size={20}/><span>Boîte Bugs & idées</span></button><button type="button" aria-label="Signaler un bug" title="Signaler un bug" onClick={() => { setOpen(false); onFeedback("bug"); }}><AppIcon name="bug" size={20}/><span>Signaler un bug</span></button><button type="button" aria-label="Soumettre une idée" title="Soumettre une idée" onClick={() => { setOpen(false); onFeedback("idea"); }}><AppIcon name="idea" size={20}/><span>Soumettre une idée</span></button></div>
     </nav>
     <footer className="workspace-account">
       <div><span className="workspace-avatar"><AppIcon name={userName ? "user" : "eye"}/></span><span><strong>{userName || "Espace partagé"}</strong><small>{userName ? "Modification partagée" : "Points enregistrés"}</small></span></div>

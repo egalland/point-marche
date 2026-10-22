@@ -365,3 +365,23 @@ test("imports and file reopening preserve meeting edits and manual source choice
   assert.deepEqual((await call(next, "/api/analyst-points?analystId=analyst")).points[0].data, analystPoint);
   assert.equal((await call(next, "/api/jira-imports")).registry.ticketCount, 1);
 });
+
+test('feedback tickets, screenshots and status history survive workbook reopening; retries do not duplicate tickets', async () => {
+  const store = new WorkspaceStore(newWorkspace());
+  const api = createLocalApi(store);
+  const draft = { id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', kind: 'idea', title: 'Nouvelle idée', detail: 'Une capture', context: 'Statistiques', reporterUserCode: 'A1234567', captures: [{ name: 'capture.png', dataUrl: 'data:image/png;base64,aA==' }] };
+  const create = () => api('/api/feedback', { method: 'POST', body: JSON.stringify(draft) });
+  assert.equal((await create()).status, 201);
+  assert.equal((await create()).status, 200);
+  let payload = await (await api('/api/feedback')).json();
+  assert.equal(payload.items.length, 1);
+  const item = payload.items[0];
+  const updated = await api('/api/feedback', { method: 'PATCH', body: JSON.stringify({ id: item.id, status: 'Résolu', by: 'B7654321', expectedUpdatedAt: item.updatedAt }) });
+  assert.equal(updated.status, 200);
+  const reopened = new WorkspaceStore(await decodeWorkspace(await encodeWorkspace(store.snapshot())));
+  const detail = await (await createLocalApi(reopened)(`/api/feedback?id=${item.id}`)).json();
+  assert.equal(detail.item.status, 'Résolu');
+  assert.equal(detail.item.reporterUserCode, 'A1234567');
+  assert.equal(detail.item.captures[0].dataUrl, draft.captures[0].dataUrl);
+  assert.equal(detail.item.history.length, 2);
+});

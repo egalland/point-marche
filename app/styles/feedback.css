@@ -6,6 +6,21 @@
 .feedback-dialog form { display: grid; gap: 16px; }
 .feedback-dialog textarea { resize: vertical; min-height: 140px; }
 .feedback-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; }
+.feedback-fields { border: 0; padding: 0; margin: 0; display: grid; gap: 14px; min-width: 0; }
+.feedback-notify { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.feedback-notify input { width: 20px; height: 20px; }
+.feedback-captures { display: flex; gap: 12px; flex-wrap: wrap; }
+.feedback-captures figure { margin: 0; width: min(150px, 100%); overflow-wrap: anywhere; font-size: .8rem; }
+.feedback-captures img { width: 100%; max-height: 140px; object-fit: contain; border: 1px solid var(--line); border-radius: 8px; }
+.feedback-inbox { padding: 24px; margin-bottom: 24px; }
+.feedback-inbox header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.feedback-inbox h2 { margin: 0; }
+.feedback-filters { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin-block: 16px; }
+.feedback-ticket-list { display: grid; gap: 10px; }
+.feedback-ticket-list > button { display: grid; gap: 6px; text-align: left; padding: 16px; border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 10px; cursor: pointer; overflow-wrap: anywhere; }
+.feedback-ticket-list span, .feedback-ticket-list small { color: var(--muted); }
+.feedback-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 700px) { .feedback-filters { grid-template-columns: minmax(0, 1fr); } .feedback-settings, .feedback-inbox { padding: 16px; } }
 .workspace-menu-size { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 42px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); cursor: pointer; font-size: .8125rem; }
 .workspace-sidebar.is-compact { padding-inline: 10px; }
 .is-compact .workspace-brand { justify-content: center; padding: 0 0 18px; }

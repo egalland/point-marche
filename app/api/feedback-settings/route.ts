@@ -1,5 +1,5 @@
 import { getRuntimeEnv } from "@/lib/runtime-env";
-import { validFeedbackEmail } from "@/lib/feedback";
+import { validFeedbackRecipients } from "@/lib/feedback";
 import { getEditorUser } from "../../simple-auth";
 
 const key = "application-settings/feedback.json";
@@ -17,7 +17,7 @@ export async function PUT(request: Request) {
     if (!await getEditorUser()) return Response.json({ error: "Accès refusé." }, { status: 401 });
     const body = await request.json() as { email?: unknown };
     const email = typeof body.email === "string" ? body.email.trim() : "";
-    if (typeof body.email !== "string" || (email && !validFeedbackEmail(email))) return Response.json({ error: "Adresse mail invalide." }, { status: 400 });
+    if (typeof body.email !== "string" || (email && !validFeedbackRecipients(email))) return Response.json({ error: "Adresse mail invalide." }, { status: 400 });
     const bucket = getRuntimeEnv()?.FILES;
     if (!bucket) throw new Error();
     await bucket.put(key, new TextEncoder().encode(JSON.stringify({ email })), { httpMetadata: { contentType: "application/json" }, customMetadata: { name: "Contact bugs et idées" } });
