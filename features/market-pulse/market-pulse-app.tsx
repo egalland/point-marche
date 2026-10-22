@@ -7,6 +7,7 @@ import {filterPURCHASES,createPURCHASESReport} from "@/lib/purchaseData";
 import {buildSimulationComparison,normalizeComparison} from "@/lib/simulation-comparison";
 import { WorkspaceHelp } from "@/components/workspace-help";
 import { FeedbackSettings, FeedbackDialog, FeedbackInbox, useFeedbackContact } from "./feedback-center";
+import { GooseEasterEgg } from "@/components/goose-easter-egg";
 import { APP_VERSION } from "@/lib/app-version";
 import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft, saveLocalFile, markPointSaved, hasUnsavedSessionDrafts, configureHostedDrafts, loadPointDraft, preparePointSave, finishPointSave, hostedPointDrafts } from "@/lib/app-transport";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type ReactNode } from "react";
@@ -1136,6 +1137,7 @@ function MarketPulseWorkspace() {
     </AppDialog>}
 
     {confirmRequest && <AppDialog open onClose={() => settleConfirmation(false)} labelledBy="confirm-dialog-title" className="confirm-dialog"><span className={`confirm-emblem ${confirmRequest.destructive ? "danger" : ""}`}><Icon name={confirmRequest.destructive ? "alert" : "check"} size={22}/></span><div className="login-heading"><span>Confirmation</span><h2 id="confirm-dialog-title">{confirmRequest.title}</h2><p>{confirmRequest.detail}</p></div><div className="confirm-actions"><button className="secondary-button" type="button" onClick={() => settleConfirmation(false)}>Annuler</button><button className={`primary-button ${confirmRequest.destructive ? "danger-button-solid" : ""}`} type="button" onClick={() => settleConfirmation(true)}>{confirmRequest.confirmLabel}</button></div></AppDialog>}
+    <GooseEasterEgg/>
     {toast && <div className="toast"><Icon name="check"/>{toast}</div>}
   </div></div>;
 }
