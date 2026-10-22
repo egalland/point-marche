@@ -28,13 +28,14 @@ export function orderedBlockIds(ids:string[], order:string[]=[]){const allowed=n
 export function reorderBlock(ids:string[],id:string,before:string|null){if(id===before||!ids.includes(id))return ids;const rest=ids.filter(v=>v!==id);const at=before?rest.indexOf(before):-1;rest.splice(at<0?rest.length:at,0,id);return rest;}
 export function placeMissingBlocks(ids:string[], widths:Record<string,string>, saved:Record<string,BlockRect>){const defaults=initialRects(ids,widths);const result={...saved};let bottom=Math.max(0,...ids.filter(id=>result[id]).map(id=>result[id].y+result[id].height+24));for(const id of ids)if(!result[id]){result[id]=normalizeRect({...defaults[id],...(Object.keys(saved).length?{x:0,y:bottom}:{})});if(Object.keys(saved).length)bottom=result[id].y+result[id].height+24;}return result;}
 
+// Only actual overlap is a collision: touching edges and user-chosen gaps are valid.
 // Keep the manipulated block under the pointer; move intersecting neighbours below it.
 export function arrangePresentationBlocks(ids:string[], blocks:Record<string,BlockRect>, anchor?:string):Record<string,BlockRect>{
  const result={...blocks},placed:BlockRect[]=[];
  const order=ids.filter(id=>blocks[id]).sort((a,b)=>blocks[a].y-blocks[b].y||blocks[a].x-blocks[b].x||ids.indexOf(a)-ids.indexOf(b));
  if(anchor&&order.includes(anchor)){order.splice(order.indexOf(anchor),1);order.unshift(anchor);}
  for(const id of order){const r={...blocks[id]};let hits:BlockRect[];
-  while((hits=placed.filter(p=>r.x<p.x+p.width&&r.x+r.width>p.x&&r.y<p.y+p.height+24&&r.y+r.height+24>p.y)).length)r.y=Math.max(...hits.map(p=>p.y+p.height+24));
+  while((hits=placed.filter(p=>r.x<p.x+p.width&&r.x+r.width>p.x&&r.y<p.y+p.height&&r.y+r.height>p.y)).length)r.y=Math.max(...hits.map(p=>p.y+p.height));
   result[id]=r;placed.push(r);
  }
  return result;
@@ -58,7 +59,14 @@ export function alignPresentationRect(raw:BlockRect,neighbours:BlockRect[],edge:
   const offsets=edge?[start?0:rect[size]]:[0,rect[size]/2,rect[size]];
   const targets=[...(axis==='x'?[0,CANVAS_WIDTH/2,CANVAS_WIDTH]:[0]),...neighbours.flatMap(p=>[p[axis],p[axis]+p[size]/2,p[axis]+p[size]])];
   let best:{delta:number;target:number}|null=null;
-  for(const offset of offsets)for(const target of targets){const delta=target-(rect[axis]+offset);if(Math.abs(delta)<=threshold&&(!best||Math.abs(delta)<Math.abs(best.delta)))best={delta,target};}
+  // Prefer docking to the opposing edge of a nearby block over centre/grid alignment.
+  const other=axis==='x'?'y':'x',otherSize=axis==='x'?'height':'width';
+  for(const p of neighbours){
+   if(rect[other]>=p[other]+p[otherSize]||rect[other]+rect[otherSize]<=p[other])continue;
+   const contacts=edge?(start?[{offset:0,target:p[axis]+p[size]}]:[{offset:rect[size],target:p[axis]}]):[{offset:0,target:p[axis]+p[size]},{offset:rect[size],target:p[axis]}];
+   for(const {offset,target} of contacts){const delta=target-(rect[axis]+offset);if(Math.abs(delta)<=threshold&&(!best||Math.abs(delta)<Math.abs(best.delta)))best={delta,target};}
+  }
+  if(!best)for(const offset of offsets)for(const target of targets){const delta=target-(rect[axis]+offset);if(Math.abs(delta)<=threshold&&(!best||Math.abs(delta)<Math.abs(best.delta)))best={delta,target};}
   const delta=best?best.delta:Math.round((rect[axis]+(edge&&end?rect[size]:0))/GRID_STEP)*GRID_STEP-(rect[axis]+(edge&&end?rect[size]:0));
   const proposed=edge?resizeFromEdge(rect,axis==='x'?delta:0,axis==='y'?delta:0,edge):normalizeRect({...rect,[axis]:rect[axis]+delta});
   const movedEdge=proposed[axis]+(edge&&end?proposed[size]:0),rawEdge=rect[axis]+(edge&&end?rect[size]:0);
