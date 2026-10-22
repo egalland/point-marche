@@ -1,0 +1,40 @@
+.project-footer { display: flex; justify-content: center; padding: 32px 16px 8px; }
+.hidden-goose { display: grid; place-items: center; width: 44px; height: 44px; padding: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; opacity: .25; transition: opacity .2s; }
+.hidden-goose:hover, .hidden-goose:focus-visible { opacity: 1; }
+.goose-drawing { display: block; width: 100%; height: 100%; overflow: visible; }
+.goose-backdrop.app-dialog-backdrop { z-index: 1000; padding: 0; background: #0b1020; }
+.goose-page.app-dialog { width: 100%; max-width: none; height: 100dvh; max-height: 100dvh; padding: 0; margin: 0; border: 0; border-radius: 0; overflow: hidden; background: #0b1020; }
+.goose-page .app-dialog-close { position: absolute; z-index: 20; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: 44px; height: 44px; color: white; background: #141826b3; border-color: #ffffff45; }
+.goose-scene { position: absolute; inset: 0; display: grid; place-items: center; isolation: isolate; overflow: hidden; background: #101834; }
+.goose-aura { position: absolute; inset: -35%; z-index: -2; background: conic-gradient(from 30deg, #9e3490, #13596a, #8d5838, #514c99, #9e3490); filter: blur(50px); animation: goose-colors 4s linear infinite; }
+.goose-floor { position: absolute; inset: 55% -50% -40%; z-index: -1; background: repeating-linear-gradient(90deg, transparent 0 78px, #ffffff18 79px 80px), repeating-linear-gradient(0deg, transparent 0 78px, #ffffff18 79px 80px); transform: perspective(400px) rotateX(55deg); animation: goose-floor 2s linear infinite; }
+.goose-star { width: clamp(190px, 35vw, 370px); height: clamp(220px, 46vh, 410px); filter: drop-shadow(0 24px 16px #0005); }
+.is-dancing .goose-star { animation: goose-chaos 1.5s ease-in-out infinite; }
+.is-dancing .goose-wing { transform-origin: 100px 178px; animation: goose-flap .6s ease-in-out infinite alternate; }
+.is-dancing .goose-feet { transform-origin: 130px 260px; animation: goose-flap .4s ease-in-out infinite alternate-reverse; }
+.is-dancing::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: #ffd9ac; opacity: 0; animation: goose-flash 2s ease-out infinite; mix-blend-mode: soft-light; }
+.goose-clone { position: absolute; left: calc(12% + var(--goose-index) * 14%); top: calc(12% + var(--goose-index) * 9%); width: clamp(65px, 15vw, 180px); height: 180px; opacity: .55; filter: hue-rotate(calc(var(--goose-index) * 55deg)) drop-shadow(10px 5px 0 #77ffe133); animation: goose-clones 2.4s ease-in-out infinite alternate; animation-delay: calc(var(--goose-index) * -.37s); }
+.goose-stage-encore .goose-star, .goose-stage-finale .goose-star { animation-duration: .9s; }
+.goose-stage-encore .goose-clone { animation-direction: alternate-reverse; }
+.is-thinking .goose-star { width: min(78vw, 650px); height: min(68dvh, 640px); }
+.goose-stage-think .goose-star { animation: goose-zoom .65s cubic-bezier(.16,1,.3,1) both; }
+.is-thinking .goose-aura { background: radial-gradient(ellipse at 35% 45%, #5b6174, #252c42 46%, #0d1525 75%); animation: goose-contemplation 16s ease-in-out infinite alternate; filter: blur(32px); }
+.is-thinking .goose-floor { display: none; }
+.goose-caption { position: absolute; inset: auto 16px max(8dvh, 30px); margin: 0; text-align: center; color: white; text-shadow: 0 3px 16px #0009; font-family: "Comic Sans MS", "Comic Sans", cursive; font-size: clamp(24px, 5vw, 56px); line-height: 1.25; }
+.goose-stage-away .goose-star { animation: goose-away .8s cubic-bezier(.7,0,1,.4) both; }
+@keyframes goose-chaos { 0%,100% { transform: translate(-12vw, -6vh) rotate(-24deg) scale(.85); } 25% { transform: translate(14vw, 14vh) rotate(22deg) scale(1.2); } 50% { transform: translate(-6vw, 8vh) rotate(-12deg) scale(1.05); } 75% { transform: translate(13vw, -16vh) rotate(30deg) scale(.8); } }
+@keyframes goose-clones { 0% { transform: translate(-12vw, 16vh) rotate(-40deg) scale(.6); } 50% { transform: translate(12vw, -16vh) rotate(45deg) scale(1.2); } 100% { transform: translate(-14vw, -10vh) rotate(-20deg) scale(.8); } }
+@keyframes goose-flap { to { transform: rotate(24deg); } }
+@keyframes goose-colors { to { transform: rotate(360deg); filter: blur(50px) hue-rotate(360deg); } }
+@keyframes goose-floor { to { background-position: 0 80px; } }
+@keyframes goose-flash { 0%,100% { opacity: 0; } 12% { opacity: .32; } 35% { opacity: 0; } }
+@keyframes goose-zoom { from { transform: scale(.2) rotate(-16deg); } to { transform: scale(1); } }
+@keyframes goose-contemplation { from { transform: translate(-2%, -1%) scale(1.02); } to { transform: translate(2%, 1%) scale(1.08); } }
+@keyframes goose-away { from { transform: scale(1.1) rotate(-14deg); opacity: 1; } to { transform: scale(.001) rotate(650deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .goose-scene *, .goose-scene::after { animation: none !important; }
+  .goose-clone { opacity: .18; }
+  .is-dancing::after { display: none; }
+  .goose-stage-away .goose-star { opacity: 0; }
+}
+@media print { .project-footer, .goose-backdrop { display: none !important; } }
