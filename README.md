@@ -2,7 +2,7 @@
 
 Application pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-**Version des sources : V92** · Interface en français · Ordinateur et mobile
+**Version des sources : V93** · Interface en français · Ordinateur et mobile
 
 
 
@@ -53,30 +53,18 @@ Le stockage partagé dépend du mode d’exécution : un simple dossier réseau 
 
 | Version | Évolution |
 | --- | --- |
+| V93 | Retrait de l’animation cachée du pied de page. |
 | V92 | Placement bord contre bord, suppression de l’espace obligatoire et aimantation sans déplacement des voisins au contact. |
-| V91 | Reprise du sprite original de l’oie de Redline et de ses huit poses animées. |
-| V90 | Ajout d’une oie discrète dans le footer et de sa séquence animée. |
 | V89 | Point marché bord à bord sur mobile, sans padding extérieur latéral. |
 | V88 | Harmonisation des alignements, des espacements, du calendrier et du menu mobile. |
 | V86–V87 | Signalement des bugs et idées, destinataires configurables, captures d’écran et suivi des demandes. |
-
-<details>
-<summary>🪿 Une oie dans le footer ?</summary>
-
-Un clic ouvre une séquence d’environ 43 secondes : danse, changements de couleurs, dédoublements, gros plan avec la main du Penseur, reprise de la danse, puis pause contemplative.
-
-La tête reste immobile pendant dix secondes, suivies de « qu'est ce que je fais ici » pendant cinq secondes, « ... » pendant cinq secondes, puis « bref ». Une dernière danse précède le départ rapide de l’oie et le retour automatique à l’application.
-
-La croix et la touche Échap permettent de revenir immédiatement au Point marché. La séquence conserve le travail en cours et respecte la préférence de réduction des animations.
-
-</details>
 
 ## Structure du dépôt
 
 | Dossier | Contenu |
 | --- | --- |
 | `features/market-pulse/` | Points marché et analystes, imports, fournisseurs, statistiques et gestion des demandes. |
-| `components/` | Contrôles partagés, fenêtres, aide et oie cachée. |
+| `components/` | Contrôles partagés, fenêtres et aide. |
 | `app/styles/` | Styles des modules, thèmes et adaptations responsive. |
 | `lib/` | Règles métier, normalisation, calculs, exports et sauvegardes. |
 | `app/api/`, `db/`, `drizzle/` | API du site, accès aux données et migrations. |
@@ -113,7 +101,7 @@ node scripts/verify-offline.mjs MARKET_PULSE_LOCAL.html VERIFICATION.json
 
 Le vérificateur du HTML autonome contrôle notamment les scripts, les styles, les polices intégrées et les composants communs. Il ne remplace pas une vérification visuelle dans un navigateur ou une ouverture du mail dans Outlook.
 
-Pour la V91, la compilation du site, TypeScript et les tests de chronologie de l’oie ont été validés. Le rendu visuel de cette séquence n’a pas été vérifié dans le navigateur de l’environnement de développement.
+La compilation et les vérifications adaptées sont réalisées avant publication.
 
 ## Documentation
 
