@@ -1,0 +1,96 @@
+/* Shared workspace rhythm. Keep report canvas and print layouts independent. */
+@media screen {
+  .app-shell { --page-gutter: 24px; --panel-padding: 20px; --control-height: 44px; }
+  .app-header { gap: 16px; padding-inline: var(--page-gutter); }
+  .workspace-location { flex: 1 1 180px; }
+  .header-actions { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .header-actions > * { flex-shrink: 0; }
+  .header-actions :is(.icon-button, .v51-help-launch),
+  .point-history-controls button { min-height: var(--control-height); }
+  .header-actions .v51-help-launch { position: static; margin: 0; border-color: var(--line); padding: 8px 12px; }
+  .point-history-controls { gap: 6px; }
+  .point-history-controls button { display: grid; place-items: center; width: 44px; padding: 0; }
+  .point-autosave-indicator { white-space: nowrap; }
+  .workspace-content { padding-inline: var(--page-gutter); }
+  .workspace-context { gap: 8px 12px; margin-bottom: 12px; }
+  .point-sync-status, .point-source-status { gap: 8px 16px; padding-block: 8px; }
+  .point-source-status > span { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+  .point-source-status b { margin: 0; }
+  .period-navigator, .period-navigator.edit-period { padding: var(--panel-padding); margin-bottom: 24px; }
+  .period-head { grid-template-columns: minmax(180px, 1fr) minmax(220px, auto) minmax(120px, auto) auto; gap: 16px; align-items: end; }
+  .period-head > * { min-width: 0; }
+  .period-market { display: grid; gap: 8px; }
+  .period-market select { max-width: none; height: var(--control-height); }
+  .direct-week-navigation { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 8px; width: 100%; }
+  .direct-week-navigation label { min-width: 0; }
+  .direct-week-navigation button { display: grid; place-items: center; height: var(--control-height); padding: 0; }
+  .direct-week-navigation input { display: block; width: 100%; min-width: 0; max-width: none; height: var(--control-height); padding: 8px 10px; }
+  .period-state { align-self: center; min-width: 0; }
+  .period-calendar-toggle { min-height: var(--control-height); justify-content: center; }
+  .month-navigation { display: grid; grid-template-columns: 44px minmax(0, 1fr) minmax(80px, .7fr) 44px; gap: 8px; }
+  .month-navigation :is(button, select) { width: 100%; min-width: 0; height: var(--control-height); }
+  .week-picker-toolbar { align-items: center; gap: 16px; }
+  .week-quick-actions { gap: 8px; }
+  .week-quick-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--control-height); }
+  .section-title, .preview-toolbar, .mail-toolbar { gap: 16px; }
+  .title-actions, .attachment-actions, .feedback-actions { gap: 8px; align-items: center; }
+  .field { min-width: 0; align-content: start; }
+  .field :is(input, select, textarea) { width: 100%; min-width: 0; }
+  .field :is(input[type="checkbox"], input[type="radio"]) { width: auto; }
+  .workspace-sidebar, .workspace-menu-dialog { gap: 0; }
+  .workspace-brand { flex-shrink: 0; align-items: center; }
+  .workspace-brand-mark { flex: 0 0 40px; height: 44px; }
+  .workspace-nav { align-content: start; flex-shrink: 0; gap: 20px; }
+  .workspace-nav-group { align-content: start; gap: 4px; }
+  .workspace-menu-size { flex-shrink: 0; margin: 0 0 12px; width: 100%; min-height: 44px; }
+  .workspace-account { flex-shrink: 0; }
+  .is-compact .workspace-nav { gap: 12px; }
+  .is-compact .workspace-nav-group > button { height: 44px; min-height: 44px; padding: 10px; }
+  .workspace-menu-backdrop { padding: 0; place-items: stretch start; }
+  .app-dialog.workspace-menu-dialog { width: min(320px, calc(100vw - 32px)); height: 100dvh; max-height: 100dvh; padding: 72px 16px max(20px, env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; }
+  .workspace-menu-dialog .workspace-brand { padding: 0 8px 20px; }
+  .workspace-menu-dialog .workspace-nav { margin-top: 0; }
+  .app-dialog.workspace-menu-dialog.is-compact { width: 88px; padding-inline: 12px; }
+  .workspace-menu-dialog.is-compact .workspace-brand { padding: 0 0 16px; }
+  .workspace-menu-dialog.is-compact .app-dialog-close { right: 22px; top: 12px; width: 44px; height: 44px; }
+  .workspace-nav-group > button > span { min-width: 0; overflow-wrap: anywhere; }
+}
+
+@media screen and (min-width: 1121px) and (max-width: 1400px) {
+  .period-head { grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr); }
+  .period-head > * { grid-column: auto; }
+}
+@media screen and (max-width: 1120px) {
+  .app-header { padding-left: 76px; }
+  .period-head { grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr); }
+  .period-head > * { grid-column: auto; }
+}
+@media screen and (max-width: 760px) {
+  .app-shell { --page-gutter: 16px; --panel-padding: 16px; }
+  .period-head { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  .period-head > * { grid-column: 1 / -1; }
+  .period-state { justify-content: flex-start; }
+  .direct-week-navigation { justify-content: stretch; }
+  .week-picker-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .month-navigation { width: 100%; }
+  .week-quick-actions { display: flex; flex-wrap: wrap; width: 100%; }
+  .week-quick-actions button { flex: 1 1 160px; }
+  .appearance-settings, .feedback-settings, .feedback-inbox, .mail-kit-panel { padding: var(--panel-padding); }
+}
+@media screen and (max-width: 700px) {
+  .app-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px var(--page-gutter); }
+  .workspace-location { display: flex; align-items: center; min-height: 44px; padding-left: 52px; }
+  .workspace-location > strong { font-size: 1rem; }
+  .workspace-menu-trigger { top: 12px; left: 16px; width: 44px; height: 44px; }
+  .header-actions { grid-column: 1; grid-row: auto; justify-self: stretch; justify-content: flex-start; flex-wrap: nowrap; width: 100%; margin: 0; padding: 0 0 2px; gap: 8px; }
+  .header-actions .icon-button { width: 44px; height: 44px; }
+  .header-actions .appearance-switch { padding: 3px; }
+  .header-actions .appearance-switch > button { min-height: 36px; min-width: 36px; padding: 6px 8px; }
+  .workspace-content { padding: 16px var(--page-gutter) 40px; }
+  .workspace-context { align-items: center; }
+  .workspace-context > span:first-child { flex-basis: 100%; }
+  .workspace-draft { margin-left: 0; }
+  .visual-week-picker { margin-top: 16px; padding-top: 16px; }
+  .form-grid, .general-grid { padding: var(--panel-padding); gap: 16px; }
+  .feedback-actions > button { flex: 1 1 140px; }
+}

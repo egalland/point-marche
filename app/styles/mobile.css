@@ -91,7 +91,7 @@ iframe {
     align-items: center;
     gap: 8px;
     min-height: auto;
-    padding: 10px 12px 9px 60px;
+    padding: 12px;
   }
 
   .workspace-menu-trigger {
@@ -111,8 +111,11 @@ iframe {
   }
 
   .header-actions {
-    width: calc(100vw - 24px);
-    margin-left: -48px;
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: stretch;
+    width: 100%;
+    margin-left: 0;
     padding: 2px 0 4px;
     justify-content: flex-start;
     flex-wrap: nowrap;
@@ -729,8 +732,8 @@ iframe {
   }
 
   .header-actions {
-    width: calc(100vw - 20px);
-    margin-left: -50px;
+    width: 100%;
+    margin-left: 0;
   }
 
   .header-actions .save-point > span,

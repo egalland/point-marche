@@ -1075,10 +1075,10 @@ function MarketPulseWorkspace() {
     <WorkspaceNavigation view={view} userName={session.user?.displayName ?? null} onSelect={chooseView} onFeedback={setFeedbackKind} onInbox={() => { chooseView("settings"); setTimeout(() => document.getElementById("feedback-inbox-title")?.scrollIntoView({ block: "start" }), 100); }}/>
     <FeedbackDialog kind={feedbackKind} email={feedbackContact.email} ready={feedbackContact.ready} context={`Marché : ${market.name}\r\nRubrique : ${workspaceTitles[view]}`} onClose={() => setFeedbackKind(null)} onSettings={() => { setFeedbackKind(null); chooseView("settings"); }}/>
     <header className="app-header">
-      <WorkspaceHelp/><div className="workspace-location"><span>Espace de travail</span><strong>{workspaceTitles[view]} <small className="app-version">{APP_VERSION}</small></strong></div>
+      <div className="workspace-location"><span>Espace de travail</span><strong>{workspaceTitles[view]} <small className="app-version">{APP_VERSION}</small></strong></div>
       <div className="header-actions">
         {session.user && <DraftQueueStatus/>}
-        <AppearanceControl/>
+        <WorkspaceHelp/><AppearanceControl/>
         <input ref={fileInput} className="sr-only" type="file" accept="application/json" onChange={importJson}/>
         {session.user && (view === "read" || view === "edit" || view === "settings") && <>
           <div className="point-history-controls"><button type="button" disabled={!historyAvailability.undo} onClick={undoPoint} title="Annuler (Ctrl+Z)">↶</button><button type="button" disabled={!historyAvailability.redo} onClick={redoPoint} title="Rétablir (Ctrl+Y)">↷</button></div><ActionMenu><button type="button" onClick={() => fileInput.current?.click()}><Icon name="upload"/> Importer un JSON</button><button type="button" onClick={() => exportJson()}><Icon name="download"/> Exporter le brouillon</button><button type="button" className="danger" onClick={() => { void resetPoint(); }}><Icon name="plus"/> Réinitialiser la semaine</button></ActionMenu>
