@@ -14,10 +14,10 @@ test('V72 composition sans chevauchement, ancrage du bloc manipulé et dispositi
  assert.deepEqual(arrangePresentationBlocks(['a','b','c'],source),source);
  const changed={...source,a:{...source.a,width:1200,height:600}};
  const result=arrangePresentationBlocks(['a','b','c'],changed,'a');
- assert.deepEqual(result.a,changed.a);assert.equal(result.b.y,624);assert.equal(result.c.y,1128);
+ assert.deepEqual(result.a,changed.a);assert.equal(result.b.y,600);assert.equal(result.c.y,1080);
  assert.deepEqual(arrangePresentationBlocks(['a','b','c'],result),result);assert.equal(source.b.y,0);
  const dragged=arrangePresentationBlocks(['a','b','c'],{...source,b:{...source.b,x:0}},'b');
- assert.equal(dragged.b.y,0);assert.equal(dragged.a.y,504);assert.equal(dragged.c.y,1008);
+ assert.equal(dragged.b.y,0);assert.equal(dragged.a.y,480);assert.equal(dragged.c.y,960);
 });
 test('V73 les huit poignées conservent le bord opposé et respectent les limites',async()=>{
  const {resizeFromEdge}=await load('lib/free-point-layout.ts');const r={x:240,y:240,width:480,height:480};
@@ -30,4 +30,35 @@ test('V73 repères bords et centres, Alt libre et dimensions alignées',async()=
  const center=alignPresentationRect({x:676,y:500,width:240,height:144},[neighbour],null,true);assert.equal(center.rect.x+120,800);assert.equal(center.guides.x,800);
  const resized=alignPresentationRect({x:240,y:100,width:365,height:295},[neighbour],'se',true);assert.equal(resized.rect.x+resized.rect.width,600);assert.equal(resized.rect.y+resized.rect.height,400);
  const raw={x:605,y:106,width:240,height:144};assert.deepEqual(alignPresentationRect(raw,[neighbour],null,false),{rect:raw,guides:{}});
+});
+
+test('V92 touching blocks and small deliberate gaps survive arranging, saving and reopening',async()=>{
+ const {arrangePresentationBlocks}=await load('lib/free-point-layout.ts');
+ for(const gap of [0,1,7,23]){
+  const blocks={a:{x:0,y:0,width:576,height:480},b:{x:0,y:480+gap,width:576,height:240},c:{x:576,y:0,width:624,height:480}};
+  assert.deepEqual(arrangePresentationBlocks(['a','b','c'],blocks,'b'),blocks);
+  const restored=normalizeFreeLayout(JSON.parse(JSON.stringify({blocks})));
+  assert.deepEqual(arrangePresentationBlocks(['a','b','c'],restored.blocks),blocks);
+ }
+});
+
+test('V92 edge docking does not push neighbours, including ungridded positions and resizing',async()=>{
+ const {alignPresentationRect,arrangePresentationBlocks}=await load('lib/free-point-layout.ts');
+ const a={x:0,y:13,width:576,height:490};
+ const b={x:0,y:509,width:576,height:240};
+ const docked=alignPresentationRect(b,[a],null,true);
+ assert.equal(docked.rect.y,503);assert.equal(docked.guides.y,503);
+ const blocks={a,b:docked.rect};
+ assert.deepEqual(arrangePresentationBlocks(['a','b'],blocks,'b'),blocks);
+ const resized=alignPresentationRect({...a,height:494},[b],'s',true);
+ assert.equal(resized.rect.y+resized.rect.height,b.y);
+ const adjacent=alignPresentationRect({x:581,y:13,width:600,height:240},[a],null,true);
+ assert.equal(adjacent.rect.x,a.x+a.width);
+});
+
+test('V92 a nearby touching edge wins over a distracting centre alignment',async()=>{
+ const {alignPresentationRect}=await load('lib/free-point-layout.ts');
+ const neighbours=[{x:0,y:0,width:600,height:480},{x:900,y:458,width:240,height:60}];
+ const result=alignPresentationRect({x:0,y:487,width:600,height:240},neighbours,null,true);
+ assert.equal(result.rect.y,480);assert.equal(result.guides.y,480);
 });

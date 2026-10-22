@@ -2,7 +2,7 @@
 
 Application GLOBAL pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-**Version des sources : V91** · Interface en français · Ordinateur et mobile
+**Version des sources : V92** · Interface en français · Ordinateur et mobile
 
 
 ## Fonctionnalités
@@ -52,6 +52,7 @@ Le stockage partagé dépend du mode d’exécution : un simple dossier réseau 
 
 | Version | Évolution |
 | --- | --- |
+| V92 | Placement bord contre bord, suppression de l’espace obligatoire et aimantation sans déplacement des voisins au contact. |
 | V91 | Reprise du sprite original de l’oie de Redline et de ses huit poses animées. |
 | V90 | Ajout d’une oie discrète dans le footer et de sa séquence animée. |
 | V89 | Point marché bord à bord sur mobile, sans padding extérieur latéral. |
