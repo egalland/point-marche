@@ -9,3 +9,4 @@
 - Ne pas ajouter de liste de mots internes à bannir dans les fichiers publics ; le contrôle doit rester extérieur au dépôt.
 - Conserver l’attribution des commits à `egalland` et ne pas modifier le site métier lors d’un changement limité à cette édition.
 - Vérifier TypeScript, la compilation et les tests adaptés aux changements. Une modification documentaire seule ne nécessite pas de déploiement du site.
+- Les messages de commit décrivent les changements réellement appliqués : correction, fonctionnalité ou documentation et effet concret. Ne jamais recopier une consigne ou un prompt, ni utiliser un titre générique comme « Update Site source ». Rédiger un résumé précis en français ; ajouter un détail uniquement s’il aide à comprendre la modification.
