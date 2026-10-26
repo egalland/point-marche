@@ -2,7 +2,7 @@
 
 Application pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-**Version des sources : V95** · Interface en français · Ordinateur et mobile
+**Version des sources : V96** · Interface en français · Ordinateur et mobile
 
 
 
@@ -11,7 +11,7 @@ Application pour préparer, présenter et diffuser les points hebdomadaires des 
 | Espace | Fonctionnement |
 | --- | --- |
 | Point marché | Sélection du marché et de la semaine, calendrier, reprise sélective du point précédent et édition directe des blocs. |
-| Mise en page | Placement et redimensionnement des modules, aide à l’alignement, réglages de densité et de taille du texte. |
+| Mise en page | Édition au clic sur un bloc, roue d’outils au clic droit, redimensionnement au survol et aide à l’alignement. |
 | Point analyste | Suivi individuel des activités et préparation des points à partir des données importées. |
 | Centre d’import | Imports Jira, Planner et PURCHASES, suivi des sources et des dates d’actualisation. |
 | Fournisseurs | Recherche, profils, simulations, variations, trames et consultation des données PURCHASES. |
@@ -24,6 +24,8 @@ L’interface propose les thèmes clair, sombre et système. Le menu latéral pe
 Le module achats du point affiche uniquement le nombre de lignes par spécialité sélectionnée et leur total. La période correspond par défaut au lundi–dimanche de la semaine du point ; deux dates permettent de choisir une autre période. Une ou plusieurs spécialités peuvent être cochées. Le décompte utilise la première date d’extraction et se retrouve dans le mail et la page jointe.
 
 La page HTML jointe reprend les titres, l’ordre, les largeurs et les positions des blocs du point ; son contenu reste dépliable et imprimable. Le mail affiche directement les données et les détails nécessaires, avec une présentation verticale compatible avec les clients de messagerie. Les commentaires Jira et le décompte achats sont conservés dans les deux formats.
+
+Le choix du marché et de la semaine tient dans un bandeau compact ; le calendrier s’ouvre à la demande. Les formulaires apparaissent uniquement après sélection d’un bloc. Un clic ailleurs ou Échap ferme les outils. Sur mobile, les blocs s’empilent et le bouton Outils donne accès au menu contextuel. Les réglages, la reprise du point précédent et les actions d’import/export restent accessibles dans les options du point.
 
 ## Parcours d’utilisation
 
@@ -57,7 +59,7 @@ Le stockage partagé dépend du mode d’exécution : un simple dossier réseau 
 
 | Version | Évolution |
 | --- | --- |
-| V95 | Retrait de l’animation cachée du pied de page. |
+| V96 | Retrait de l’animation cachée du pied de page. |
 | V92 | Placement bord contre bord, suppression de l’espace obligatoire et aimantation sans déplacement des voisins au contact. |
 | V89 | Point marché bord à bord sur mobile, sans padding extérieur latéral. |
 | V88 | Harmonisation des alignements, des espacements, du calendrier et du menu mobile. |

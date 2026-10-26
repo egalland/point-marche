@@ -16,7 +16,7 @@ export function DraftQueueStatus() {
   return <span className="draft-queue-state" role="status">{pending} brouillon{pending > 1 ? "s" : ""} à synchroniser</span>;
 }
 
-export function PointSyncStatus({ scope, ownerId, date, onRestore, onReconnect }: { scope: PointScope; ownerId: string; date: string; onRestore: (draft: PointDraft, snapshot: DraftSnapshot) => void; onReconnect?: () => void }) {
+export function PointSyncStatus({ scope, ownerId, date, onRestore, onReconnect, compact=false }: { compact?:boolean; scope: PointScope; ownerId: string; date: string; onRestore: (draft: PointDraft, snapshot: DraftSnapshot) => void; onReconnect?: () => void }) {
   useDraftUpdates();
   const [review, setReview] = useState<DraftSnapshot | null>(null);
   const [reviewData, setReviewData] = useState<Record<string, unknown> | null>(null);
@@ -43,12 +43,12 @@ export function PointSyncStatus({ scope, ownerId, date, onRestore, onReconnect }
     : state.status === "conflict" ? "Deux copies à comparer" : state.status === "error" ? "Sauvegarde interrompue" : state.status === "idle" ? "Sauvegarde automatique activée" : "Sauvegarde du brouillon…";
   const differences = review && reviewData ? pointDifferences(reviewData, remotePointData(review)) : [];
   return <>
-    <div className={`point-sync-status ${state.status}`} role={state.status === "error" || state.status === "conflict" ? "alert" : "status"}>
+    {(!compact || (state.status!=="idle"&&state.status!=="saved"))&&<div className={`point-sync-status ${state.status}`} role={state.status === "error" || state.status === "conflict" ? "alert" : "status"}>
       <div><strong>{label}</strong>{state.message && <span>{state.message}</span>}{error && !review && <span>{error}</span>}</div>
       {state.status === "error" && <button type="button" className="secondary-button" onClick={() => { void hostedPointDrafts.retry(scope, ownerId, date); }}>Réessayer</button>}
 
       {state.status === "conflict" && <button type="button" className="secondary-button" disabled={busy} onClick={() => { void compare(); }}>Comparer les copies</button>}
-    </div>
+    </div>}
     <AppDialog open={Boolean(review)} busy={busy} onClose={() => { if (!busy) setReview(null); }} className="point-conflict-dialog" labelledBy="point-conflict-title">
       <header><h2 id="point-conflict-title">Choisir la copie à conserver</h2><p>Une autre personne ou un autre onglet a sauvegardé ce point. Vérifie les différences avant de choisir le brouillon à garder.</p></header>
       {review && <p className="comparison-caption">Copie en ligne du {pointTimeLabel(review.draft?.updatedAt ?? review.point?.updatedAt ?? review.point?.createdAt ?? "")}. Le point sera mis à jour automatiquement après résolution.</p>}

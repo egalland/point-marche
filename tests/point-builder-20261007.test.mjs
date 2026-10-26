@@ -68,7 +68,7 @@ test('rich dossiers, comparative snapshot and rules survive point normalization 
   const mail=app.buildMailHtml(data,market,[]);assert.match(mail,/Texte enrichi/);assert.doesNotMatch(mail,/Comparatif des simulations/);assert.match(mail,/Tickets Jira/);
   data.preferences.htmlModules={...data.preferences.htmlModules,simulationComparison:true,jira:false};const html=app.buildInteractiveHtml(data,market,[]);assert.match(html,/Texte enrichi/);assert.match(html,/Comparatif des simulations/);assert.doesNotMatch(html,/Tickets Jira ·/);assert.ok(html.indexOf('data-module="dossiers"')<html.indexOf('data-module="simulationComparison"'));
   const ui = renderToStaticMarkup(createElement(app.PreviewDashboard,{data,market,archive:[],tasks:[],markets:[market],editing:true,actions:{updateFreeLayout(){}}}));
-  assert.match(ui,/Ajouter un module/); assert.match(ui,/Modifier/);
+  assert.match(ui,/Outils du point/);assert.doesNotMatch(ui,/aria-label="Modifier Dossiers"/);
 });
 const asset = await bundled('app/api/point-assets/route.ts', '\nexport { runWithRuntimeEnv } from "../../../lib/runtime-env";', [{ name:'auth-fixture', setup(build) { build.onLoad({filter:/app\/simple-auth\.ts$/},()=>({contents:'export async function getEditorUser(){return globalThis.assetEditor ?? null}',loader:'ts'})); } }]);
 test('uploaded attachments persist in object storage, require editor access and download as files', async () => {
@@ -95,7 +95,7 @@ test('V51 édition sur place et menu sans modifier la disposition',()=>{
  const props={data,content:{},actions:{updateFreeLayout:l=>writes.push(l)},editingModule:null,onEdit:id=>edits.push(id)};
  const render=()=>{canvasHooks.cursor=0;return treeNodes(freeCanvas.FreePointCanvas(props));};
  let nodes=render();const before=nodes.find(n=>n.props?.['data-point-module']==='operations').props.style;
- nodes.find(n=>n.props?.['aria-label']==='Modifier Simulations').props.onClick();
+ nodes.find(n=>n.props?.['data-point-module']==='operations').props.onClick({target:{closest:()=>null}});
  assert.deepEqual(edits,['operations']);assert.equal(writes.length,0);nodes=render();assert.deepEqual(nodes.find(n=>n.props?.['data-point-module']==='operations').props.style,before);
  canvasHooks={cursor:0,slots:[]};assert.ok(!treeNodes(freeCanvas.FreePointCanvas({...props,actions:undefined})).some(n=>n.props?.className==='v51-block-tools'));
 });
@@ -133,18 +133,18 @@ test('formatted dossier titles persist in normalization, mail and page exports',
 });
 
 test('V72 pointer resize saves both dimensions and moves an overlapping neighbour below',()=>{
- canvasHooks={cursor:0,slots:[]};const old=globalThis.window, listeners=new Map();globalThis.window={scrollY:0,scrollBy(){},innerWidth:1400,innerHeight:1000,addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
+ canvasHooks={cursor:0,slots:[]};const old=globalThis.window, listeners=new Map();globalThis.window={scrollY:0,scrollBy(){},matchMedia:()=>({matches:false}),setTimeout:f=>f(),innerWidth:1400,innerHeight:1000,addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
  try {const data=app.initialData(market.id);data.preferences.freeLayout={flow:false,enabled:true,snap:true,showGrid:true,blocks:{operations:{x:0,y:0,width:576,height:480},jira:{x:600,y:0,width:576,height:480}},titles:{},copies:[]};const writes=[];
- const props={data,content:{},actions:{updateFreeLayout:l=>writes.push(l)},editingModule:null,onEdit(){}};const render=()=>{canvasHooks.cursor=0;return treeNodes(freeCanvas.FreePointCanvas(props));};let nodes=render();nodes.find(n=>n.props?.['aria-label']==='Organiser les blocs').props.onClick();nodes=render();
+ const props={data,content:{},actions:{updateFreeLayout:l=>writes.push(l)},editingModule:null,onEdit(){}};const render=()=>{canvasHooks.cursor=0;return treeNodes(freeCanvas.FreePointCanvas(props));};let nodes=render();
  const stage=nodes.find(n=>n.props?.className?.startsWith('v51-stage'));stage.props.ref.current={getBoundingClientRect(){return {width:1200};}};
  nodes.find(n=>n.props?.['aria-label']==='Redimensionner Simulations').props.onPointerDown({preventDefault(){},stopPropagation(){},clientX:576,clientY:480});listeners.get('pointermove')({clientX:624,clientY:528,altKey:false});listeners.get('pointerup')();
  assert.equal(writes.at(-1).blocks.operations.width,624);assert.equal(writes.at(-1).blocks.operations.height,528);assert.deepEqual(writes.at(-1).blocks.jira,{...data.preferences.freeLayout.blocks.jira,y:528});
  }finally{globalThis.window=old;}
 });
 test('V71 glisser directement la barre de titre, réduire puis restaurer sans modifier les dimensions',()=>{
- canvasHooks={cursor:0,slots:[]};const oldWindow=globalThis.window,listeners=new Map();globalThis.window={scrollY:0,scrollBy(){},innerWidth:1400,innerHeight:1000,addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
+ canvasHooks={cursor:0,slots:[]};const oldWindow=globalThis.window,listeners=new Map();globalThis.window={scrollY:0,scrollBy(){},matchMedia:()=>({matches:false}),setTimeout:f=>f(),innerWidth:1400,innerHeight:1000,addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
  try{const data=app.initialData(market.id);data.preferences.freeLayout={enabled:true,snap:true,showGrid:true,blocks:{operations:{x:0,y:0,width:576,height:480}},titles:{},copies:[]};const writes=[];const props={data,content:{},actions:{updateFreeLayout:l=>writes.push(l)},editingModule:null,onEdit(){}};const render=()=>{canvasHooks.cursor=0;return treeNodes(freeCanvas.FreePointCanvas(props));};let nodes=render();const stage=nodes.find(n=>n.props?.className?.startsWith('v51-stage'));stage.props.ref.current={getBoundingClientRect(){return {width:1200};}};
  const block=nodes.find(n=>n.props?.['data-point-module']==='operations');treeNodes(block).find(n=>n.type==='header').props.onPointerDown({button:0,target:{closest:()=>null},preventDefault(){},stopPropagation(){},clientX:100,clientY:100});listeners.get('pointermove')({clientX:148,clientY:124,altKey:false});listeners.get('pointerup')();assert.equal(writes.at(-1).blocks.operations.x,48);assert.equal(writes.at(-1).blocks.operations.y,24);assert.equal(writes.at(-1).blocks.operations.width,576);
- nodes=render();nodes.find(n=>n.props?.['aria-label']==='Replier Simulations').props.onClick();nodes=render();const reduced=nodes.find(n=>n.props?.['data-point-module']==='operations');assert.equal(reduced.props.style.height,64);assert.ok(treeNodes(reduced).some(n=>n.props?.className==='v51-content'&&n.props.hidden));nodes.find(n=>n.props?.['aria-label']==='Afficher la fenêtre Simulations').props.onClick();nodes=render();assert.equal(nodes.find(n=>n.props?.['data-point-module']==='operations').props.style.height,480);
+ nodes=render();nodes.find(n=>n.props?.['aria-label']==='Replier Simulations').props.onClick();nodes=render();const reduced=nodes.find(n=>n.props?.['data-point-module']==='operations');assert.equal(reduced.props.style.height,64);assert.ok(treeNodes(reduced).some(n=>n.props?.className==='v51-content'&&n.props.hidden));nodes.find(n=>n.props?.['aria-label']==='Déplier Simulations').props.onClick();nodes=render();assert.equal(nodes.find(n=>n.props?.['data-point-module']==='operations').props.style.height,480);
  }finally{globalThis.window=oldWindow;}
 });

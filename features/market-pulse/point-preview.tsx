@@ -4,7 +4,7 @@ import {PURCHASESPoint} from "./purchaseData-dashboard";
 import type {PURCHASESConfig} from "@/lib/purchaseData";
 import { FreePointCanvas } from "./free-point-canvas";
 import type { FreeLayout } from "@/lib/free-point-layout";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { DossierBoard } from "./dossier-board";
 import { SimulationComparison } from "./simulation-comparison";
 import { JiraRulesEditor } from "./jira-rules-editor";
@@ -115,12 +115,14 @@ export type PointCanvasActions = {
   moveModule: (module: PointModule, amount: number) => void;
   updateModuleWidth: (module: PointModule, width: ModuleWidth) => void;
   resetLayout: () => void;
+  openPointSettings?: () => void;
 };
 
 export function PreviewDashboard({ data, market, archive, editing = false, actions, tasks = [], markets = [], plannerUpdatedAt = "" }: { data: PointData; market: Market; archive: PointRecord[]; editing?: boolean; actions?: PointCanvasActions; tasks?: PlannerTask[]; markets?: Market[]; plannerUpdatedAt?: string }) {
 
   const canManage = Boolean(actions);
   const [priorityEditing, setPriorityEditing] = useState(false);
+  useEffect(()=>{const close=(event:PointerEvent)=>{if(!(event.target as HTMLElement).closest('.report-priority'))setPriorityEditing(false);};const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')setPriorityEditing(false);};document.addEventListener('pointerdown',close);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',escape);};},[]);
   const [activeDossier, setActiveDossier] = useState<string | null>(null);
   const [editingModule, setEditingModule] = useState<PointModule | null>(null);
   const alerts = useMemo(() => buildAlerts(data, market), [data, market]);
@@ -129,7 +131,7 @@ export function PreviewDashboard({ data, market, archive, editing = false, actio
   const currentMonth = calendarMonthLabel(monthStart(data.meetingDate));
   const followingMonth = calendarMonthLabel(shiftMonth(monthStart(data.meetingDate), 1));
   const operationGroups = [currentMonth, followingMonth].map((month, index) => ({ month, items: data.operations.filter((item) => index === 1 ? item.month === followingMonth : item.month !== followingMonth) }));
-  const isModuleEditing = (id: PointModule) => canManage && (editing || editingModule === id);
+  const isModuleEditing = (id: PointModule) => canManage && editingModule === id;
   const content: Record<PointModule, ReactNode> = {
     purchaseData: <PURCHASESPoint configs={data.purchaseDataConfigs} meetingDate={data.meetingDate} onChange={isModuleEditing("purchaseData") ? actions?.updatePURCHASES : undefined}/>,
     simulationComparison: <SimulationComparison tasks={tasks} markets={markets} config={data.simulationComparisonConfig ?? normalizeComparison(null, market.id)} snapshot={data.simulationComparisonSnapshot} editing={isModuleEditing("simulationComparison")} updatedAt={plannerUpdatedAt} onChange={actions?.updateComparison}/>,
@@ -142,9 +144,9 @@ export function PreviewDashboard({ data, market, archive, editing = false, actio
   };
   return <div className="report-canvas"><div className="report-ambient report-ambient-one"/><div className="report-ambient report-ambient-two"/>
     <header className="report-hero"><div><div className="market-badge"><i/> MARKET PULSE <b>/</b> {market.short}</div><h1>Point marché</h1><p><strong>{market.name}</strong><span>Dossiers · simulations · promotions · Jira</span></p></div><div className="week-card"><strong><small>{isoWeekYear(data.meetingDate)} ·</small>S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</strong><i/><div><b>{dateLabel(data.meetingDate)}</b><span>Année et semaine ISO</span></div></div></header>
-    <section className={`report-priority ${priorityEditing ? "is-inline-editing" : ""}`} onContextMenu={(event) => { if (!actions) return; event.preventDefault(); event.stopPropagation(); setPriorityEditing(true); }}><span>Priorité de la semaine</span>{priorityEditing && actions ? <><textarea autoFocus aria-label="Priorité de la semaine" value={data.priority} onChange={(event) => actions.updatePriority(event.target.value)}/><button type="button" onClick={() => setPriorityEditing(false)}>Terminer</button></> : <><strong>{data.priority || "Aucune priorité renseignée."}</strong>{actions && <button type="button" className="canvas-priority-edit" onClick={() => setPriorityEditing(true)}>Modifier</button>}</>}</section>
+    <section className={`report-priority ${priorityEditing ? "is-inline-editing" : ""}`} onClick={() => { if (actions) setPriorityEditing(true); }}><span>Priorité de la semaine</span>{priorityEditing && actions ? <><textarea autoFocus aria-label="Priorité de la semaine" value={data.priority} onChange={(event) => actions.updatePriority(event.target.value)}/><button type="button" onClick={event => {event.stopPropagation();setPriorityEditing(false);}}>Terminer</button></> : <><strong>{data.priority || "Aucune priorité renseignée."}</strong></>}</section>
 
-    <FreePointCanvas data={data} content={content} actions={actions} editingModule={editingModule} onEdit={(module) => { setEditingModule(module); if (module === "dossiers") setActiveDossier(data.dossiers[0]?.id ?? null); }}/>
+    <FreePointCanvas data={data} content={content} actions={actions} editingModule={editingModule} onEdit={(module,itemId) => { setEditingModule(module); if (module === "dossiers") setActiveDossier(itemId??data.dossiers[0]?.id??null); }}/>
     <footer className="report-footer"><span>Market Pulse · {market.name}</span><span>Point marché · {isoWeekYear(data.meetingDate)} · S{String(isoWeek(data.meetingDate)).padStart(2, "0")}</span></footer>
   </div>;
 }

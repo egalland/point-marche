@@ -117,8 +117,7 @@ test("changing markets during a save never applies the old point to the new mark
   await triggerAutoSave();
   await settle();
   const next = app.defaultMarkets.find((market) => market.id !== post.body.marketId);
-  const select = find((node) => node.type === "select" && node.props.value === post.body.marketId && nodes(node.props.children).some((option) => option.props?.value === next.id));
-  await select.props.onChange({ target: { value: next.id } }); await settle();
+  find(node=>node.type?.name==="PointPeriodSelector").props.onMarket(next.id); await settle();
   await resolveSave();
   assert.equal(preview().market.id, next.id);
   assert.equal(preview().data.priority, "Priorité enregistrée");
@@ -128,8 +127,7 @@ test("a failed market load keeps the current point and its draft", async () => {
   preview().actions.updatePriority("Brouillon à conserver"); await settle();
   const current = preview().market.id;
   failedMarket = app.defaultMarkets.find((market) => market.id !== current).id;
-  const select = find((node) => node.type === "select" && node.props.value === current && nodes(node.props.children).some((option) => option.props?.value === failedMarket));
-  await select.props.onChange({ target: { value: failedMarket } }); await settle();
+  find(node=>node.type?.name==="PointPeriodSelector").props.onMarket(failedMarket); await settle();
   assert.equal(preview().market.id, current);
   assert.equal(preview().data.priority, "Brouillon à conserver");
 });
@@ -256,7 +254,7 @@ test("automatic save publishes a changed week and returns it after reload", asyn
   await triggerAutoSave(); await resolveSave();
   const marketId = preview().market.id;
   assert.equal(records.get(marketId)[0].data.priority, "Note sauvegardée automatiquement");
-  assert.equal(nodes(tree).find(node => node.props?.className === "point-autosave-indicator").props.children, "À jour");
+  assert.equal(find(node=>node.type?.name==="PointPeriodSelector").props.status,"Enregistré");
   hooks.slots.forEach(slot => slot?.cleanup?.()); app.clearSessionDrafts();
   hooks = {slots: [], effects: [], cursor: 0}; timers.clear(); autoTimers.clear();
   await settle(); assert.equal(preview().data.priority, "Note sauvegardée automatiquement");

@@ -7,9 +7,9 @@ const globals = readFileSync(new URL("../app/globals.css", import.meta.url), "ut
 const mobileSource = readFileSync(new URL("../app/styles/mobile.css", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../features/market-pulse/free-point-canvas.tsx", import.meta.url), "utf8");
 
-test("loads the shared mobile layer last and keeps every responsive selector valid", () => {
+test("loads responsive layers after the shared styles and keeps every mobile selector valid", () => {
   const imports = [...globals.matchAll(/@import\s+["']([^"']+)["']/g)].map((match) => match[1]);
-  assert.ok(imports.indexOf("./styles/mobile.css") > imports.indexOf("./styles/components.css"));
+  assert.deepEqual(imports.slice(-3), ["./styles/mobile.css", "./styles/alignment.css", "./styles/point-interaction.css"]);
   const css = postcss.parse(mobileSource);
   const media = css.nodes.filter((node) => node.type === "atrule" && node.name === "media").map((node) => node.params);
   assert.ok(media.includes("(max-width: 700px)"));

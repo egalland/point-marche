@@ -63,9 +63,11 @@ test("standalone market and analyst pages respect saved block order and widths",
   data.preferences.fontScalePercent = 125;
   data.preferences.density = "airy";
   data.preferences.readModules.comparison = true;
+  data.preferences.htmlModules.comparison = true;
+  data.preferences.freeLayout={mode:"flow"};
   const html = app.buildInteractiveHtml(data, market, []);
   assert.deepEqual([...html.matchAll(/data-module="([a-z]+)"/g)].map((match) => match[1]), data.preferences.moduleOrder);
-  assert.match(html, /data-module="promotions" style="--columns:2"/);
+  assert.match(html, /data-module="promotions"[^>]*style="--columns:2"/);
   assert.match(html, /--point-scale:1\.25;--space:24px/);
   assert.match(html, /height:0%/);
   const analystData = point.initialAnalystPoint(analyst);
@@ -121,20 +123,20 @@ test("manual Planner values cannot be enriched or inserted into the imported reg
   assert.deepEqual(plannerRegistry.recoverPlannerTasksFromPoints([{ marketId: "a", payload }], { a: ["REV-PB"] }), []);
 });
 
-test("mail and standalone comparison visibility follow the point despite legacy flags", () => {
+test("mail and standalone comparison follow their explicit destination flags", () => {
   const market = app.defaultMarkets[0];
   const data = app.normalizePointData({ ...app.initialData(), jira: [], marketComparison: snapshot }, market.id);
   assert.equal(data.preferences.readModules.comparison, false);
   assert.doesNotMatch(app.buildMailHtml(data, market, []), /Comparaison des marchés|Marché A/);
   assert.doesNotMatch(app.buildInteractiveHtml(data, market, []), /Comparaison des marchés|Marché A/);
   data.preferences.mailModules.comparison = true;
-  assert.doesNotMatch(app.buildMailHtml(data, market, []), /Comparaison des marchés|Marché A/);
+  assert.match(app.buildMailHtml(data, market, []), /Comparaison des marchés|Marché A/);
   assert.doesNotMatch(app.buildInteractiveHtml(data, market, []), /Marché A/);
   data.preferences.htmlModules.comparison = true;
-  assert.doesNotMatch(app.buildInteractiveHtml(data, market, []), /Marché A/);
+  assert.match(app.buildInteractiveHtml(data, market, []), /Marché A/);
   const actions = { updateFreeLayout() {}, updatePriority() {}, updateDossier() {}, addDossier() {}, removeDossier() {}, updateOperation() {}, resetOperation() {}, addOperation() {}, removeOperation() {}, updatePromotion() {}, addPromotion() {}, removePromotion() {}, updateJira() {}, resetJira() {}, addJira() {}, setSourceMode() {}, insertModule() {}, hideModule() {}, moveModule() {}, updateModuleWidth() {}, resetLayout() {} };
   const read = renderToStaticMarkup(createElement(app.PreviewDashboard, { data, market, archive: [], editing: true, actions }));
-  assert.match(read, /Ajouter un module/);
+  assert.match(read, /Outils du point/);
   assert.doesNotMatch(read, /Modifier pendant le point/);
   assert.doesNotMatch(read, /Marché A/);
   data.preferences.readModules.comparison = true;
