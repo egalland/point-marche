@@ -2,7 +2,7 @@
 
 Application pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-**Version des sources : V94** · Interface en français · Ordinateur et mobile
+**Version des sources : V95** · Interface en français · Ordinateur et mobile
 
 
 
@@ -21,9 +21,9 @@ Application pour préparer, présenter et diffuser les points hebdomadaires des 
 
 L’interface propose les thèmes clair, sombre et système. Le menu latéral peut afficher les textes ou uniquement les pictogrammes. Sur mobile, le point marché utilise toute la largeur disponible.
 
-Le module achats du point présente une synthèse du périmètre sélectionné : volumes, évolution, fournisseurs les plus représentés et articles récurrents. Les réglages et le tableau détaillé restent accessibles en édition. Les nouvelles vues utilisent une période basée sur la semaine du point.
+Le module achats du point affiche uniquement le nombre de lignes par spécialité sélectionnée et leur total. La période correspond par défaut au lundi–dimanche de la semaine du point ; deux dates permettent de choisir une autre période. Une ou plusieurs spécialités peuvent être cochées. Le décompte utilise la première date d’extraction et se retrouve dans le mail et la page jointe.
 
-La page HTML jointe reprend les titres, l’ordre, les largeurs et les positions des blocs du point ; son contenu reste dépliable et imprimable. Le mail affiche directement les données et les détails nécessaires, avec une présentation verticale compatible avec les clients de messagerie. Les commentaires Jira et la synthèse achats sont conservés dans les deux formats.
+La page HTML jointe reprend les titres, l’ordre, les largeurs et les positions des blocs du point ; son contenu reste dépliable et imprimable. Le mail affiche directement les données et les détails nécessaires, avec une présentation verticale compatible avec les clients de messagerie. Les commentaires Jira et le décompte achats sont conservés dans les deux formats.
 
 ## Parcours d’utilisation
 
@@ -57,7 +57,7 @@ Le stockage partagé dépend du mode d’exécution : un simple dossier réseau 
 
 | Version | Évolution |
 | --- | --- |
-| V94 | Retrait de l’animation cachée du pied de page. |
+| V95 | Retrait de l’animation cachée du pied de page. |
 | V92 | Placement bord contre bord, suppression de l’espace obligatoire et aimantation sans déplacement des voisins au contact. |
 | V89 | Point marché bord à bord sur mobile, sans padding extérieur latéral. |
 | V88 | Harmonisation des alignements, des espacements, du calendrier et du menu mobile. |

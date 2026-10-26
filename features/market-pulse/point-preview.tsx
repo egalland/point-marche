@@ -131,7 +131,7 @@ export function PreviewDashboard({ data, market, archive, editing = false, actio
   const operationGroups = [currentMonth, followingMonth].map((month, index) => ({ month, items: data.operations.filter((item) => index === 1 ? item.month === followingMonth : item.month !== followingMonth) }));
   const isModuleEditing = (id: PointModule) => canManage && (editing || editingModule === id);
   const content: Record<PointModule, ReactNode> = {
-    purchaseData: <PURCHASESPoint configs={data.purchaseDataConfigs} specialty={market.name} meetingDate={data.meetingDate} onChange={isModuleEditing("purchaseData") ? actions?.updatePURCHASES : undefined}/>,
+    purchaseData: <PURCHASESPoint configs={data.purchaseDataConfigs} meetingDate={data.meetingDate} onChange={isModuleEditing("purchaseData") ? actions?.updatePURCHASES : undefined}/>,
     simulationComparison: <SimulationComparison tasks={tasks} markets={markets} config={data.simulationComparisonConfig ?? normalizeComparison(null, market.id)} snapshot={data.simulationComparisonSnapshot} editing={isModuleEditing("simulationComparison")} updatedAt={plannerUpdatedAt} onChange={actions?.updateComparison}/>,
     comparison: <MarketComparisonChart snapshot={data.marketComparison}/>,
     jira: <JiraCommandCenter key={`${market.id}-${data.meetingDate}`} data={data} archive={archive} market={market} editing={isModuleEditing("jira")} onUpdate={actions?.updateJira} onReset={actions?.resetJira} onAdd={actions?.addJira} onRules={actions?.updateJiraRules}/>,

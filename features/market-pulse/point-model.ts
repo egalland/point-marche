@@ -74,7 +74,7 @@ export const pointModules: { id: PointModule; label: string; detail: string }[] 
   { id: "operations", label: "Simulations", detail: "État métier final, importé ou corrigé pendant le point" },
   { id: "promotions", label: "Promotions", detail: "Promotions achat et actions commerciales" },
   { id: "alerts", label: "Vigilances", detail: "Alertes dossiers et Jira" },
-  { id: "purchaseData", label: "Suivi PURCHASES", detail: "Vues multiples par spécialité et fournisseur" },
+  { id: "purchaseData", label: "Suivi PURCHASES", detail: "Période et nombre de PURCHASES par spécialité" },
   { id: "simulationComparison", label: "Comparatif des simulations", detail: "Deux périodes, marché ou fournisseur, volume et variations" },
   { id: "comparison", label: "Comparaison des marchés", detail: "Camembert des tickets Jira ouverts par marché" },
 ];

@@ -3,7 +3,7 @@ import { useWorkspaceRoute } from "./use-workspace-route";
 import { usePointExports } from "./use-point-exports";
 import { LoadingStatus } from "@/components/loading-status";
 import {usePURCHASES} from "./purchaseData-dashboard";
-import {filterPURCHASES,createPURCHASESReport} from "@/lib/purchaseData";
+import {pointPURCHASESConfig,createPURCHASESPointReport} from "@/lib/purchaseData-point";
 import {buildSimulationComparison,normalizeComparison} from "@/lib/simulation-comparison";
 import { WorkspaceHelp } from "@/components/workspace-help";
 import { FeedbackSettings, FeedbackDialog, FeedbackInbox, useFeedbackContact } from "./feedback-center";
@@ -123,7 +123,7 @@ function MarketPulseWorkspace() {
   const {rows: purchaseDataRows,loaded: purchaseDataLoaded,error: purchaseDataSourceError,updatedAt:purchaseDataUpdatedAt} = usePURCHASES();
   const [exportPreview,setExportPreview]=useState<"mail"|"html">("mail");
   const exportSourcePending = Boolean(data.purchaseDataConfigs?.length && !purchaseDataLoaded && !purchaseDataSourceError);
-  const purchaseDataConfigs = useMemo(() => purchaseDataLoaded ? data.purchaseDataConfigs?.map(config => ({ ...config, report: { ...createPURCHASESReport(purchaseDataRows, config), updatedAt: purchaseDataUpdatedAt }, snapshot: undefined })) : data.purchaseDataConfigs, [data.purchaseDataConfigs, purchaseDataLoaded, purchaseDataRows, purchaseDataUpdatedAt]);
+  const purchaseDataConfigs = useMemo(() => {const config=pointPURCHASESConfig(data.purchaseDataConfigs,data.meetingDate);return [purchaseDataLoaded?{...config,report:createPURCHASESPointReport(purchaseDataRows,config,purchaseDataUpdatedAt),snapshot:undefined}:config];}, [data.purchaseDataConfigs,data.meetingDate,purchaseDataLoaded,purchaseDataRows,purchaseDataUpdatedAt]);
   const simulationSnapshot = useMemo(() => plannerTasks.length ? buildSimulationComparison(plannerTasks, marketOptions, normalizeComparison(data.simulationComparisonConfig, marketId), plannerUpdatedAt) : data.simulationComparisonSnapshot, [plannerTasks, marketOptions, data.simulationComparisonConfig, data.simulationComparisonSnapshot, marketId, plannerUpdatedAt]);
   const preparedData = useMemo(() => {
     const enriched = { ...data, purchaseDataConfigs, simulationComparisonSnapshot: simulationSnapshot };
@@ -132,7 +132,7 @@ function MarketPulseWorkspace() {
     if (data.jiraMode !== "manual") return enriched;
     return { ...enriched, marketComparison: { ...snapshot, rows: snapshot.rows.map((row): MarketComparisonRow => row.marketId === marketId ? { ...row, count: openTicketCount(data.jira), source: "manual", updatedAt: data.meetingDate } : row) } };
   }, [data, marketId, purchaseDataConfigs, simulationSnapshot]);
-  const exportData = useMemo(()=>view==='mail'&&purchaseDataLoaded?{...preparedData,purchaseDataConfigs:preparedData.purchaseDataConfigs?.map(c=>({...c,snapshot:filterPURCHASES(purchaseDataRows,c)}))}:preparedData,[view,preparedData,purchaseDataLoaded,purchaseDataRows]);
+  const exportData = preparedData;
   const { mailHtml, interactiveHtml, preparing: exportPreparing, error: exportError } = usePointExports(view === "mail" && !exportSourcePending, exportData, market, archive);
   const exportsPending = exportSourcePending || exportPreparing || Boolean(exportError);
   const htmlAttachmentName = interactiveAttachmentName(data, market);

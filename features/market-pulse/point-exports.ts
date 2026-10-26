@@ -1,5 +1,5 @@
 import {operationExportDetails, mailTables} from "@/lib/point-export-data";
-import {purchaseDataExport} from "@/lib/purchaseData";
+import {purchaseDataPointExport} from "@/lib/purchaseData-point";
 import { normalizeFreeLayout, orderedBlockIds, placeMissingBlocks, arrangePresentationBlocks } from "@/lib/free-point-layout";
 
 import { gridRows, moduleColumns } from "@/lib/point-grid";
@@ -33,7 +33,7 @@ export function buildMailHtml(data: PointData, market: Market, archive: PointRec
   const kpis = [[stats.currentVolume, "Tickets ouverts"], [stats.attentionCount, "À surveiller selon les seuils"], [stats.criticalCount, "Critiques selon les seuils"], [deltaLabel, "Écart vs dernier point"]];
   const jiraKpis = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>${kpis.map(([value, label], index) => `<td width="25%" valign="top" style="padding-right:${index < 3 ? "8px" : "0"}"><table role="presentation" width="100%" style="background:${index === 2 ? "#FEECEB" : index === 1 ? "#FFF3E4" : "#F4F7F6"};border:1px solid ${index === 2 ? "#F6C8C5" : index === 1 ? "#F2D7B6" : "#DCE5E2"}"><tr><td style="padding:13px"><b style="display:block;color:${index === 2 ? "#B42318" : index === 1 ? "#9A5B13" : "#10201D"};font-size:22px">${value}</b><span style="color:#61736E;font-size:11px;text-transform:uppercase">${label}</span></td></tr></table></td>`).join("")}</tr></table>`;
   const mailSections: Record<PointModule, string> = {
-    purchaseData: section("Suivi PURCHASES", purchaseDataExport(data.purchaseDataConfigs, true)),
+    purchaseData: section("Suivi PURCHASES", purchaseDataPointExport(data.purchaseDataConfigs, data.meetingDate)),
     simulationComparison: section("Comparatif des simulations", comparisonHtml(data.simulationComparisonSnapshot)),
     comparison: section("Comparaison des marchés", marketComparisonHtml(data.marketComparison, data.marketComparison ? comparisonPng(data.marketComparison.rows) : undefined)),
     jira: section(data.jiraMode === "manual" ? "Tickets Jira · saisie manuelle" : "Tickets Jira · alertes prioritaires", `${jiraKpis}<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${jiraRows || '<tr><td style="padding:13px 10px;color:#71817D;font-size:13px">Aucun ticket actif.</td></tr>'}</table>`),
@@ -82,7 +82,7 @@ export function buildInteractiveHtml(data: PointData, market: Market, archive: P
   const otherAlerts = buildAlerts(data, market).map((item) => `<article class="${item.severity}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.category)} · ${escapeHtml(item.detail)}</span></article>`).join("");
   const deltaLabel = stats.delta === null ? "—" : `${stats.delta > 0 ? "+" : ""}${stats.delta}`;
   const htmlSections: Record<PointModule, string> = {
-    purchaseData: `<section class="section"><h2>Suivi PURCHASES</h2>${purchaseDataExport(data.purchaseDataConfigs)}</section>`,
+    purchaseData: `<section class="section"><h2>Suivi PURCHASES</h2>${purchaseDataPointExport(data.purchaseDataConfigs, data.meetingDate)}</section>`,
     simulationComparison: `<section class="section"><h2>Comparatif des simulations</h2>${comparisonHtml(data.simulationComparisonSnapshot)}</section>`,
     jira: `<section class="jira"><header class="jira-head"><div><span class="eyebrow">Radar Jira interactif</span><h2>Tickets ouverts du marché</h2><p>Les tickets en alerte sont placés en premier. Utilisez les filtres, ouvrez une personne puis cliquez sur un ticket pour accéder à Jira.</p></div><div class="delta"><small>Depuis le dernier point</small><strong>${deltaLabel}</strong></div></header><div class="kpis"><button type="button" class="active" data-scope="all"><span>Tickets ouverts</span><strong>${stats.currentVolume}</strong><small>Stock actuel</small></button><button type="button" class="warning" data-scope="attention"><span>Sans activité</span><strong>${stats.attentionCount}</strong><small>Depuis ${market.jiraWarningDays} jours</small></button><button type="button" class="critical" data-scope="critical"><span>Attention forte</span><strong>${stats.criticalCount}</strong><small>Depuis ${market.jiraCriticalDays} jours</small></button></div><div class="visuals"><article class="panel"><strong>Évolution du volume</strong><div class="trend">${trendBars}</div></article><article class="panel"><strong>Répartition par statut</strong><div class="status-bar">${statusSegments || "<i></i>"}</div><div class="status-buttons"><button type="button" class="active" data-status="all">Tous</button>${statusButtons}</div></article></div><div class="filter-line"><span><strong id="visible-total">${stats.currentVolume}</strong> tickets affichés</span><button type="button" id="reset-filter">Réinitialiser</button></div><div class="people">${peopleHtml || '<div class="empty">Aucun ticket Jira actif.</div>'}</div></section>`,
     comparison: `<section class="section"><h2>Comparaison des marchés</h2>${marketComparisonHtml(data.marketComparison)}</section>`,
