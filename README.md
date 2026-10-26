@@ -2,7 +2,7 @@
 
 Application pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-**Version des sources : V96** · Interface en français · Ordinateur et mobile
+**Version des sources : V97** · Interface en français · Ordinateur et mobile
 
 
 
@@ -26,6 +26,8 @@ Le module achats du point affiche uniquement le nombre de lignes par spécialit�
 La page HTML jointe reprend les titres, l’ordre, les largeurs et les positions des blocs du point ; son contenu reste dépliable et imprimable. Le mail affiche directement les données et les détails nécessaires, avec une présentation verticale compatible avec les clients de messagerie. Les commentaires Jira et le décompte achats sont conservés dans les deux formats.
 
 Le choix du marché et de la semaine tient dans un bandeau compact ; le calendrier s’ouvre à la demande. Les formulaires apparaissent uniquement après sélection d’un bloc. Un clic ailleurs ou Échap ferme les outils. Sur mobile, les blocs s’empilent et le bouton Outils donne accès au menu contextuel. Les réglages, la reprise du point précédent et les actions d’import/export restent accessibles dans les options du point.
+
+Les surfaces suivent une hiérarchie commune : un cadre principal, des séparateurs entre les entrées et des fonds légers pour les indicateurs. Les encadrements internes et ombres superposées sont réduits dans les points, statistiques, imports, fiches fournisseurs et retours. Les champs, sélections et alertes conservent leurs repères visuels.
 
 ## Parcours d’utilisation
 
@@ -59,7 +61,7 @@ Le stockage partagé dépend du mode d’exécution : un simple dossier réseau 
 
 | Version | Évolution |
 | --- | --- |
-| V96 | Retrait de l’animation cachée du pied de page. |
+| V97 | Retrait de l’animation cachée du pied de page. |
 | V92 | Placement bord contre bord, suppression de l’espace obligatoire et aimantation sans déplacement des voisins au contact. |
 | V89 | Point marché bord à bord sur mobile, sans padding extérieur latéral. |
 | V88 | Harmonisation des alignements, des espacements, du calendrier et du menu mobile. |

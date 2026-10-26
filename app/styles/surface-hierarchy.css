@@ -1,0 +1,166 @@
+/* One main surface, quiet nested content, visible controls and state indicators. */
+.app-shell {
+  --surface-divider: color-mix(in srgb, var(--line) 72%, transparent);
+  --surface-tint: color-mix(in srgb, var(--text) 3%, var(--surface));
+}
+.app-shell :is(.surface,.analyst-point-module,.supplier-section,.supplier-identity,.supplier-search,.supplier-empty,.import-source-card,.import-refresh-panel):not(.selected,.active,.error,.warning,.critical,.danger) {
+  border-color: var(--surface-divider);
+  border-radius: 14px;
+  box-shadow: none;
+}
+/* Nested sections belong to their parent; their whitespace supplies the hierarchy. */
+.app-shell .surface .surface:not(.selected,.active,.error,.warning,.critical,.danger),
+.app-shell .app-dialog .surface:not(.selected,.active,.error,.warning,.critical,.danger),
+.app-shell .analyst-point-module :is(.report-standalone,.report-focus,.jira-command-center) {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.app-shell .point-quiet-canvas .v51-block:not(.selected) {
+  border-color: var(--surface-divider);
+  box-shadow: none;
+}
+.app-shell .point-quiet-canvas .v70-module-header {
+  border-bottom-color: var(--surface-divider);
+  background: transparent;
+}
+.app-shell .point-quiet-canvas .v51-content {
+  padding: 18px;
+}
+.app-shell .point-quiet-canvas .v51-content > :is(.report-focus,.report-standalone,.report-alert-card,.jira-command-center,.purchaseData-point,.surface) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+.app-shell .point-quiet-canvas .v51-content .report-heading {
+  padding: 0;
+}
+/* Dossiers are publications separated by a rule, rather than framed cards. */
+.app-shell .dossier-board .dossier-publication,
+.app-shell .analyst-point-module .analyst-dossier-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 18px 0;
+}
+.app-shell .dossier-board .dossier-publication:first-child,
+.app-shell .analyst-point-module .analyst-dossier-card:first-child {
+  padding-top: 0;
+}
+.app-shell .dossier-board .dossier-publication + .dossier-publication,
+.app-shell .analyst-point-module .analyst-dossier-card + .analyst-dossier-card {
+  border-top: 1px solid var(--surface-divider);
+}
+/* Months and analytical subsections no longer draw another frame. */
+.app-shell :is(.simulation-month,.jira-trend-panel,.jira-status-panel,.jira-command-filter,.jira-command-delta,.analyst-completed-trend,.analyst-jira-metrics > div) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell .simulation-month { padding: 0; }
+.app-shell .simulation-month-grid { gap: 24px; }
+.app-shell .simulation-month > header { border-bottom-color: var(--surface-divider); }
+.app-shell :is(.promotion-card,.report-simulation) {
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-tint);
+  box-shadow: none;
+}
+.app-shell :is(.simulation-metrics,.report-simulation) .supplier-turnover {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding-inline: 0;
+}
+/* A soft fill distinguishes metrics without surrounding every value with a line. */
+.app-shell :is(.report-metric,.stats-kpis article,.stats-delay-card,.supplier-kpis article,.supplier-delay-grid article,.supplier-dialog-stats article,.import-registry-kpis article,.jira-file-kpis article,.analyst-point-kpis article,.analyst-jira-status-grid article,.analyst-delay-grid article,.comparison-totals > div) {
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-tint);
+  box-shadow: none;
+}
+.app-shell .jira-command-kpis button {
+  border-color: transparent;
+  border-radius: 10px;
+  background: var(--surface-tint);
+  box-shadow: none;
+}
+.app-shell .jira-command-kpis button.active {
+  border-color: var(--aqua);
+  background: color-mix(in srgb, var(--aqua) 8%, var(--surface));
+}
+.app-shell .jira-command-kpis button.warning.active {
+  border-color: var(--peach);
+  background: color-mix(in srgb, var(--peach) 8%, var(--surface));
+}
+.app-shell .jira-command-kpis button.critical.active {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 8%, var(--surface));
+}
+.app-shell .jira-command-people > article {
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-tint);
+}
+.app-shell .jira-command-people > article.open {
+  background: color-mix(in srgb, var(--aqua) 4%, var(--surface));
+}
+/* Repeated entries read as lists, with critical states kept on the leading edge. */
+.app-shell :is(.analyst-jira-list > a,.analyst-activity-list article,.supplier-simulation,.feedback-ticket-list > button:not(.active):not([aria-pressed="true"])) {
+  border-width: 0 0 1px;
+  border-bottom-color: var(--surface-divider);
+  border-radius: 0;
+  box-shadow: none;
+}
+.app-shell .analyst-jira-list > a.critical {
+  border-left: 3px solid var(--red);
+}
+.app-shell .supplier-simulation { background: transparent; }
+.app-shell .supplier-simulation-body { border-top-color: var(--surface-divider); }
+.app-shell :is(.supplier-table-scroll,.purchaseData-table) {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* Keep drop zones and form fields intact; remove only their extra wrappers. */
+.app-shell .import-source-card :is(.surface,.purchaseData-view),
+.app-shell .analyst-point-module :is(.manual-analyst-editor,.analyst-module-empty) {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.app-shell :is(.comparison-controls fieldset,.jira-rules-editor fieldset,.source-mode-control,.manual-import-fallback,.canvas-source-controls) {
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-tint);
+  box-shadow: none;
+}
+.app-shell .jira-rules-editor {
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--surface-divider);
+  padding: 16px 0 0;
+}
+.app-shell .point-options-dialog .point-layout-toolbar,
+.app-shell .v51-floating .rich-toolbar {
+  border: 0;
+  box-shadow: none;
+}
+@media(max-width:760px) {
+  .app-shell .point-quiet-canvas .v51-content { padding: 14px; }
+  .app-shell .simulation-month-grid { gap: 20px; }
+  .app-shell .dossier-board .dossier-publication { padding-block: 16px; }
+  .app-shell .dossier-board .dossier-publication:first-child { padding-top: 0; }
+}
+@media print {
+  .app-shell { --surface-divider: #d3d8dc; --surface-tint: #f7f7f7; }
+}
+
+.app-shell .analyst-point-kpis article.resolved { background: color-mix(in srgb, var(--mint) 7%, var(--surface)); }
