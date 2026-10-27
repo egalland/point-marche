@@ -8,8 +8,8 @@ export function PointToolWheel({x,y,title,tools,onClose}:{x:number;y:number;titl
  useEffect(()=>{const previous=document.activeElement as HTMLElement|null;ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({preventScroll:true});
  const outside=(event:PointerEvent)=>{if(!ref.current?.contains(event.target as Node))close.current();};
  const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close.current();previous?.focus({preventScroll:true});}};
- const dismiss=()=>close.current();document.addEventListener('pointerdown',outside);document.addEventListener('keydown',key);window.addEventListener('resize',dismiss);window.addEventListener('scroll',dismiss,true);
- return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',key);window.removeEventListener('resize',dismiss);window.removeEventListener('scroll',dismiss,true);};},[]);
+ const dismiss=()=>close.current();document.addEventListener('pointerdown',outside);document.addEventListener('keydown',key);window.addEventListener('resize',dismiss);window.addEventListener('wheel',dismiss,{passive:true});window.addEventListener('touchmove',dismiss,{passive:true});
+ return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',key);window.removeEventListener('resize',dismiss);window.removeEventListener('wheel',dismiss);window.removeEventListener('touchmove',dismiss);};},[]);
  if(typeof document==='undefined')return null;
  const viewportWidth=document.documentElement.clientWidth||window.innerWidth,viewportHeight=document.documentElement.clientHeight||window.innerHeight;
  const size=Math.min(344,viewportWidth-16,viewportHeight-16),half=size/2,left=Math.max(8,Math.min(x-half,viewportWidth-size-8)),top=Math.max(8,Math.min(y-half,viewportHeight-size-8)),radius=size*.355;
