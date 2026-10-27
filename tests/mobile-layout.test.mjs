@@ -9,7 +9,7 @@ const appSource = readFileSync(new URL("../features/market-pulse/free-point-canv
 
 test("loads responsive layers after the shared styles and keeps every mobile selector valid", () => {
   const imports = [...globals.matchAll(/@import\s+["']([^"']+)["']/g)].map((match) => match[1]);
-  assert.deepEqual(imports.slice(-4), ["./styles/mobile.css", "./styles/alignment.css", "./styles/point-interaction.css", "./styles/surface-hierarchy.css"]);
+  assert.deepEqual(imports.slice(-5), ["./styles/mobile.css", "./styles/alignment.css", "./styles/point-interaction.css", "./styles/surface-hierarchy.css", "./styles/analyst-interaction.css"]);
   const css = postcss.parse(mobileSource);
   const media = css.nodes.filter((node) => node.type === "atrule" && node.name === "media").map((node) => node.params);
   assert.ok(media.includes("(max-width: 700px)"));

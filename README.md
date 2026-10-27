@@ -2,7 +2,7 @@
 
 Application pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-**Version des sources : V97** · Interface en français · Ordinateur et mobile
+**Version des sources : V98** · Interface en français · Ordinateur et mobile
 
 
 
@@ -12,7 +12,7 @@ Application pour préparer, présenter et diffuser les points hebdomadaires des 
 | --- | --- |
 | Point marché | Sélection du marché et de la semaine, calendrier, reprise sélective du point précédent et édition directe des blocs. |
 | Mise en page | Édition au clic sur un bloc, roue d’outils au clic droit, redimensionnement au survol et aide à l’alignement. |
-| Point analyste | Suivi individuel des activités et préparation des points à partir des données importées. |
+| Point analyste | Semaine compacte, édition ciblée des blocs, roue d’outils, déplacement et redimensionnement au survol. |
 | Centre d’import | Imports Jira, Planner et PURCHASES, suivi des sources et des dates d’actualisation. |
 | Fournisseurs | Recherche, profils, simulations, variations, trames et consultation des données PURCHASES. |
 | Statistiques | Indicateurs d’activité, délais, tendances et comparaisons de périodes. |
@@ -119,3 +119,9 @@ La compilation et les vérifications adaptées sont réalisées avant publicatio
 - [Aide historique V51](docs/v51.md) et [mode opératoire V51](docs/Mode_Operatoire_V51.md)
 
 Les documents associés à une ancienne version décrivent l’état de cette version ; le code et le présent README reflètent les évolutions plus récentes.
+
+## Plan du site
+
+Le plan navigable `/plan-du-site` regroupe les points hebdomadaires, statistiques, fournisseurs, imports, diffusion, paramètres et aide. Le menu propose un accès direct au plan. Le fichier `/sitemap.xml` reprend les liens des rubriques et est déclaré dans `/robots.txt`. Les fiches individuelles et les routes API en sont exclues.
+
+Le point analyste présente les sources dans un volet replié et les réglages dans un dialogue. Un clic ouvre uniquement le bloc à modifier ; un clic à l’extérieur ou Échap ferme l’édition. La largeur et l’ordre des blocs sont conservés dans la page HTML jointe. Sur mobile, les blocs occupent toute la largeur.

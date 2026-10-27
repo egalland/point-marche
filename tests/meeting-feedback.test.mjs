@@ -75,7 +75,7 @@ test("standalone market and analyst pages respect saved block order and widths",
   analystData.preferences.widths.dossiers = "two-thirds";
   const analystHtml = analystExport.analystInteractiveHtml(analystData, analyst, stats, null);
   assert.deepEqual([...analystHtml.matchAll(/data-module="([a-z0-9]+)"/g)].map((match) => match[1]), ["dossiers", "overview", "planner", "jira"]);
-  assert.match(analystHtml, /data-module="dossiers" style="--columns:4"/);
+  assert.match(analystHtml, /data-module="dossiers" style="--columns:8"/);
 });
 
 test("market comparison distinguishes unknown markets from zero and weights manual summaries", () => {

@@ -49,6 +49,7 @@ export function WorkspaceNavigation({ view, userName, onSelect, onFeedback, onIn
       <div className="workspace-nav-group workspace-feedback"><span>Votre avis</span><button type="button" aria-label="Boîte Bugs & idées" title="Boîte Bugs & idées" onClick={() => { setOpen(false); onInbox(); }}><AppIcon name="mail" size={20}/><span>Boîte Bugs & idées</span></button><button type="button" aria-label="Signaler un bug" title="Signaler un bug" onClick={() => { setOpen(false); onFeedback("bug"); }}><AppIcon name="bug" size={20}/><span>Signaler un bug</span></button><button type="button" aria-label="Soumettre une idée" title="Soumettre une idée" onClick={() => { setOpen(false); onFeedback("idea"); }}><AppIcon name="idea" size={20}/><span>Soumettre une idée</span></button></div>
     </nav>
     <footer className="workspace-account">
+      <a href="/plan-du-site" aria-label="Plan du site" title="Plan du site"><AppIcon name="menu" size={16}/><span>Plan du site</span></a>
       <div><span className="workspace-avatar"><AppIcon name={userName ? "user" : "eye"}/></span><span><strong>{userName || "Espace partagé"}</strong><small>{userName ? "Modification partagée" : "Points enregistrés"}</small></span></div>
       {isLocalWorkspace() && <button type="button" aria-label="Fichier local" title="Fichier local" onClick={() => { setOpen(false); openLocalFiles(); }}><AppIcon name="download" size={16}/><span>Fichier local</span></button>}
 

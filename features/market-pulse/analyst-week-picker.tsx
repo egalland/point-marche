@@ -15,8 +15,8 @@ export function AnalystWeekPicker({ value, savedWeeks, disabled, onSelect }: Pro
   const [month, setMonth] = useState(value.slice(0, 7));
   const selected = isoWeekForDate(value);
   const [year, monthNumber] = month.split("-").map(Number);
-  const firstYear = Math.min(2020, selected.year, ...savedWeeks.map((week) => week.year));
-  const lastYear = Math.max(new Date().getUTCFullYear() + 5, selected.year, ...savedWeeks.map((week) => week.year));
+  const firstYear = Math.min(new Date().getUTCFullYear() - 3, selected.year, ...savedWeeks.map((week) => week.year));
+  const lastYear = Math.max(new Date().getUTCFullYear() + 3, selected.year, ...savedWeeks.map((week) => week.year));
   const years = Array.from({ length: lastYear - firstYear + 1 }, (_, index) => firstYear + index);
   const saved = new Set(savedWeeks.map((week) => `${week.year}-${week.week}`));
   const changeMonth = (amount: number) => {
@@ -28,7 +28,7 @@ export function AnalystWeekPicker({ value, savedWeeks, disabled, onSelect }: Pro
     <div className="analyst-week-control">
       <button type="button" disabled={disabled || selected.year <= 2020 && selected.week === 1} aria-label="Semaine précédente" onClick={() => onSelect(isoWeekForDate(addIsoDays(selected.from, -7)))}>←</button>
       <button type="button" className="analyst-week-trigger" disabled={disabled} aria-haspopup="dialog" aria-expanded={open} onClick={() => { setMonth(value.slice(0, 7)); setOpen(true); }}>
-        <span>Choisir la semaine ▾</span>
+
         <strong>{jiraWeekLabel(selected)}</strong>
         <small>{jiraWeekDateLabel(selected)}</small>
       </button>
@@ -36,6 +36,7 @@ export function AnalystWeekPicker({ value, savedWeeks, disabled, onSelect }: Pro
     </div>
     <AppDialog open={open} onClose={() => setOpen(false)} labelledBy={titleId} className="analyst-week-dialog">
       <header><h2 id={titleId}>Choisir la semaine du point</h2><p>Une ligne du calendrier correspond à une semaine.</p></header>
+      <label className="field analyst-direct-week"><span>Aller à la semaine</span><input type="week" min="2020-W01" max="2200-W52" value={`${selected.year}-W${String(selected.week).padStart(2, "0")}`} onChange={(event) => { const match = /^(\d{4})-W(\d{2})$/.exec(event.target.value); if (match) choose({ year: Number(match[1]), week: Number(match[2]) }); }}/></label>
       <div className="analyst-calendar-controls">
         <button type="button" aria-label="Mois précédent" disabled={year <= firstYear && monthNumber === 1} onClick={() => changeMonth(-1)}>←</button>
         <label><span>Mois</span><select data-autofocus value={monthNumber} onChange={(event) => setMonth(`${year}-${event.target.value.padStart(2, "0")}`)}>{months.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}</select></label>

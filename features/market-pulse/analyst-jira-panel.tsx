@@ -8,6 +8,7 @@ import { isoWeekForDate } from "@/lib/iso-week";
 import { jiraMetricCards } from "@/lib/analyst-jira-metrics";
 
 type Props = {
+  editing?: boolean;
   analystName: string;
   pointDate: string;
   tickets: AnalystJiraTicket[];
@@ -86,16 +87,16 @@ export function AnalystJiraMetrics({ history, pointDate, currentCount, previousC
   </dl>;
 }
 
-export function AnalystJiraPanel({ analystName, pointDate, tickets, unavailable, history, previousWeek, settings, onSettingsChange, onSelectWeek, onRetry }: Props) {
+export function AnalystJiraPanel({ editing = false, analystName, pointDate, tickets, unavailable, history, previousWeek, settings, onSettingsChange, onSelectWeek, onRetry }: Props) {
   const week = isoWeekForDate(pointDate);
   return <section className="analyst-point-module analyst-jira-module analyst-completed-module">
     <header><div><span>Jira · {jiraWeekLabel(week)}</span><h2>Tickets terminés</h2><p>{analystName} · {jiraWeekDateLabel(week)}</p></div><div className="analyst-completed-total" aria-busy={unavailable}><strong>{unavailable ? "—" : tickets.length.toLocaleString("fr-FR")}</strong><span>cette semaine</span></div></header>
     <section className="analyst-completed-trend" aria-busy={history.loading}>
-      <header><h3>Évolution par semaine</h3><label><span>Période du graphique</span><select value={settings.horizon} onChange={(event) => {
+      <header><h3>Évolution par semaine</h3>{editing && <label><span>Période du graphique</span><select value={settings.horizon} onChange={(event) => {
         const horizon = event.target.value as JiraChartSettings["horizon"];
         onSettingsChange({ ...settings, ...(horizon === "custom" && history.history ? { from: history.history.from, to: history.history.to } : {}), horizon });
-      }}><option value="1">1 mois</option><option value="3">3 mois</option><option value="6">6 mois</option><option value="12">1 an</option><option value="custom">Période donnée</option></select></label></header>
-      {settings.horizon === "custom" && <div className="analyst-completed-range"><label><span>Du</span><SafeDateInput value={settings.from} max={settings.to} onCommit={(from) => onSettingsChange({ ...settings, from })}/></label><label><span>Au</span><SafeDateInput value={settings.to} min={settings.from} onCommit={(to) => onSettingsChange({ ...settings, to })}/></label></div>}
+      }}><option value="1">1 mois</option><option value="3">3 mois</option><option value="6">6 mois</option><option value="12">1 an</option><option value="custom">Période donnée</option></select></label>}</header>
+      {editing && settings.horizon === "custom" && <div className="analyst-completed-range"><label><span>Du</span><SafeDateInput value={settings.from} max={settings.to} onCommit={(from) => onSettingsChange({ ...settings, from })}/></label><label><span>Au</span><SafeDateInput value={settings.to} min={settings.from} onCommit={(to) => onSettingsChange({ ...settings, to })}/></label></div>}
       {history.loading ? <div className="analyst-chart-state" role="status">Chargement de l’historique Jira…</div> : history.error ? <div className="analyst-chart-state" role="alert"><span>{history.error}</span><button type="button" className="secondary-button" onClick={onRetry}>Réessayer</button></div> : history.history ? <>
         <AnalystJiraMetrics history={history.history} pointDate={pointDate} currentCount={unavailable ? null : tickets.length} previousCount={previousWeek?.count}/>
         {previousWeek?.loading && <p className="analyst-comparison-state" role="status">Chargement de la semaine précédente…</p>}

@@ -31,7 +31,7 @@ const originalWindow = globalThis.window;
 let autoTimers, timers, tree, records, post, failedMarket, renderComponent, draftRecords;
 const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
-function nodes(value) { if (Array.isArray(value)) return value.flatMap(nodes); if (!value || typeof value !== "object") return []; return [value, ...nodes(value.props?.children)]; }
+function nodes(value) { if (Array.isArray(value)) return value.flatMap(nodes); if (!value || typeof value !== "object") return []; return [value, ...nodes(typeof value.props?.children === "function" && value.type?.name === "AnalystPointCanvas" ? value.props.order.map(value.props.children) : value.props?.children)]; }
 function find(predicate) { const found = nodes(tree).find(predicate); assert.ok(found, "Expected control is available"); return found; }
 const preview = () => find((node) => node.type?.name === "PreviewDashboard").props;
 const navigation = () => find((node) => node.type?.name === "WorkspaceNavigation").props;
@@ -208,7 +208,7 @@ async function openAnalyst() {
   await settle();
 }
 async function editAnalystNote(value) {
-  find((node) => node.props?.["aria-label"] === "Modifier le point analyste").props.onChange({ target: { checked: true } }); await settle();
+  find((node) => node.type?.name === "AnalystPointCanvas").props.onEdit("overview"); await settle();
   find((node) => node.type === "textarea" && node.props["aria-label"] === "Message de synthèse").props.onChange({ target: { value } }); await settle();
 }
 
@@ -232,6 +232,8 @@ test("analyst drafts survive changing analysts and a late save preserves newer n
   find((node) => node.type === "select" && node.props.value === "a").props.onChange({ target: { value: "b" } }); await settle();
   await editAnalystNote("Note analyste B");
   find((node) => node.type === "select" && node.props.value === "b").props.onChange({ target: { value: "a" } }); await settle();
+  assert.equal(find((node) => node.type?.name === "AnalystPointCanvas").props.editing, null);
+  find((node) => node.type?.name === "AnalystPointCanvas").props.onEdit("overview"); await settle();
   assert.equal(find((node) => node.type === "textarea" && node.props["aria-label"] === "Message de synthèse").props.value, "Ajout pendant la sauvegarde");
   assert.equal(app.readLocalDraft("analyst", "b").data.note, "Note analyste B");
 });

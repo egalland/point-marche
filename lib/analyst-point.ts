@@ -148,7 +148,7 @@ export function normalizeAnalystPoint(value: unknown, analyst: GlobalDirectoryUs
       ...fallback.preferences,
       ...preferences,
       order,
-      widths: Object.fromEntries(analystPointModules.map(({ id }) => [id, ["half", "two-thirds", "full"].includes(preferences.widths?.[id]) ? preferences.widths[id] : fallback.preferences.widths[id]])) as Record<AnalystPointModule, ModuleWidth>,
+      widths: Object.fromEntries(analystPointModules.map(({ id }) => [id, ["quarter", "half", "two-thirds", "three-quarters", "full"].includes(preferences.widths?.[id]) ? preferences.widths[id] : fallback.preferences.widths[id]])) as Record<AnalystPointModule, ModuleWidth>,
       readModules: visible(preferences.readModules),
       mailModules: visible(preferences.mailModules),
       htmlModules: visible(preferences.htmlModules),
