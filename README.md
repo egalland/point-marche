@@ -2,7 +2,7 @@
 
 Application pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-**Version des sources : V99** · Interface en français · Ordinateur et mobile
+**Version des sources : V100** · Interface en français · Ordinateur et mobile
 
 
 
@@ -127,3 +127,7 @@ Le plan navigable `/plan-du-site` regroupe les points hebdomadaires, statistique
 Le point analyste présente les sources dans un volet replié et les réglages dans un dialogue. Un clic ouvre uniquement le bloc à modifier ; un clic à l’extérieur ou Échap ferme l’édition. La largeur et l’ordre des blocs sont conservés dans la page HTML jointe. Sur mobile, les blocs occupent toute la largeur.
 
 Les fenêtres du point conservent leur taille lorsque leur contenu évolue. Un seul défilement vertical est utilisé par bloc et la molette reprend le défilement de la page à ses limites. La lecture mobile conserve des blocs de hauteur naturelle.
+
+## Partage du build local
+
+Le HTML autonome permet de rejoindre un dossier partagé. Chaque modification est écrite dans un fichier distinct, puis les sessions vérifient le journal toutes les trois secondes après la saisie. Les points distincts se réunissent ; les versions concurrentes d’un même point restent disponibles pour résolution. Les imports sont des lots indivisibles. Le navigateur doit autoriser la lecture et l’écriture dans le dossier. Voir [la mise en place et les limites du partage local](docs/partage-local.md).
