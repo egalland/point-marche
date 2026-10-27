@@ -2,7 +2,7 @@
 
 Application pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-**Version des sources : V100** · Interface en français · Ordinateur et mobile
+**Version des sources : V101** · Interface en français · Ordinateur et mobile
 
 
 
@@ -131,3 +131,7 @@ Les fenêtres du point conservent leur taille lorsque leur contenu évolue. Un s
 ## Partage du build local
 
 Le HTML autonome permet de rejoindre un dossier partagé. Chaque modification est écrite dans un fichier distinct, puis les sessions vérifient le journal toutes les trois secondes après la saisie. Les points distincts se réunissent ; les versions concurrentes d’un même point restent disponibles pour résolution. Les imports sont des lots indivisibles. Le navigateur doit autoriser la lecture et l’écriture dans le dossier. Voir [la mise en place et les limites du partage local](docs/partage-local.md).
+
+## Bugs et idées
+
+Le bouton fixe bug / ampoule ouvre un formulaire commun avec choix du type. Le suivi est regroupé dans **Paramètres → Bugs et idées** : listes séparées par type, recherche, filtre par statut, badges visuels et détails des tickets. Voir [le mode opératoire](docs/bugs-et-idees.md).

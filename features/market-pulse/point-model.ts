@@ -23,7 +23,7 @@ import { hasMarketSimulationOverride, marketSimulationFields, normalizeMarketSim
 
 export type Tone = "mint" | "violet" | "aqua" | "peach" | "red";
 export type View = WorkspaceView;
-export type Section = "general" | "dossiers" | "operations" | "promotions" | "jira" | "saved" | "markets" | "users" | "mail" | "personalization";
+export type Section = "general" | "dossiers" | "operations" | "promotions" | "jira" | "saved" | "markets" | "users" | "mail" | "personalization" | "feedback";
 export type FontScale = "compact" | "standard" | "large";
 export type Density = "compact" | "comfortable" | "airy";
 export type PointModule = "jira" | "dossiers" | "operations" | "promotions" | "alerts" | "comparison" | "simulationComparison" | "purchaseData";

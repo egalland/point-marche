@@ -7,7 +7,7 @@ import {usePURCHASES} from "./purchaseData-dashboard";
 import {pointPURCHASESConfig,createPURCHASESPointReport} from "@/lib/purchaseData-point";
 import {buildSimulationComparison,normalizeComparison} from "@/lib/simulation-comparison";
 import { WorkspaceHelp } from "@/components/workspace-help";
-import { FeedbackSettings, FeedbackDialog, FeedbackInbox, useFeedbackContact } from "./feedback-center";
+import { FeedbackSettings, FeedbackDialog, FeedbackInbox, FeedbackLauncher, useFeedbackContact } from "./feedback-center";
 import { APP_VERSION } from "@/lib/app-version";
 import { appFetch as fetch, isLocalWorkspace, markLocalFormPending, readLocalDraft, writeLocalDraft, saveLocalFile, markPointSaved, hasUnsavedSessionDrafts, configureHostedDrafts, loadPointDraft, preparePointSave, finishPointSave, hostedPointDrafts } from "@/lib/app-transport";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent as ReactDragEvent, type ReactNode } from "react";
@@ -59,7 +59,7 @@ export function MarketPulseApp() {
 
 function MarketPulseWorkspace() {
   const feedbackContact = useFeedbackContact();
-  const [feedbackKind, setFeedbackKind] = useState<"bug" | "idea" | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [marketOptions, setMarketOptions] = useState<Market[]>(defaultMarkets);
   const [marketId, setMarketId] = useState("revetements-menuiserie");
   const [data, setData] = useState<PointData>(() => initialData());
@@ -912,7 +912,7 @@ function MarketPulseWorkspace() {
   };
 
   const navGroups: { label: string; items: { id: Section; label: string; icon: string; count?: number }[] }[] = view === "settings" ? [
-    { label: "Application", items: [{ id: "personalization", label: "Personnalisation", icon: "settings" }, { id: "markets", label: "Marchés & seuils", icon: "edit" }, { id: "users", label: "Annuaire GLOBAL", icon: "user" }] },
+    { label: "Application", items: [{ id: "personalization", label: "Personnalisation", icon: "settings" }, { id: "markets", label: "Marchés & seuils", icon: "edit" }, { id: "users", label: "Annuaire GLOBAL", icon: "user" }, { id: "feedback", label: "Bugs et idées", icon: "bug" }] },
     { label: "Diffusion", items: [{ id: "mail", label: "Paramètres du mail", icon: "mail" }, { id: "saved", label: "Historique des points", icon: "download" }] },
   ] : [
     { label: "Contenu du point", items: [{ id: "general", label: "Cadre du point", icon: "spark" }, { id: "dossiers", label: "Dossiers en cours", icon: "folder" }, { id: "operations", label: "Simulations", icon: "trend" }, { id: "promotions", label: "Promotions", icon: "spark" }, { id: "jira", label: "Tickets Jira", icon: "ticket" }] },
@@ -939,10 +939,10 @@ function MarketPulseWorkspace() {
       <div className="guidance-grid"><article><span>01</span><strong>Choisis le bon marché</strong><p>Les noms et codes sont administrables dans « Gérer les marchés ».</p></article><article><span>02</span><strong>Reprends les suivis utiles</strong><p>Les dossiers et opérations non terminés du dernier point peuvent être reconduits sans doublon.</p></article><article><span>03</span><strong>Complète et diffuse</strong><p>Les destinataires et tickets Jira sont préparés depuis l’annuaire GLOBAL.</p></article></div>
     </section>}
 
+    {section === "feedback" && <section className="editor-section feedback-settings-page"><FeedbackInbox onCreate={() => setFeedbackOpen(true)}/><details className="feedback-notification-settings"><summary>Notifications par mail</summary><FeedbackSettings contact={feedbackContact}/></details></section>}
+
     {section === "personalization" && <section className="editor-section">
       <AppearanceSettings/>
-      <FeedbackSettings contact={feedbackContact}/>
-      <FeedbackInbox/>
       <SectionTitle eyebrow="Paramètres du point actif" title="Personnaliser l’affichage" detail="Ici, règle le confort de lecture et les contenus diffusés. L’ordre et la largeur des blocs se modifient directement dans le point."/>
       <div className="surface personalization-card">
         <div className="personalization-choice"><div><strong>Taille du texte</strong><span>Réglage libre de 85 à 130 %, enregistré avec le point.</span></div><div className="font-scale-control"><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent - 5)} aria-label="Réduire le texte">A−</button><input type="range" min="85" max="130" step="5" value={data.preferences.fontScalePercent} aria-label="Taille du texte" onChange={(event) => updateFontScalePercent(Number(event.target.value))}/><output>{data.preferences.fontScalePercent}%</output><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent + 5)} aria-label="Agrandir le texte">A+</button><button type="button" onClick={() => updateFontScalePercent(100)}>100%</button></div></div>
@@ -1066,8 +1066,9 @@ function MarketPulseWorkspace() {
 
   return <div className={`app-shell font-${data.preferences.fontScale} density-${data.preferences.density}`} style={themeStyle}>
     <a className="skip-link" href="#workspace-content">Aller au contenu</a>
-    <WorkspaceNavigation view={view} userName={session.user?.displayName ?? null} onSelect={chooseView} onFeedback={setFeedbackKind} onInbox={() => { chooseView("settings"); setTimeout(() => document.getElementById("feedback-inbox-title")?.scrollIntoView({ block: "start" }), 100); }}/>
-    <FeedbackDialog kind={feedbackKind} email={feedbackContact.email} ready={feedbackContact.ready} context={`Marché : ${market.name}\r\nRubrique : ${workspaceTitles[view]}`} onClose={() => setFeedbackKind(null)} onSettings={() => { setFeedbackKind(null); chooseView("settings"); }}/>
+    <WorkspaceNavigation view={view} userName={session.user?.displayName ?? null} onSelect={chooseView}/>
+    <FeedbackLauncher onOpen={() => setFeedbackOpen(true)}/>
+    <FeedbackDialog open={feedbackOpen} email={feedbackContact.email} ready={feedbackContact.ready} context={`Marché : ${market.name}\r\nRubrique : ${workspaceTitles[view]}`} onClose={() => setFeedbackOpen(false)} onSettings={() => { setFeedbackOpen(false); chooseView("settings"); setSection("feedback"); }}/>
     <header className="app-header">
       <div className="workspace-location"><span>Espace de travail</span><strong>{workspaceTitles[view]} <small className="app-version">{APP_VERSION}</small></strong></div>
       <div className="header-actions">

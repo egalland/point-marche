@@ -2,7 +2,16 @@
 import { useEffect, useRef, useState } from "react";
 import { appFetch } from "@/lib/app-transport";
 import { feedbackMail, validFeedbackRecipients, feedbackStatuses, type FeedbackRequest, type FeedbackSummary, type FeedbackCapture } from "@/lib/feedback";
+import { AppIcon } from "@/components/app-icon";
 import { AppDialog } from "@/components/app-dialog";
+
+export function FeedbackLauncher({ onOpen }: { onOpen: () => void }) {
+  return <button type="button" className="feedback-launcher" aria-label="Signaler un bug ou proposer une idée" title="Signaler un bug ou proposer une idée" aria-haspopup="dialog" onClick={onOpen}><AppIcon name="bug" size={22}/><span aria-hidden="true">/</span><AppIcon name="idea" size={22}/></button>;
+}
+const statusTones: Record<string, string> = { Nouveau: "new", "En cours": "progress", "En attente": "waiting", Résolu: "resolved", Refusé: "declined" };
+export function FeedbackStatusBadge({ status }: { status: string }) {
+  return <span className={`feedback-status-badge status-${statusTones[status] ?? "new"}`} aria-label={`Statut : ${status}`}><i aria-hidden="true"/>{status}</span>;
+}
 
 export function useFeedbackContact() {
   const [email, setEmail] = useState("");
@@ -39,12 +48,13 @@ export function FeedbackSettings({ contact }: { contact: ReturnType<typeof useFe
   return <section className="surface feedback-settings" aria-labelledby="feedback-settings-title">
     <h2 id="feedback-settings-title">Bugs et idées</h2>
     <p>Destinataires de notification communs aux bugs et aux idées. Sépare les adresses par des points-virgules (10 maximum). Enregistrée automatiquement en quittant le champ, pour toute l’application et tous les marchés.</p>
-    <label className="field"><span>Adresses mail de notification</span><input type="text" inputMode="email" maxLength={2540} placeholder="contact@entreprise.fr; suivi@entreprise.fr" value={contact.draft} disabled={!contact.ready || contact.saving} onChange={event => contact.setDraft(event.target.value)} onBlur={() => void contact.save()} aria-describedby="feedback-save-status" /></label>
+    <label className="field"><span>Adresses mail de notification</span><input type="text" inputMode="email" maxLength={2540} placeholder="contact@example.test; suivi@example.test" value={contact.draft} disabled={!contact.ready || contact.saving} onChange={event => contact.setDraft(event.target.value)} onBlur={() => void contact.save()} aria-describedby="feedback-save-status" /></label>
     <p id="feedback-save-status" role="status">{contact.saving ? "Enregistrement…" : contact.message || (contact.ready ? "La case « Signaler par mail » prépare un mail dans la messagerie par défaut (Outlook si configuré)." : "Chargement…")}</p>
     {!contact.ready && contact.message && <button type="button" className="secondary-button" onClick={() => void contact.load()}>Réessayer</button>}
   </section>;
 }
-export function FeedbackDialog({ kind, email, ready, context, onClose, onSettings }: { kind: "bug" | "idea" | null; email: string; ready: boolean; context: string; onClose: () => void; onSettings: () => void }) {
+export function FeedbackDialog({ open, email, ready, context, onClose, onSettings }: { open: boolean; email: string; ready: boolean; context: string; onClose: () => void; onSettings: () => void }) {
+  const [kind, setKind] = useState<"bug" | "idea">("bug");
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [usercode, setUserCode] = useState("");
@@ -56,6 +66,7 @@ export function FeedbackDialog({ kind, email, ready, context, onClose, onSetting
   const [saved, setSaved] = useState<FeedbackSummary | null>(null);
   const id = useRef("");
   useEffect(() => { try { setUserCode(localStorage.getItem("market-pulse:feedback-usercode") ?? ""); } catch {} }, []);
+  useEffect(() => { if (open && saved) { setSaved(null); setTitle(""); setDetail(""); setCaptures([]); setMessage(""); id.current = ""; } }, [open]);
   async function addCaptures(files: File[]) {
     if (!files.length) return;
     setReading(true); setMessage("");
@@ -85,7 +96,7 @@ export function FeedbackDialog({ kind, email, ready, context, onClose, onSetting
     setBusy(true); setMessage("");
     try {
       id.current ||= crypto.randomUUID();
-      const response = await appFetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id.current, kind: kind ?? "bug", title, detail, context, captures, reporterUserCode: usercode }) });
+      const response = await appFetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id.current, kind, title, detail, context, captures, reporterUserCode: usercode }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
       setSaved(result.item);
@@ -96,10 +107,11 @@ export function FeedbackDialog({ kind, email, ready, context, onClose, onSetting
     } catch (error) { setMessage(error instanceof Error ? error.message : "Demande non enregistrée. Réessaie."); }
     finally { setBusy(false); }
   }
-  return <AppDialog open={!!kind} onClose={onClose} busy={busy || reading} labelledBy="feedback-title" className="feedback-dialog">
-    <h2 id="feedback-title">{kind === "bug" ? "Signaler un bug" : "Soumettre une idée"}</h2>
-    {saved ? <div><p>Demande enregistrée · {saved.id.slice(0, 8)} · {saved.status}</p><p role="status">{message}</p><div className="feedback-actions">{validFeedbackRecipients(email) && <><button className="secondary-button" type="button" onClick={() => openMail(saved)}>Ouvrir le mail</button><button className="secondary-button" type="button" onClick={async () => { try { const mail = mailFor(saved); await navigator.clipboard.writeText(`À : ${email}\nObjet : ${mail.subject}\n\n${mail.body}`); setMessage("Mail copié. Colle-le dans Outlook."); } catch { setMessage("Copie indisponible dans ce navigateur. Utilise les informations du ticket."); } }}>Copier le mail</button></>}<button className="primary-button" type="button" onClick={() => { setSaved(null); setTitle(""); setDetail(""); setCaptures([]); setMessage(""); id.current = ""; }}>Nouvelle demande</button></div></div> : <form onSubmit={event => { event.preventDefault(); void submit(); }} onPaste={event => { const files = Array.from(event.clipboardData.files); if (files.length && !busy && !reading) { event.preventDefault(); void addCaptures(files); } }}>
+  return <AppDialog open={open} onClose={onClose} busy={busy || reading} labelledBy="feedback-title" className="feedback-dialog">
+    <header className="feedback-dialog-heading"><h2 id="feedback-title">Bug ou idée</h2><p>Signale un problème ou propose une amélioration.</p></header>
+    {saved ? <div><p>Demande enregistrée · {saved.id.slice(0, 8)}</p><FeedbackStatusBadge status={saved.status}/><p role="status">{message}</p><div className="feedback-actions">{validFeedbackRecipients(email) && <><button className="secondary-button" type="button" onClick={() => openMail(saved)}>Ouvrir le mail</button><button className="secondary-button" type="button" onClick={async () => { try { const mail = mailFor(saved); await navigator.clipboard.writeText(`À : ${email}\nObjet : ${mail.subject}\n\n${mail.body}`); setMessage("Mail copié. Colle-le dans Outlook."); } catch { setMessage("Copie indisponible dans ce navigateur. Utilise les informations du ticket."); } }}>Copier le mail</button></>}<button className="primary-button" type="button" onClick={() => { setSaved(null); setTitle(""); setDetail(""); setCaptures([]); setMessage(""); id.current = ""; }}>Nouvelle demande</button></div></div> : <form onSubmit={event => { event.preventDefault(); void submit(); }} onPaste={event => { const files = Array.from(event.clipboardData.files); if (files.length && !busy && !reading) { event.preventDefault(); void addCaptures(files); } }}>
       <fieldset disabled={busy || reading} className="feedback-fields">
+        <fieldset className="feedback-kind-picker"><legend>Type de demande</legend><div>{(["bug", "idea"] as const).map(value => <label key={value} className={kind === value ? "selected" : ""}><input type="radio" name="feedback-request-kind" value={value} checked={kind === value} onChange={() => setKind(value)}/><AppIcon name={value === "bug" ? "bug" : "idea"}/><span>{value === "bug" ? "Signaler un bug" : "Proposer une idée"}</span></label>)}</div></fieldset>
         <label className="field"><span>Ton USERCODE</span><input required pattern="[A-Za-z][0-9]{7}" maxLength={8} placeholder="A1234567" value={usercode} onChange={event => setUserCode(event.target.value.toUpperCase())}/></label>
         <small>USERCODE déclaré pour le suivi ; il ne remplace pas une authentification.</small>
         <label className="field"><span>Objet</span><input required maxLength={100} value={title} onChange={event => setTitle(event.target.value)}/></label>
@@ -118,16 +130,17 @@ export function FeedbackDialog({ kind, email, ready, context, onClose, onSetting
 }
 
 const dateLabel = (value: string) => value ? new Date(value).toLocaleString("fr-FR") : "—";
-export function FeedbackInbox() {
+export function FeedbackInbox({ onCreate }: { onCreate?: () => void } = {}) {
   const [items, setItems] = useState<FeedbackSummary[]>([]);
   const [selected, setSelected] = useState<FeedbackRequest | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
-  const [kind, setKind] = useState("");
+  const [kind, setKind] = useState<"bug" | "idea">("bug");
   const [by, setBy] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const selection = useRef(0);
   async function load() {
     setLoading(true); setMessage("");
     try { const response = await appFetch("/api/feedback", { cache: "no-store" }); const result = await response.json(); if (!response.ok) throw new Error(result.error); setItems(result.items); }
@@ -136,9 +149,10 @@ export function FeedbackInbox() {
   }
   useEffect(() => { void load(); const refresh = () => { void load(); }; window.addEventListener("feedback-updated", refresh); try { setBy(localStorage.getItem("market-pulse:feedback-usercode") ?? ""); } catch {} return () => window.removeEventListener("feedback-updated", refresh); }, []);
   async function select(id: string) {
+    const request = ++selection.current;
     setMessage(""); setSelected(null);
-    try { const response = await appFetch(`/api/feedback?id=${encodeURIComponent(id)}`, { cache: "no-store" }); const result = await response.json(); if (!response.ok) throw new Error(result.error); setSelected(result.item); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Chargement impossible."); }
+    try { const response = await appFetch(`/api/feedback?id=${encodeURIComponent(id)}`, { cache: "no-store" }); const result = await response.json(); if (!response.ok) throw new Error(result.error); if (request === selection.current) setSelected(result.item); }
+    catch (error) { if (request === selection.current) setMessage(error instanceof Error ? error.message : "Chargement impossible."); }
   }
   async function updateStatus(next: string) {
     if (!selected || saving) return;
@@ -152,13 +166,16 @@ export function FeedbackInbox() {
   }
   const filtered = items.filter(item => (!status || item.status === status) && (!kind || item.kind === kind) && `${item.title} ${item.reporterUserCode} ${item.context} ${item.id}`.toLocaleLowerCase("fr").includes(query.toLocaleLowerCase("fr")));
   return <section className="surface feedback-inbox" aria-labelledby="feedback-inbox-title">
-    <header><div><h2 id="feedback-inbox-title">Boîte Bugs & idées</h2><p>{items.length} demande(s) · {items.filter(item => !["Résolu", "Refusé"].includes(item.status)).length} à suivre</p></div><button type="button" className="secondary-button" onClick={() => void load()} disabled={loading}>Actualiser</button></header>
-    <div className="feedback-filters"><label className="field"><span>Recherche / USERCODE</span><input type="search" value={query} onChange={event => setQuery(event.target.value)}/></label><label className="field"><span>Statut</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="">Tous les statuts</option>{feedbackStatuses.map(value => <option key={value}>{value}</option>)}</select></label><label className="field"><span>Type</span><select value={kind} onChange={event => setKind(event.target.value)}><option value="">Bugs et idées</option><option value="bug">Bugs</option><option value="idea">Idées</option></select></label></div>
+    <header><div><h2 id="feedback-inbox-title">Bugs et idées</h2><p>{items.filter(item => !["Résolu", "Refusé"].includes(item.status)).length} demande(s) à suivre</p></div><div className="feedback-actions">{onCreate && <button type="button" className="primary-button" onClick={onCreate}>Nouvelle demande</button>}<button type="button" className="secondary-button" onClick={() => void load()} disabled={loading}>Actualiser</button></div></header>
+    <div className="feedback-kind-tabs" role="group" aria-label="Type de demandes">{(["bug", "idea"] as const).map(value => <button type="button" key={value} aria-pressed={kind === value} onClick={() => setKind(value)}><AppIcon name={value === "bug" ? "bug" : "idea"}/>{value === "bug" ? "Bugs" : "Idées"}<span>{items.filter(item => item.kind === value).length}</span></button>)}</div>
+    <div className="feedback-filters"><label className="field"><span>Rechercher une demande / USERCODE</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Objet, demandeur, référence…"/></label><label className="field"><span>Filtrer par statut</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="">Tous les statuts</option>{feedbackStatuses.map(value => <option key={value}>{value}</option>)}</select></label></div>
+    <p className="feedback-result-count">{filtered.length} {kind === "bug" ? "bug(s)" : "idée(s)"} affiché(s)</p>
     <p role="status">{loading ? "Chargement des demandes…" : message}</p>
     {!loading && !filtered.length && <p>{items.length ? "Aucune demande ne correspond aux filtres." : "Aucune demande enregistrée."}</p>}
-    <div className="feedback-ticket-list">{filtered.map(item => <button type="button" key={item.id} onClick={() => void select(item.id)}><strong>{item.kind === "bug" ? "Bug" : "Idée"} · {item.title}</strong><span>{item.reporterUserCode} · {item.status} · {item.captureCount} capture(s)</span><small>Création : {dateLabel(item.createdAt)} · Modification : {dateLabel(item.updatedAt)}</small></button>)}</div>
-    <AppDialog open={!!selected} busy={saving} onClose={() => setSelected(null)} labelledBy="feedback-ticket-title" className="feedback-dialog">
-      {selected && <><h2 id="feedback-ticket-title">{selected.title}</h2><p>{selected.id} · {selected.kind === "bug" ? "Bug" : "Idée"}</p><p>Demandeur : <strong>{selected.reporterUserCode}</strong><br/>Créé le {dateLabel(selected.createdAt)}<br/>Modifié le {dateLabel(selected.updatedAt)}</p><p className="feedback-text">{selected.detail}</p><p className="feedback-text">{selected.context}</p>
+    <div className="feedback-ticket-head" aria-hidden="true"><span>Demande</span><span>Demandeur</span><span>État</span><span>Dernière modification</span><span/></div>
+    <div className="feedback-ticket-list">{filtered.map(item => <button type="button" className="feedback-ticket-row" key={item.id} onClick={() => void select(item.id)}><span className="feedback-ticket-subject"><strong>{item.title}</strong><small>#{item.id.slice(0, 8)} · {item.captureCount} capture(s)</small></span><span className="feedback-ticket-reporter">{item.reporterUserCode}</span><FeedbackStatusBadge status={item.status}/><time dateTime={item.updatedAt}>{dateLabel(item.updatedAt)}</time><AppIcon name="chevron" size={17}/></button>)}</div>
+    <AppDialog open={!!selected} busy={saving} onClose={() => { ++selection.current; setSelected(null); }} labelledBy="feedback-ticket-title" className="feedback-dialog">
+      {selected && <><header className="feedback-dialog-heading"><h2 id="feedback-ticket-title">{selected.title}</h2><FeedbackStatusBadge status={selected.status}/></header><p>{selected.id} · {selected.kind === "bug" ? "Bug" : "Idée"}</p><p>Demandeur : <strong>{selected.reporterUserCode}</strong><br/>Créé le {dateLabel(selected.createdAt)}<br/>Modifié le {dateLabel(selected.updatedAt)}</p><p className="feedback-text">{selected.detail}</p><p className="feedback-text">{selected.context}</p>
         <div className="feedback-captures">{selected.captures.map((capture, index) => <figure key={index}><a href={capture.dataUrl} download={capture.name}><img src={capture.dataUrl} alt={capture.name}/><figcaption>Télécharger {capture.name}</figcaption></a></figure>)}</div>
         <label className="field"><span>USERCODE de la personne qui suit la demande</span><input maxLength={8} pattern="[A-Za-z][0-9]{7}" value={by} disabled={saving} onChange={event => setBy(event.target.value.toUpperCase())}/></label>
         <label className="field"><span>Statut du ticket</span><select value={selected.status} disabled={saving} onChange={event => void updateStatus(event.target.value)}>{feedbackStatuses.map(value => <option key={value}>{value}</option>)}</select></label>
