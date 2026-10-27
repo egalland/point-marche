@@ -100,12 +100,12 @@ test("preserves abandoned import rows without counting them as open or completed
 test("recognizes the full Jira custom-field participant header", () => {
   const value = [
     "Clé de ticket;ID de ticket;État;Résumé;Création;Personne assignée;Mise à jour;Champs personnalisés (Participants à la requête)",
-    "GLOBAL-12502;1646977;En attente de changement;REV : Huot;12/08/2026 09:00;X7877257;27/08/2026 13:38;E7234871(JIRAUSER134623)",
+    "GLOBAL-12502;1646977;En attente de changement;CAT : Fournisseur exemple;12/08/2026 09:00;X0000002;27/08/2026 13:38;A0000001(JIRAUSER134623)",
   ].join("\n");
   const result = csv.parseJiraCsv(value);
 
   assert.equal(result.tickets.length, 1);
-  assert.deepEqual(result.tickets[0].participants, [{ usercode: "E7234871", jiraUserId: "JIRAUSER134623" }]);
+  assert.deepEqual(result.tickets[0].participants, [{ usercode: "A0000001", jiraUserId: "JIRAUSER134623" }]);
 });
 
 test("handles more than twelve thousand Jira rows", () => {

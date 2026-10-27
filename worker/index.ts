@@ -1,3 +1,4 @@
+import { guardedServerRequest } from "../lib/access-server";
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
@@ -48,7 +49,9 @@ const worker = {
       }, allowedWidths);
     }
 
-    return runWithRuntimeEnv(env, () => handler.fetch(request, env, ctx));
+    return runWithRuntimeEnv(env, () => url.pathname.startsWith("/api/")
+      ? guardedServerRequest(request, env, () => handler.fetch(request, env, ctx))
+      : handler.fetch(request, env, ctx));
   },
 };
 

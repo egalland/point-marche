@@ -15,3 +15,10 @@ test('typing during a slow write stays local and publishes next without creating
 test('a stale resolution never acknowledges a newer unseen concurrent version',async()=>{const{dir,a,b,data}=await pair();const c=session(dir,data);await c.engine.sync();note(a,'A');note(b,'B');await Promise.all([a.engine.sync(),b.engine.sync()]);await a.engine.sync();const conflict=a.engine.state.conflicts[0];note(c,'Nouvelle version C');await c.engine.sync();await a.engine.resolve(conflict.key,conflict.choices[0].id);assert.equal(a.engine.state.conflicts.length,1);assert.ok(a.engine.state.conflicts[0].choices.some(c=>c.value.data.priority==='Nouvelle version C'));});
 test('missing or altered journal files suspend synchronization without clearing the current data',async()=>{const{dir,a}=await pair();note(a,'À garder');const first=[...dir.files.keys()][0];dir.files.delete(first);assert.equal(await a.engine.sync(),false);assert.equal(text(a),'À garder');assert.equal(a.engine.state.status,'error');});
 test('corrupt, unsupported and prototype-bearing journal entries are rejected',async()=>{for(const text of['{}','{"__proto__":{}}','{"entry":{"format":"market-pulse-shared","version":2}}'])await assert.rejects(()=>decodeSharedEntry(text));});
+test('audit entries merge per event without remounting remote applications or losing concurrent events',async()=>{
+ const {dir,a,data}=await pair();let refreshes=0;const b=session(dir,data,()=>refreshes++);await b.engine.sync();const initial=refreshes;
+ a.store.writePreference('activity:a',JSON.stringify({id:'a',usercode:'A1234567'}));b.store.writePreference('activity:b',JSON.stringify({id:'b',usercode:'B1234567'}));
+ await Promise.all([a.engine.sync(),b.engine.sync()]);await a.engine.sync();await b.engine.sync();
+ assert.equal(refreshes,initial);for(const s of[a,b]){assert.ok(s.store.readPreference('activity:a'));assert.ok(s.store.readPreference('activity:b'));assert.equal(s.engine.state.conflicts.length,0);}
+ a.store.writePreference('access-role:B1234567',JSON.stringify({usercode:'B1234567',name:'B',role:'admin'}));await a.engine.sync();await b.engine.sync();assert.ok(refreshes>initial);
+});

@@ -1,6 +1,6 @@
 import { build } from "esbuild";
 import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
 import postcss from "postcss";
 import tailwindcss from "@tailwindcss/postcss";
 
@@ -24,7 +24,21 @@ const bundle = await build({
   target: ["chrome110", "edge110"],
   jsx: "automatic",
   write: false,
+  metafile: true,
+  plugins: [{
+    name: "portable-only-modules",
+    setup(builder) {
+      builder.onResolve({filter: /(?:^|\/)app-transport(?:\.ts)?$/}, args => {
+        if(args.path === "@/lib/app-transport" || resolve(dirname(args.importer),args.path).replace(/\.ts$/, "") === resolve(root,"lib/app-transport")) return {path:resolve(root,"offline/app-transport.ts")};
+      });
+      builder.onResolve({filter: /(?:^|\/)point-sync-status(?:\.tsx)?$/}, args => {
+        if(resolve(dirname(args.importer),args.path).replace(/\.tsx$/, "") === resolve(root,"features/market-pulse/point-sync-status")) return {path:resolve(root,"offline/point-sync-status.tsx")};
+      });
+    },
+  }],
 });
+const forbiddenInputs = Object.keys(bundle.metafile.inputs).filter(path => /(?:^|\/)(?:db|worker)(?:\/|$)|app\/api\/|(?:hosted-point-drafts|session-drafts)\.ts$|(?:@cloudflare|drizzle-orm|vinext)(?:\/|$)/.test(path));
+if(forbiddenInputs.length) throw new Error(`Le build local contient des modules serveur inutiles : ${forbiddenInputs.join(", ")}`);
 const javascript = bundle.outputFiles.find((file) => file.path.endsWith(".js"))?.text ?? bundle.outputFiles[0]?.text;
 if (!javascript) throw new Error("Le bundle JavaScript n'a pas été généré.");
 const cssEntry = resolve(root, "offline/entry.css");
@@ -53,4 +67,5 @@ const html = `<!doctype html>
 <meta name="color-scheme" content="light dark"><title>Point marché Revêtements et Menuiserie</title><link rel="icon" href="data:image/svg+xml;base64,${favicon}">
 <script>${appearanceBootstrapScript}</script><style>${stylesheet}</style></head><body class="${fontLayout.bodyClass}">${embeddedData}<div id="root"></div><script>${safeJavascript}</script></body></html>`;
 await writeFile(outputPath, html, "utf8");
+if (process.env.OFFLINE_BUILD_REPORT) await writeFile(resolve(process.env.OFFLINE_BUILD_REPORT), JSON.stringify({inputFiles:Object.keys(bundle.metafile.inputs),javascriptBytes:Buffer.byteLength(javascript),htmlBytes:Buffer.byteLength(html),serverModules:forbiddenInputs},null,2)+"\n");
 console.log(outputPath);

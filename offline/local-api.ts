@@ -1,3 +1,4 @@
+import { guardLocalApi } from "./access-api";
 import { validFeedbackRecipients, parseFeedbackRequest, feedbackSummary, updateFeedbackStatus, type FeedbackRequest } from "../lib/feedback";
 import type { AppTransport } from "../lib/app-transport";
 import { isGlobalRole, roleMailMode, roleUsesAutomaticJira, type GlobalDirectoryUser } from "../lib/global-directory";
@@ -89,7 +90,9 @@ function analystTicket(ticket: JiraDetailedTicket) {
   return { id: `${ticket.key}:${ticket.updatedAt}`, key: ticket.key, internalId: ticket.internalId, summary: ticket.summary, status: ticket.status, createdAt: ticket.createdAt, updatedAt: ticket.updatedAt, link: ticket.link };
 }
 
-export function createLocalApi(store: WorkspaceStore): AppTransport {
+export function createLocalApi(store: WorkspaceStore): AppTransport { return guardLocalApi(store, createUnguardedLocalApi(store)); }
+
+function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
   const staging = new Map<string, Map<string, JiraCsvTicket>>();
   return async (input, init) => {
     try {

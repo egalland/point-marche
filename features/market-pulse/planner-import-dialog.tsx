@@ -1,4 +1,5 @@
 "use client";
+import { useAccess } from "./access-panel";
 import { LoadingStatus } from "@/components/loading-status";
 
 import { useMemo, useState } from "react";
@@ -18,6 +19,7 @@ function normalized(value: string) {
 }
 
 export function PlannerImportDialog({ markets, onImport }: Props) {
+  const { can } = useAccess();
   const [open, setOpen] = useState(false);
   const [rawText, setRawText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -45,6 +47,7 @@ export function PlannerImportDialog({ markets, onImport }: Props) {
     }
   };
 
+  if (!can("imports.planner")) return null;
   return <>
     <button className="primary-button" type="button" onClick={() => setOpen(true)}>Importer Planner</button>
     <AppDialog open={open} onClose={() => setOpen(false)} busy={saving} labelledBy="planner-import-title" className="planner-import-dialog">

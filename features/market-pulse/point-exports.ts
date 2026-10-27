@@ -15,7 +15,7 @@ export function buildMailHtml(data: PointData, market: Market, archive: PointRec
   const stats = jiraDashboardStats(data, market, archive);
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
   const accent = normalizeHex(data.customColor) || theme.accent;
-  const modules = data.preferences.mailModules;
+  const modules = data.preferences.readModules;
   const attentionRank: Record<JiraAttentionLevel, number> = { critical: 0, warning: 1, undated: 2, fresh: 3 };
   const section = (title: string, body: string) => `<tr><td class="mail-inset" style="padding:0 30px 18px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #DCE5E2;border-radius:16px;background:#FFFFFF"><tr><td style="padding:16px 18px 9px;color:#38524B;font-size:17px;font-weight:700;letter-spacing:.1px">${title}</td></tr><tr><td style="padding:0 8px 10px">${body}</td></tr></table></td></tr>`;
   const dossierRows = data.dossiers.map((item) => {
@@ -52,7 +52,7 @@ export function buildMailHtml(data: PointData, market: Market, archive: PointRec
 
 export function buildInteractiveHtml(data: PointData, market: Market, archive: PointRecord[]) {
   const stats = jiraDashboardStats(data, market, archive);
-  const modules = data.preferences.htmlModules;
+  const modules = data.preferences.readModules;
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
   const accent = normalizeHex(data.customColor) || theme.accent;
   const maxVolume = Math.max(1, ...stats.points.map((point) => point.value));

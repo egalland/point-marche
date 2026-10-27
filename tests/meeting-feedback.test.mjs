@@ -123,17 +123,16 @@ test("manual Planner values cannot be enriched or inserted into the imported reg
   assert.deepEqual(plannerRegistry.recoverPlannerTasksFromPoints([{ marketId: "a", payload }], { a: ["REV-PB"] }), []);
 });
 
-test("mail and standalone comparison follow their explicit destination flags", () => {
+test("mail and standalone comparison follow the visible point despite legacy destination flags", () => {
   const market = app.defaultMarkets[0];
   const data = app.normalizePointData({ ...app.initialData(), jira: [], marketComparison: snapshot }, market.id);
   assert.equal(data.preferences.readModules.comparison, false);
   assert.doesNotMatch(app.buildMailHtml(data, market, []), /Comparaison des marchés|Marché A/);
   assert.doesNotMatch(app.buildInteractiveHtml(data, market, []), /Comparaison des marchés|Marché A/);
   data.preferences.mailModules.comparison = true;
-  assert.match(app.buildMailHtml(data, market, []), /Comparaison des marchés|Marché A/);
-  assert.doesNotMatch(app.buildInteractiveHtml(data, market, []), /Marché A/);
   data.preferences.htmlModules.comparison = true;
-  assert.match(app.buildInteractiveHtml(data, market, []), /Marché A/);
+  assert.doesNotMatch(app.buildMailHtml(data, market, []), /Comparaison des marchés|Marché A/);
+  assert.doesNotMatch(app.buildInteractiveHtml(data, market, []), /Marché A/);
   const actions = { updateFreeLayout() {}, updatePriority() {}, updateDossier() {}, addDossier() {}, removeDossier() {}, updateOperation() {}, resetOperation() {}, addOperation() {}, removeOperation() {}, updatePromotion() {}, addPromotion() {}, removePromotion() {}, updateJira() {}, resetJira() {}, addJira() {}, setSourceMode() {}, insertModule() {}, hideModule() {}, moveModule() {}, updateModuleWidth() {}, resetLayout() {} };
   const read = renderToStaticMarkup(createElement(app.PreviewDashboard, { data, market, archive: [], editing: true, actions }));
   assert.match(read, /Outils du point/);

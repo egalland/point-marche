@@ -7,7 +7,8 @@ async function loadModule(file) {
   return import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString("base64")}`);
 }
 const { WorkspaceStore } = await loadModule("../offline/workspace-store.ts");
-const { createLocalApi } = await loadModule("../offline/local-api.ts");
+const { createLocalApi: guardedApi } = await loadModule("../offline/local-api.ts");
+const createLocalApi = store => { const api = guardedApi(store); return (input, init) => api(input, {...init, headers:{...init?.headers, "X-Market-USERCODE":"A0000001", "Content-Type":"application/json"}}); };
 const { newWorkspace, encodeWorkspace, decodeWorkspace, validateWorkspace, isEmptyStarterWorkspace } = await loadModule("../offline/workspace-data.ts");
 const { readWorkspaceFile, writeWorkspaceFile, fingerprint } = await loadModule("../offline/file-session.ts");
 const { parseJiraCsv } = await loadModule("../lib/jira-csv.ts");

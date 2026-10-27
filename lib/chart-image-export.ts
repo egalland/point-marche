@@ -1,3 +1,4 @@
+import { clientCan } from "./access-client";
 export type ChartImageInfo = { title: string; subtitle: string; global: boolean; weighted: boolean };
 
 function escapeXml(value: string) {
@@ -48,6 +49,7 @@ export async function chartPngBlob(element: SVGSVGElement, info: ChartImageInfo)
 }
 
 export function downloadChartPng(blob: Blob) {
+  if (!clientCan("exports.charts")) return;
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a"); link.href = url; link.download = "point-marche-variations.png";
   document.body.appendChild(link); link.click(); link.remove();

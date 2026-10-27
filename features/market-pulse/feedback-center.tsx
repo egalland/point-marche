@@ -1,4 +1,5 @@
 "use client";
+import { useAccess } from "./access-panel";
 import { useEffect, useRef, useState } from "react";
 import { appFetch } from "@/lib/app-transport";
 import { feedbackMail, validFeedbackRecipients, feedbackStatuses, type FeedbackRequest, type FeedbackSummary, type FeedbackCapture } from "@/lib/feedback";
@@ -131,6 +132,7 @@ export function FeedbackDialog({ open, email, ready, context, onClose, onSetting
 
 const dateLabel = (value: string) => value ? new Date(value).toLocaleString("fr-FR") : "—";
 export function FeedbackInbox({ onCreate }: { onCreate?: () => void } = {}) {
+  const { can } = useAccess();
   const [items, setItems] = useState<FeedbackSummary[]>([]);
   const [selected, setSelected] = useState<FeedbackRequest | null>(null);
   const [query, setQuery] = useState("");
@@ -177,9 +179,9 @@ export function FeedbackInbox({ onCreate }: { onCreate?: () => void } = {}) {
     <AppDialog open={!!selected} busy={saving} onClose={() => { ++selection.current; setSelected(null); }} labelledBy="feedback-ticket-title" className="feedback-dialog">
       {selected && <><header className="feedback-dialog-heading"><h2 id="feedback-ticket-title">{selected.title}</h2><FeedbackStatusBadge status={selected.status}/></header><p>{selected.id} · {selected.kind === "bug" ? "Bug" : "Idée"}</p><p>Demandeur : <strong>{selected.reporterUserCode}</strong><br/>Créé le {dateLabel(selected.createdAt)}<br/>Modifié le {dateLabel(selected.updatedAt)}</p><p className="feedback-text">{selected.detail}</p><p className="feedback-text">{selected.context}</p>
         <div className="feedback-captures">{selected.captures.map((capture, index) => <figure key={index}><a href={capture.dataUrl} download={capture.name}><img src={capture.dataUrl} alt={capture.name}/><figcaption>Télécharger {capture.name}</figcaption></a></figure>)}</div>
-        <label className="field"><span>USERCODE de la personne qui suit la demande</span><input maxLength={8} pattern="[A-Za-z][0-9]{7}" value={by} disabled={saving} onChange={event => setBy(event.target.value.toUpperCase())}/></label>
-        <label className="field"><span>Statut du ticket</span><select value={selected.status} disabled={saving} onChange={event => void updateStatus(event.target.value)}>{feedbackStatuses.map(value => <option key={value}>{value}</option>)}</select></label>
-        <p role="status">{saving ? "Enregistrement du statut…" : message}</p><button type="button" className="secondary-button" onClick={() => void select(selected.id)} disabled={saving}>Recharger le ticket</button>
+        <label className="field"><span>USERCODE de la personne qui suit la demande</span><input maxLength={8} pattern="[A-Za-z][0-9]{7}" value={by} disabled={saving || !can("feedback.manage")} onChange={event => setBy(event.target.value.toUpperCase())}/></label>
+        <label className="field"><span>Statut du ticket</span><select value={selected.status} disabled={saving || !can("feedback.manage")} onChange={event => void updateStatus(event.target.value)}>{feedbackStatuses.map(value => <option key={value}>{value}</option>)}</select></label>
+        <p role="status">{saving ? "Enregistrement du statut…" : message}</p><button type="button" className="secondary-button" onClick={() => void select(selected.id)} disabled={saving || !can("feedback.manage")}>Recharger le ticket</button>
         <h3>Historique</h3><ul>{selected.history?.map((event, index) => <li key={index}>{dateLabel(event.date)} · {event.status} · {event.by}</li>)}</ul>
       </>}
     </AppDialog>

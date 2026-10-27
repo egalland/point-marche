@@ -193,8 +193,8 @@ export function normalizePointData(value: unknown, marketId: string, marketOverr
       fontScalePercent,
       density: sourcePreferences.density === "compact" || sourcePreferences.density === "airy" ? sourcePreferences.density : "comfortable",
       readModules: mergeModules(sourcePreferences.readModules),
-      mailModules: mergeModules(sourcePreferences.mailModules),
-      htmlModules: mergeModules(sourcePreferences.htmlModules),
+      mailModules: mergeModules(sourcePreferences.readModules),
+      htmlModules: mergeModules(sourcePreferences.readModules),
       moduleOrder: Array.isArray(sourcePreferences.moduleOrder) ? [...new Set([...sourcePreferences.moduleOrder.filter((id) => pointModules.some((module) => module.id === id)), ...defaultModuleOrder])] : [...defaultModuleOrder],
       moduleWidths: Object.fromEntries(pointModules.map((module) => {
         const candidate = sourcePreferences.moduleWidths && typeof sourcePreferences.moduleWidths === "object" ? sourcePreferences.moduleWidths[module.id] : undefined;

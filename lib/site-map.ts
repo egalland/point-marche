@@ -11,7 +11,11 @@ export const siteMapGroups = [
   ] },
   { title: "Diffusion et réglages", pages: [
     { href: "/?mode=mail", title: "Mail du marché", description: "Aperçu du mail, fichier HTML et préparation de la diffusion." },
-    { href: "/?mode=settings", title: "Paramètres", description: "Réglages du point, des modules, des sources et du mail." },
+    { href: "/?mode=settings", title: "Paramètres", description: "Réglages de présentation, annuaire, sources et destinataires." },
+  ] },
+  { title: "Administration", pages: [
+    { href: "/?mode=admin", title: "Administration", description: "Gestion des idées et bugs, notifications et journal selon les autorisations." },
+    { href: "/?mode=superadmin", title: "Super admin", description: "Attribution des rôles et grille des autorisations du site." },
   ] },
   { title: "Aide et navigation", pages: [
     { href: "/aide", title: "Aide", description: "Modes opératoires et recherche documentaire." },

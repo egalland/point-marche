@@ -1,4 +1,5 @@
 'use client';
+import { appFetch as fetch } from '@/lib/app-transport';
 import {QueryTableHead,QueryTableTools,useQueryTable} from '@/components/query-table';
 import {pointPURCHASESConfig,pointWeek,createPURCHASESPointReport,savedPURCHASESPointReport,validPointPURCHASESPeriod} from '@/lib/purchaseData-point';
 import {purchaseDataColumnsWithOccurrences} from '@/lib/purchaseData-table-columns';

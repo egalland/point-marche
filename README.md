@@ -2,7 +2,7 @@
 
 Application pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-**Version des sources : V101** · Interface en français · Ordinateur et mobile
+**Version des sources : V106** · Interface en français · Ordinateur et mobile
 
 
 
@@ -135,3 +135,9 @@ Le HTML autonome permet de rejoindre un dossier partagé. Chaque modification es
 ## Bugs et idées
 
 Le bouton fixe bug / ampoule ouvre un formulaire commun avec choix du type. Le suivi est regroupé dans **Paramètres → Bugs et idées** : listes séparées par type, recherche, filtre par statut, badges visuels et détails des tickets. Voir [le mode opératoire](docs/bugs-et-idees.md).
+
+## Mise à jour V106
+
+Les profils Admin et Super admin, les cases de l’annuaire, les vues restreintes, le journal et la grille des autorisations sont intégrés. L’identifiant initial est fictif : `A0000001`. L’identification demeure déclarative, sans mot de passe.
+
+Le build portable utilise exclusivement les données du classeur et le journal du dossier partagé. Il exclut la base D1, les routes serveur, les Workers et les files de brouillons hébergées. Le script vérifie les modules réellement embarqués et refuse une dépendance serveur accidentelle. Le ZIP de distribution doit contenir uniquement le HTML autonome et son mode d’emploi ; le dépôt conserve les sources nécessaires aux deux versions. Les exports mail et HTML suivent les blocs visibles du point.

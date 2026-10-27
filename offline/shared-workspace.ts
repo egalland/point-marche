@@ -183,7 +183,12 @@ export class SharedWorkspaceSession {
     }
     const differs = !equal([...current].sort(), [...effective.parts].sort());
     this.base = effective.parts; this.heads = effective.heads; this.initialized = true;
-    if (differs) { this.store.replace(merged); this.onRemote(); } else this.store.markSaved(revision);
+    if (differs) {
+      // Receiving audit-only entries must not remount the app and generate another activity cycle.
+      const visible = (parts: PartMap) => [...parts].filter(([name]) => !(name.startsWith("preferences/") && decodeURIComponent(name.slice("preferences/".length)).startsWith("activity:"))).sort();
+      const refresh = !equal(visible(current), visible(effective.parts));
+      this.store.replace(merged); if (refresh) this.onRemote();
+    } else this.store.markSaved(revision);
     this.knownEntries = this.entries.size; this.knownVersion = this.store.version(); this.state = { ...this.state, lastSync: new Date().toISOString() };
     this.report(effective.conflicts.length ? 'conflict' : 'ready', effective.conflicts.length ? 'Versions concurrentes conservées. Choisis la version à utiliser.' : 'Dossier partagé à jour.', effective.conflicts);
     return !effective.conflicts.length;

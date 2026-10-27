@@ -17,6 +17,7 @@ let hooks;
 const react = require("react");
 const reactStub = {
   ...react,
+  useContext(context) { const value = context._currentValue; return value?.person ? {...value, person:{usercode:"A0000001",name:"Administrateur exemple",role:"superadmin"}, effective:{usercode:"A0000001",name:"Administrateur exemple",role:"superadmin"}, can:()=>true} : value; },
   useId() { const index = hooks.cursor++; return hooks.slots[index] ??= `test-id-${index}`; },
   useState(initial) { const index = hooks.cursor++; if (!(index in hooks.slots)) hooks.slots[index] = typeof initial === "function" ? initial() : initial; return [hooks.slots[index], (next) => { hooks.slots[index] = typeof next === "function" ? next(hooks.slots[index]) : next; }]; },
   useRef(initial) { const index = hooks.cursor++; return hooks.slots[index] ??= { current: initial }; },

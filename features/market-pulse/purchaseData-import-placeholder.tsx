@@ -1,4 +1,5 @@
 'use client';
+import { appFetch as fetch } from '@/lib/app-transport';
 import {useEffect,useRef,useState} from 'react';
 import {inspectPURCHASES,purchaseDataSummary} from '@/lib/purchaseData';
 import {decodePURCHASESFile,PURCHASES_MAX_BYTES} from '@/lib/purchaseData-import';

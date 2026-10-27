@@ -1,3 +1,4 @@
+import { clientCan } from "./access-client";
 import { chartExcelTemplate } from "./chart-excel-template";
 import { supplierVariationView, type SupplierVariationPoint } from "./supplier-variations";
 import type { ChartImageInfo } from "./chart-image-export";
@@ -176,6 +177,7 @@ export function chartExcelBytes(points: SupplierVariationPoint[], info: ExcelInf
 }
 
 export function downloadChartExcel(points: SupplierVariationPoint[], info: ExcelInfo) {
+  if (!clientCan("exports.charts")) return;
   const blob = new Blob([chartExcelBytes(points, info)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob), link = document.createElement("a");
   link.href = url; link.download = chartExcelFilename(points, info); document.body.appendChild(link); link.click(); link.remove();

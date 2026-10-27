@@ -1,4 +1,5 @@
 "use client";
+import { clientCan } from "../../lib/access-client";
 import {PURCHASESDashboard} from "./purchaseData-dashboard";
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
@@ -136,9 +137,9 @@ function SupplierDetailChart({ points: observations, title, subtitle, supplier }
       <button type="button" className={showWeighted ? "active weighted" : ""} aria-pressed={showWeighted} onClick={() => setShowWeighted((current) => !current)}><i/>Variation pondérée</button>
     </div>
     <div className="supplier-chart-export-actions">
-      <button type="button" className="secondary-button" disabled={imageStatus.busy || !values.length} onClick={() => { void exportImage(true); }}>Copier le graphique</button>
-      <button type="button" className="secondary-button" disabled={imageStatus.busy || !values.length} onClick={() => { void exportImage(false); }}>Télécharger en PNG</button>
-      <button type="button" className="secondary-button" disabled={imageStatus.busy || !observations.some((point) => point.globalVariation !== null || point.weightedVariation !== null)} onClick={exportExcel}>Exporter en Excel</button>
+      <button type="button" className="secondary-button" disabled={!clientCan("exports.charts") || imageStatus.busy || !values.length} onClick={() => { void exportImage(true); }}>Copier le graphique</button>
+      <button type="button" className="secondary-button" disabled={!clientCan("exports.charts") || imageStatus.busy || !values.length} onClick={() => { void exportImage(false); }}>Télécharger en PNG</button>
+      <button type="button" className="secondary-button" disabled={!clientCan("exports.charts") || imageStatus.busy || !observations.some((point) => point.globalVariation !== null || point.weightedVariation !== null)} onClick={exportExcel}>Exporter en Excel</button>
       {imageStatus.message && <span role={imageStatus.error ? "alert" : "status"}>{imageStatus.message}</span>}
     </div>
     <p id={helpId} className="editor-hint">{view === "months" ? "Tous les mois sont espacés régulièrement ; un mois sans donnée reste vide." : "Seuls les mois avec une valeur dans les séries affichées sont présentés."} Sur le graphique, utilisez les flèches gauche et droite pour parcourir les mois ; Début et Fin pour les extrémités.</p>

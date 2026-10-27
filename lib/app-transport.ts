@@ -1,3 +1,4 @@
+import { accessHeaders, clientCan } from "./access-client";
 import { SessionDrafts } from "./session-drafts";
 import { HostedPointDrafts } from "./hosted-point-drafts";
 import type { PublishedPoint, StoredPointDraft } from "./point-persistence";
@@ -17,7 +18,7 @@ export type LocalDraftBridge = {
 let transport: AppTransport | null = null;
 let drafts: LocalDraftBridge | null = null;
 const sessionDrafts = new SessionDrafts();
-export const hostedPointDrafts = new HostedPointDrafts((input, init) => fetch(input, init));
+export const hostedPointDrafts = new HostedPointDrafts((input, init) => appFetch(input, init));
 
 export function configureHostedDrafts(editor: string | null) {
   hostedPointDrafts.configure(isLocalWorkspace() ? null : editor);
@@ -33,7 +34,8 @@ export function isLocalWorkspace() {
 }
 
 export function appFetch(input: RequestInfo | URL, init?: RequestInit) {
-  return transport ? transport(input, init) : fetch(input, init);
+  const options = accessHeaders(init);
+  return transport ? transport(input, options) : fetch(input, options);
 }
 
 export function readLocalDraft(scope: LocalDraft["scope"], ownerId: string, meetingDate?: string) {
@@ -41,6 +43,7 @@ export function readLocalDraft(scope: LocalDraft["scope"], ownerId: string, meet
 }
 
 export function writeLocalDraft(draft: LocalDraft) {
+  if (!clientCan(draft.scope === "analyst" ? "analyst.edit" : "point.edit")) return;
   if (drafts) drafts.write(draft);
   else if (hostedPointDrafts.enabled) hostedPointDrafts.write(draft);
   else sessionDrafts.write(draft);
