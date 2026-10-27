@@ -2,7 +2,7 @@
 
 Application pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-**Version des sources : V98** · Interface en français · Ordinateur et mobile
+**Version des sources : V99** · Interface en français · Ordinateur et mobile
 
 
 
@@ -125,3 +125,5 @@ Les documents associés à une ancienne version décrivent l’état de cette ve
 Le plan navigable `/plan-du-site` regroupe les points hebdomadaires, statistiques, fournisseurs, imports, diffusion, paramètres et aide. Le menu propose un accès direct au plan. Le fichier `/sitemap.xml` reprend les liens des rubriques et est déclaré dans `/robots.txt`. Les fiches individuelles et les routes API en sont exclues.
 
 Le point analyste présente les sources dans un volet replié et les réglages dans un dialogue. Un clic ouvre uniquement le bloc à modifier ; un clic à l’extérieur ou Échap ferme l’édition. La largeur et l’ordre des blocs sont conservés dans la page HTML jointe. Sur mobile, les blocs occupent toute la largeur.
+
+Les fenêtres du point conservent leur taille lorsque leur contenu évolue. Un seul défilement vertical est utilisé par bloc et la molette reprend le défilement de la page à ses limites. La lecture mobile conserve des blocs de hauteur naturelle.

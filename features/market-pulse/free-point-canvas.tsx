@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useId,useRef,useState,type ReactNode,type PointerEvent as RP} from 'react';
+import {relayPointWheel} from '@/lib/point-scroll';
 import {PointToolWheel,type PointTool} from '@/components/point-tool-wheel';
 import {AppIcon} from '@/components/app-icon';
 import {AppDialog} from '@/components/app-dialog';
@@ -22,6 +23,7 @@ export function FreePointCanvas({data,content,actions,editingModule,onEdit}:Prop
  const persist=(next:FreeLayout,anchor=selected??undefined)=>{setWorking(null);actions?.updateFreeLayout?.(next.flow?next:{...next,blocks:arrangePresentationBlocks(ids,next.blocks,anchor)});};
  const update=(patch:Partial<FreeLayout>)=>persist({...layout,...patch,...(patch.flow===undefined?{}:{mode:patch.flow?"flow":"windows"})});
  useEffect(()=>()=>cleanup.current(),[]);
+ useEffect(()=>{const root=workspace.current;if(!root)return;const wheel=(event:WheelEvent)=>{relayPointWheel(event);};root.addEventListener("wheel",wheel,{passive:false});return()=>root.removeEventListener("wheel",wheel);},[]);
  useEffect(()=>{const close=(e:PointerEvent)=>{if((e.target as HTMLElement).closest('.v51-floating,.point-tool-wheel,.v51-block,.app-dialog'))return;setSelected(null);setMenu(null);setConfig(null);setCopyEdit(null);onEdit(null);};const escape=(e:KeyboardEvent)=>{if(e.key!=='Escape'||(e.target as HTMLElement).closest('.app-dialog,.point-tool-wheel'))return;setSelected(null);setMenu(null);setConfig(null);setCopyEdit(null);onEdit(null);};document.addEventListener('pointerdown',close);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',escape);};},[onEdit]);
  useEffect(()=>{if(!editable)return;const root=workspace.current?.closest('.report-canvas')??workspace.current;const context=(event:Event)=>{const e=event as MouseEvent;if((e.target as HTMLElement).closest('.v51-block,input,textarea,select,[contenteditable="true"]'))return;e.preventDefault();setMenu({id:'canvas',x:e.clientX,y:e.clientY});};root?.addEventListener('contextmenu',context);return()=>root?.removeEventListener('contextmenu',context);},[editable]);
  const remove=(id:string)=>{if(visible.includes(id as PointModule))actions?.hideModule(id as PointModule);else update({copies:layout.copies.filter(c=>c.id!==id)});setMenu(null);setSelected(null);onEdit(null);};

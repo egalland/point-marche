@@ -9,3 +9,37 @@
 .point-quiet-canvas .promotion-card-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}.point-quiet-canvas .report-pill{white-space:nowrap;word-break:normal;overflow-wrap:normal}.report-canvas .report-hero{padding-top:16px;padding-bottom:18px;min-height:0}.report-canvas .report-hero h1{font-size:clamp(28px,3vw,36px);margin:10px 0}.report-canvas .week-card{gap:16px;padding:12px 0}.report-canvas .week-card>strong{display:flex;flex-direction:row;align-items:baseline;gap:8px;font-size:34px;line-height:1.1}.report-canvas .week-card strong small{font-size:18px}.report-canvas .week-card>i{display:none}.report-canvas .week-card>div span{display:none}@media(max-width:760px){.report-canvas .report-hero{padding:12px}.report-canvas .week-card>strong{font-size:26px}.report-canvas .week-card strong small{font-size:16px}}
 @media(max-width:760px){.point-period-bar{position:relative;grid-template-columns:1fr;gap:8px}.point-period-bar .point-period-status{position:absolute;right:12px;top:12px}.point-market-choice>span{padding-right:130px}.point-week-choice{grid-column:1/-1;width:100%}.point-week-choice>button.point-week-current{flex:1;min-width:0}.point-week-current>span{min-width:0}.point-week-current>svg{flex-shrink:0}}
 @media(max-width:760px){.point-quiet-canvas .v51-canvas-scroll{overflow:visible}.point-quiet-canvas .v51-stage{display:flex!important;flex-direction:column;gap:14px;height:auto!important;min-height:0;min-width:0!important}.point-quiet-canvas .v51-stage>.v51-block{position:relative!important;inset:auto!important;left:auto!important;top:auto!important;width:100%!important;height:auto!important;max-height:none;min-height:0;grid-column:1/-1!important}.point-quiet-canvas .v51-block>.v51-content{height:auto;max-height:none;overflow:visible;flex:none}.point-quiet-canvas .v51-block>.v73-resize{display:none!important}.point-quiet-canvas .v70-module-header{cursor:default;touch-action:pan-y}.point-quiet-canvas .v70-module-header>button[aria-label^="Déplacer"]{display:none}.point-quiet-canvas .v70-module-actions button[aria-haspopup=menu]{display:inline-flex!important}.report-canvas .report-hero{display:flex;flex-direction:column;align-items:stretch;gap:10px;margin:10px 0 16px;padding:12px}.report-canvas .report-hero h1{font-size:26px;margin:8px 0}.report-canvas .report-hero p{margin:6px 0}.report-canvas .week-card{display:flex;align-items:center;justify-content:space-between;padding:0}.report-canvas .week-card>strong{font-size:24px}.report-canvas .week-card>div{font-size:11px}}
+
+/* A point window owns its viewport; content never resizes the presentation. */
+@media screen and (min-width:761px) {
+  .point-quiet-canvas.is-free .v51-stage > .v51-block {
+    contain: size;
+    min-height: 0;
+    overflow: clip;
+  }
+  .point-quiet-canvas.is-free .v51-block > .v51-content {
+    flex: 1 1 0%;
+    height: 0;
+    min-height: 0;
+    min-width: 0;
+    max-height: 100%;
+    overflow: auto;
+  }
+}
+/* Native scroll chaining resumes the page when the point viewport ends. */
+.point-quiet-canvas .v51-block > .v51-content {
+  overscroll-behavior: auto;
+}
+/* One vertical viewport per block, including expanded ticket/step lists. */
+.point-quiet-canvas .v51-content :is(.simulation-steps,.jira-person-tickets) {
+  max-height: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+.point-quiet-canvas .v51-content :is(.table-scroll,.data-table-wrap,.purchaseData-table) {
+  max-height: none;
+  overscroll-behavior: auto;
+}
+.point-quiet-canvas .v51-content > :is(.report-focus,.report-alert-card,.jira-command-center) {
+  min-height: 0;
+}
