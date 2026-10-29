@@ -118,3 +118,11 @@ test("handles more than twelve thousand Jira rows", () => {
   assert.equal(result.participantCount, 12_050);
   assert.equal(result.rejectedRows, 0);
 });
+
+test('recognizes completion date aliases and prefers a real timestamp over textual Resolution',()=>{
+ for(const label of ['Terminée','Terminé','Résolue','Date de fin','Date de clôture','Completed','Resolved at']){
+  const result=csv.parseJiraCsv(`Clé de ticket;État;Résumé;Création;Mise à jour;Résolution;${label}\nTEST-1;Fini;Exemple;23/10/2026;29/10/2026;Terminé;27/10/2026`);
+  assert.equal(result.tickets[0].resolutionAt,'2026-10-27T00:00:00',label);assert.equal(result.resolvedDatedCount,1);assert.equal(result.closedWithoutResolutionDate,0);assert.ok(result.resolutionColumn.includes(label));
+ }
+ const invalid=csv.parseJiraCsv('Clé de ticket;État;Résumé;Création;Mise à jour;Terminée\nTEST-2;Fini;Invalide;23/10/2026;29/10/2026;31/02/2026');assert.equal(invalid.invalidDateRows,1);assert.equal(invalid.closedWithoutResolutionDate,1);
+});

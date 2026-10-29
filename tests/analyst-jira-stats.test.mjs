@@ -68,3 +68,10 @@ test('lightweight weekly counts agree with complete reports for every basis, fil
   for(const w of r.timeline.a){const expected=buildAnalystJiraStats(data,users,markets,{...q,a:{from:w.from,to:w.to},b:{from:w.from,to:w.to}});assert.equal(w.total,expected.a.total,`${basis} ${marketId} ${w.from}`);assert.deepEqual(w.markets,expected.a.marketCounts);}
  }
 });
+
+test('resolution KPIs use true completion dates independent of activity basis, with actionable missing-date diagnostics',()=>{
+ const data=[ticket,{...ticket,key:'TEST-60',createdAt:'',resolutionAt:'2026-10-27'},{...ticket,key:'TEST-61',resolutionAt:''},{...ticket,key:'TEST-62',createdAt:'2026-10-29',resolutionAt:'2026-10-27'},{...ticket,key:'TEST-63',resolutionAt:'invalid'}];
+ for(const basis of ['activity','stock','created','updated','resolved']){
+  const r=buildAnalystJiraStats(data,users,markets,{...query(),basis});assert.equal(r.a.resolution.mean,2);assert.equal(r.a.resolution.median,2);assert.equal(r.a.resolution.sample,1);assert.equal(r.a.resolution.completed,3);assert.equal(r.a.resolution.excluded,2);assert.equal(r.a.resolution.missingCreation,1);assert.equal(r.a.resolution.invalidOrder,1);assert.equal(r.a.resolution.missingResolution,1);assert.equal(r.a.resolution.invalidResolution,1);assert.equal(r.b.resolution.mean,null);
+ }
+});

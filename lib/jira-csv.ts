@@ -16,6 +16,7 @@ export type JiraCsvParseResult = {
   resolvedDatedCount: number;
   closedWithoutResolutionDate: number;
   hasResolutionColumn: boolean;
+  resolutionColumn: string;
   delimiter: "comma" | "semicolon" | "tab" | "unknown";
   missingColumns: string[];
 };
@@ -160,14 +161,17 @@ export function parseJiraCsv(value: string): JiraCsvParseResult {
   const summaryIndex = column(headers, [/^resume$/, /^summary$/]);
   const categoryIndex = column(headers, [/^(?:champs? personnalises? )?categorie$/, /^custom field category$/, /^category$/]);
   const subcategoryIndex = column(headers, [/^(?:champs? personnalises? )?sous categorie$/, /^souscategorie$/, /^sub category$/, /^subcategory$/, /^custom field subcategory$/, /^custom field sub category$/]);
-  const createdIndex = column(headers, [/^creation$/, /^date de creation$/, /^created$/]);
+  const createdIndex = column(headers, [/^creation$/, /^creee?$/, /^date de creation$/, /^created$/]);
   const assigneeIndex = column(headers, [/^personne assignee$/, /^assignee$/, /^responsable$/]);
   const updatedIndex = column(headers, [/^mise a jour$/, /^updated$/, /^date de mise a jour$/]);
-  const resolutionIndex = column(headers, [/^resolution$/, /^date de resolution$/, /^resolved$/]);
+  // Some Jira exports label the completion timestamp « Terminée ». A Resolution
+  // column can also contain a textual outcome: use the first actual date per row.
+  const resolutionIndexes = headers.flatMap((h,i)=>/^(resolution|date de resolution|resolved|resolved at|resolution date|resolue?|terminee?|terminee? le|date terminee?|date de fin|date de cloture|cloturee?|completed|completed at|completion date|done)$/.test(h)?[i]:[]);
+  const resolutionIndex = resolutionIndexes[0] ?? -1;
   const participantIndexes = headers.map((header, index) => /participant/.test(header) ? index : -1).filter((index) => index >= 0);
   const required = [[keyIndex, "Clé de ticket"], [statusIndex, "État"], [summaryIndex, "Résumé"], [createdIndex, "Création"], [updatedIndex, "Mise à jour"]] as const;
   const missingColumns = required.filter(([index]) => index < 0).map(([, label]) => label);
-  if (!rows.length || missingColumns.length) return { tickets: [], rows: Math.max(0, rows.length - 1), rejectedRows: Math.max(0, rows.length - 1), invalidDateRows: 0, duplicateKeys: 0, participantCount: 0, repairedTextCount: repaired.repairedTextCount, openTicketCount: 0, closedTicketCount: 0, abandonedTicketCount: 0, resolvedDatedCount: 0, closedWithoutResolutionDate: 0, hasResolutionColumn: resolutionIndex >= 0, delimiter: delimiter === "," ? "comma" : delimiter === ";" ? "semicolon" : delimiter === "\t" ? "tab" : "unknown", missingColumns };
+  if (!rows.length || missingColumns.length) return { tickets: [], rows: Math.max(0, rows.length - 1), rejectedRows: Math.max(0, rows.length - 1), invalidDateRows: 0, duplicateKeys: 0, participantCount: 0, repairedTextCount: repaired.repairedTextCount, openTicketCount: 0, closedTicketCount: 0, abandonedTicketCount: 0, resolvedDatedCount: 0, closedWithoutResolutionDate: 0, hasResolutionColumn: resolutionIndex >= 0, resolutionColumn: resolutionIndexes.map(i=>(rows[0]??[])[i]).join(" / "), delimiter: delimiter === "," ? "comma" : delimiter === ";" ? "semicolon" : delimiter === "\t" ? "tab" : "unknown", missingColumns };
 
   const tickets = new Map<string, JiraCsvTicket>();
   let rejectedRows = 0;
@@ -183,7 +187,8 @@ export function parseJiraCsv(value: string): JiraCsvParseResult {
     const updatedRaw = cells[updatedIndex] ?? "";
     const createdAt = jiraDate(createdRaw);
     const updatedAt = jiraDate(updatedRaw);
-    if ((createdRaw && !createdAt) || (updatedRaw && !updatedAt)) invalidDateRows += 1;
+    const resolutionAt=resolutionIndexes.map(i=>jiraDate(cells[i]??"")).find(Boolean)??"";
+    if ((createdRaw && !createdAt) || (updatedRaw && !updatedAt) || (resolutionIndexes.some(i=>Boolean(cells[i]?.trim()))&&!resolutionAt)) invalidDateRows += 1;
     const assigneeMatch = (cells[assigneeIndex] ?? "").match(/[A-Z]\d{7}/i);
     const ticket: JiraCsvTicket = {
       key,
@@ -195,7 +200,7 @@ export function parseJiraCsv(value: string): JiraCsvParseResult {
       createdAt,
       assigneeUserCode: assigneeMatch?.[0].toUpperCase() ?? "",
       updatedAt,
-      resolutionAt: resolutionIndex >= 0 ? jiraDate(cells[resolutionIndex] ?? "") : "",
+      resolutionAt,
       participants: participants(cells, participantIndexes),
       link: `https://jira.example.test/browse/${key}`,
     };
@@ -222,7 +227,7 @@ export function parseJiraCsv(value: string): JiraCsvParseResult {
     abandonedTicketCount: parsedTickets.filter((ticket) => isAbandonedJiraStatus(ticket.status)).length,
     resolvedDatedCount: closedTickets.filter((ticket) => Boolean(ticket.resolutionAt)).length,
     closedWithoutResolutionDate: closedTickets.filter((ticket) => !ticket.resolutionAt).length,
-    hasResolutionColumn: resolutionIndex >= 0,
+    hasResolutionColumn: resolutionIndex >= 0, resolutionColumn: resolutionIndexes.map(i=>(rows[0]??[])[i]).join(" / "),
     delimiter: delimiter === "," ? "comma" : delimiter === ";" ? "semicolon" : delimiter === "\t" ? "tab" : "unknown",
     missingColumns,
   };

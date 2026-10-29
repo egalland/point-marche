@@ -86,3 +86,8 @@ test("parses detailed Jira tickets, USERCODEs and activity dates", () => {
   assert.equal(result.detailedTickets[1].status, "Réouvert");
   assert.match(result.detailedTickets[1].summary, /Mise à jour/);
 });
+
+test('pasted ticket list maps Terminée to actual resolution instead of last modification',()=>{
+ const result=parser.parseJiraAssigneeSummary('Clé de ticket\tÉtat\tRésumé\tCréation\tPersonne assignée\tMise à jour\tTerminée\nTEST-1\tFini\tContrôle test\t23/10/2026\tA1234567\t29/10/2026\t27/10/2026');
+ assert.equal(result.detailedTickets[0].resolutionAt,'2026-10-27T00:00:00');assert.equal(result.detailedTickets[0].updatedAt,'2026-10-29T00:00:00');
+});

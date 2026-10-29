@@ -1,3 +1,11 @@
+## V132 — 29 octobre 2026
+
+- Comparaisons Jira regroupées : chiffres principaux en grand, référence en petit, camembert de référence en miniature.
+- Courbes hebdomadaires colorées par marché, avec référence en pointillés ; détails chiffrés repliés.
+- Import des dates Terminée, Résolue, Date de fin et équivalents ; repli sur une autre colonne de date lorsque Résolution contient un libellé.
+- Moyenne et médiane en jours ouvrés calculées sur les dates de fin de la période, y compris dans la vue Stock ; diagnostic des dates absentes ou incohérentes.
+- Les anciens imports ayant ignoré la colonne doivent être réimportés. Les points sauvegardés conservent leur instantané.
+
 ## V131 — 29 octobre 2026
 
 - Compilation depuis un dossier de sortie propre : les anciens fichiers supprimés du projet ne restent plus dans la distribution.

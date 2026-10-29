@@ -139,10 +139,12 @@ function isSeparatorRow(cells: string[]) {
 }
 
 function jiraDate(value: string) {
-  const match = plainCell(value).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
-  if (!match) return "";
-  const [, day, month, year, hour = "00", minute = "00"] = match;
-  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${hour.padStart(2, "0")}:${minute}:00`;
+  const raw=plainCell(value),iso=/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{2}))?/.exec(raw),fr=/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4}|\d{2})(?!\d)(?:\s+(\d{1,2}):(\d{2}))?/.exec(raw);
+  if(!iso&&!fr)return "";
+  const match=(iso??fr)!,yearRaw=Number(match[iso?1:3]),year=yearRaw<100?2000+yearRaw:yearRaw,month=Number(match[2]),day=Number(match[iso?3:1]),hour=Number(match[4]??0),minute=Number(match[5]??0);
+  if(hour>23||minute>59)return "";
+  const date=new Date(Date.UTC(year,month-1,day,hour,minute));
+  return date.getUTCFullYear()===year&&date.getUTCMonth()===month-1&&date.getUTCDate()===day?date.toISOString().slice(0,19):"";
 }
 
 function detailedTicket(cells: string[], headers:string[] = []): JiraDetailedTicket | null {
@@ -153,7 +155,7 @@ function detailedTicket(cells: string[], headers:string[] = []): JiraDetailedTic
   const dateIndexes = clean.map((cell, index) => jiraDate(cell) ? index : -1).filter((index) => index > keyIndex);
   if (usercodeIndex < 0 || dateIndexes.length < 2) return null;
   const headerIndex=(pattern:RegExp)=>headers.findIndex(h=>pattern.test(h));
-  const hc=headerIndex(/^(creation|date de creation|created)$/),hu=headerIndex(/^(mise a jour|date de mise a jour|updated)$/);
+  const hc=headerIndex(/^(creation|creee?|date de creation|created)$/),hu=headerIndex(/^(mise a jour|date de mise a jour|updated)$/);
   const createdIndex = hc>=0?hc:dateIndexes[0];
   const updatedIndex = hu>=0?hu:dateIndexes[dateIndexes.length - 1];
   const internalIdIndex = clean.findIndex((cell, index) => index > keyIndex && index < createdIndex && /^\d{5,}$/.test(cell));
@@ -167,7 +169,7 @@ function detailedTicket(cells: string[], headers:string[] = []): JiraDetailedTic
     summary: headerIndex(/^(resume|summary)$/)>=0?clean[headerIndex(/^(resume|summary)$/)]:clean.slice(statusIndex + 1, createdIndex).filter(Boolean).join(" "),
     category: clean[headerIndex(/^(?:(?:champs? personnalises?|custom field) )?(categorie|category)$/)]??"",
     subcategory: clean[headerIndex(/^(?:(?:champs? personnalises?|custom field) )?(sous categorie|subcategory|sub category)$/)]??"",
-    resolutionAt: jiraDate(clean[headerIndex(/^(resolution|date de resolution|resolved)$/)]??""),
+    resolutionAt: headers.flatMap((h,i)=>/^(resolution|date de resolution|resolved|resolved at|resolution date|resolue?|terminee?|terminee? le|date terminee?|date de fin|date de cloture|cloturee?|completed|completed at|completion date|done)$/.test(h)?[jiraDate(clean[i]??"")]:[]).find(Boolean)??"",
     createdAt: jiraDate(clean[createdIndex]),
     assigneeUserCode: clean[usercodeIndex].toUpperCase(),
     updatedAt: jiraDate(clean[updatedIndex]),
