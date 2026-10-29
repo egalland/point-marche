@@ -1,5 +1,11 @@
 # Historique des versions
 
+## V123 · 2026-10-29
+
+Dossier de projet téléchargeable
+
+- Ajout du PDF de référence V122 dans Affichage et compte sur le site.
+
 ## V122 · 2026-10-29
 
 Historique des versions et rôle Vente

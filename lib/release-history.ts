@@ -1,6 +1,7 @@
 /** User-facing notes curated from the saved version history, not raw requests or commit logs. */
 export type ReleaseNote = { version: number; date: string; title: string; changes: string[] };
 export const releaseHistory: ReleaseNote[] = [
+  {version:123,date:"2026-10-29",title:"Dossier de projet téléchargeable",changes:["Ajout du dossier de référence V122 au format PDF dans Affichage et compte sur le site."]},
   {
     "version": 122,
     "date": "2026-10-29",
