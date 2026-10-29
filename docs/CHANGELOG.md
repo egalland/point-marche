@@ -1,5 +1,9 @@
 # Historique des versions
 
+## V125 · 2026-10-29
+
+- Fiche technique V124 téléchargeable depuis Affichage et compte sur le site.
+
 ## V124 · 2026-10-29
 
 - Annuaire : plusieurs marchés par période, création de rôles métier et historique daté des affectations.
