@@ -17,13 +17,13 @@ export function DirectoryAccessProvider({users,children}:{users:GlobalDirectoryU
   catch(e){setError((e as Error).message);try{const r=await request("/api/admin/roles");setPeople(r.people);}catch{setReady(false);}}
   finally{setBusy(false);}
  };
- return <Context.Provider value={{people,ready,busy,change}}>{error&&<p role="alert">{error}</p>}{effective.role==="superadmin"&&<p className="access-note">Les cases Admin et Super admin sont enregistrées immédiatement. Super admin inclut Admin. Décoche Super admin avant de pouvoir retirer Admin.</p>}{children}</Context.Provider>;
+ return <Context.Provider value={{people,ready,busy,change}}>{error&&<p role="alert">{error}</p>}{effective.role==="superadmin"&&<p className="access-note">Les droits sont enregistrés immédiatement. Vente donne uniquement accès à la lecture et aux exports. Le métier Vente impose cette restriction. Super admin inclut Admin. Décoche Super admin avant de pouvoir retirer Admin.</p>}{children}</Context.Provider>;
 }
 export function DirectoryAccessCheckboxes({usercode,name}:{usercode:string;name:string}){
  const {effective}=useAccess(),state=useContext(Context);if(effective.role!=="superadmin")return null;
  const id=normalizeUserCode(usercode),person=state.people.find(p=>p.usercode===id),role=person?.role||(id===ROOT_ADMIN?"superadmin":"user");
- return <DirectoryRoleCheckboxes name={name} role={role} locked={!state.ready||state.busy||!validUserCode(id)||id===ROOT_ADMIN} onChange={next=>{void state.change(id,name,next,role);}}/>;
+ return <DirectoryRoleCheckboxes name={name} role={role} salesJob={person?.jobRole==="vente"} locked={!state.ready||state.busy||!validUserCode(id)||id===ROOT_ADMIN} onChange={next=>{void state.change(id,name,next,role);}}/>;
 }
-export function DirectoryRoleCheckboxes({name,role,locked,onChange}:{name:string;role:AccessRole;locked:boolean;onChange:(role:AccessRole)=>void}){
- return <div className="directory-access-checks" role="group" aria-label={`Droits de ${name}`}><label><input type="checkbox" aria-label={`Admin · ${name}`} checked={role!=="user"} disabled={locked||role==="superadmin"} onChange={e=>onChange(e.target.checked?"admin":"user")}/>Admin</label><label><input type="checkbox" aria-label={`Super admin · ${name}`} checked={role==="superadmin"} disabled={locked} onChange={e=>onChange(e.target.checked?"superadmin":"admin")}/>Super admin</label></div>;
+export function DirectoryRoleCheckboxes({name,role,locked,salesJob=false,onChange}:{name:string;role:AccessRole;locked:boolean;salesJob?:boolean;onChange:(role:AccessRole)=>void}){
+ return <div className="directory-access-checks" role="group" aria-label={`Droits de ${name}`}><label><input type="checkbox" aria-label={`Admin · ${name}`} checked={role==="admin"||role==="superadmin"} disabled={locked||role==="superadmin"||salesJob} onChange={e=>onChange(e.target.checked?"admin":"user")}/>Admin</label><label><input type="checkbox" aria-label={`Super admin · ${name}`} checked={role==="superadmin"} disabled={locked||salesJob} onChange={e=>onChange(e.target.checked?"superadmin":"admin")}/>Super admin</label><label><input type="checkbox" aria-label={`Vente · lecture seule · ${name}`} checked={role==="sales"} disabled={locked||salesJob} onChange={e=>onChange(e.target.checked?"sales":"user")}/>Vente · lecture seule</label></div>;
 }

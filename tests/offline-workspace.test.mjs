@@ -386,3 +386,13 @@ test('feedback tickets, screenshots and status history survive workbook reopenin
   assert.equal(detail.item.captures[0].dataUrl, draft.captures[0].dataUrl);
   assert.equal(detail.item.history.length, 2);
 });
+
+test('local sales profile survives workbook reload and denies direct mutations',async()=>{
+ const data=fixture();data.users.push({id:'sales',name:'Vente test',email:'sales@example.test',usercode:'V1234567',plannerAlias:'',role:'vente',marketIds:['market-local']});
+ const store=new WorkspaceStore(await decodeWorkspace(await encodeWorkspace(data))),api=guardedApi(store);
+ const request=(path,method='GET',body)=>api(path,{method,headers:{'X-Market-USERCODE':'V1234567','Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+ const session=await (await request('/api/access/session')).json();assert.equal(session.person.role,'sales');assert.equal(session.person.readOnly,true);
+ assert.equal((await request('/api/points?marketId=market-local')).status,200);
+ for(const [path,method] of [['/api/points','POST'],['/api/point-drafts','PUT'],['/api/global-users','POST'],['/api/feedback','POST']])assert.equal((await request(path,method,{name:'Interdit'})).status,403);
+ assert.equal(store.read().points.length,0);assert.equal(store.read().users.length,3);
+});

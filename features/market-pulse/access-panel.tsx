@@ -9,7 +9,7 @@ const AccessContext = createContext<AccessContextValue>({ person:anonymous, effe
 export const useAccess = () => useContext(AccessContext);
 export function AccessViewSelector() {
   const {person,viewMode,setViewMode} = useAccess();
-  if (person.role === "user") return null;
+  if (allowedViews(person.role).length < 2) return null;
   return <label className="access-view-select"><span>Vue affichée</span><select aria-label="Vue affichée" value={viewMode} onChange={e=>setViewMode(e.target.value as AccessView)}>{allowedViews(person.role).map(v=><option key={v} value={v}>{v === "reader" ? "Lecteur" : v === "superadmin" ? "Super admin" : "Admin"}</option>)}</select>{viewMode!==person.role && <small>Vue restreinte · rôle réel : {roleNames[person.role]}</small>}</label>;
 }
 export async function logActivity(action: string, target: string, detail = "") {

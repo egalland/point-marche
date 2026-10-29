@@ -64,3 +64,12 @@ test('legacy analyst policy levels migrate to Admin and remain editable with SQL
  const request=fixture(t,{'directory.create':'staff'});const initial=await request('/api/admin/policy');assert.equal(initial.body.policy['directory.create'],'admin');
  const after={...initial.body.policy,'directory.create':'superadmin'};assert.equal((await request('/api/admin/policy','PUT',{policy:after,expected:initial.body.policy})).status,200);assert.equal((await request('/api/admin/policy')).body.policy['directory.create'],'superadmin');
 });
+
+test('built Worker persists sales access and denies direct writes or view escalation',async t=>{
+ const request=fixture(t);
+ assert.equal((await request('/api/admin/roles','PUT',{usercode:'V1234567',name:'Vente test',role:'sales'})).status,200);
+ const session=await request('/api/access/session','GET',undefined,'','V1234567');assert.equal(session.body.person.role,'sales');assert.equal(session.body.person.readOnly,true);
+ assert.equal((await request('/api/points?marketId=shared-test','GET',undefined,'','V1234567')).status,200);
+ for(const [path,method] of [['/api/points','POST'],['/api/point-drafts','PUT'],['/api/point-assets','POST'],['/api/feedback','POST'],['/api/global-users','POST']])assert.equal((await request(path,method,{},'','V1234567')).status,403,path);
+ assert.equal((await request('/api/points','POST',{},'','V1234567','superadmin')).status,403);
+});

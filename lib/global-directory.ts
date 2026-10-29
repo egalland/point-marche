@@ -3,6 +3,7 @@ export const GLOBAL_ROLE_OPTIONS = [
   { id: "chef-marche", label: "Chef de marché" },
   { id: "analyste-tarif-referentiel", label: "Analyste tarif et référentiel" },
   { id: "manager-tarif", label: "Manager Tarif" },
+  { id: "vente", label: "Vente · lecture seule" },
   { id: "autre", label: "Autre rôle" },
 ] as const;
 

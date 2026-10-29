@@ -7,7 +7,7 @@ const nodes=value=>Array.isArray(value)?value.flatMap(nodes):value?.props?[value
 const find=(tree,p)=>{const n=nodes(tree).find(p);assert.ok(n,'Expected UI control');return n;};
 const oldFetch=globalThis.fetch,oldWindow=globalThis.window;test.afterEach(()=>{globalThis.fetch=oldFetch;globalThis.window=oldWindow;});
 test('superadmin permissions are managed centrally and account rights are delegated to directory checkboxes',async()=>{
- const people=[{usercode:'A0000001',name:'Administrateur exemple',role:'superadmin'},{usercode:'A1234567',name:'Analyste',role:'user',jobRole:'analyste-tarif-referentiel'}];const policy=defaultPolicy();let sent;
+ const people=[{usercode:'A0000001',name:'Utilisateur Exemple',role:'superadmin'},{usercode:'A1234567',name:'Analyste',role:'user',jobRole:'analyste-tarif-referentiel'}];const policy=defaultPolicy();let sent;
  context={person:people[0],effective:people[0],can:()=>true};hooks={i:0,slots:[],effects:[]};globalThis.window={dispatchEvent(){}};
  globalThis.fetch=async(path,init)=>{if(init?.method==='PUT')sent=JSON.parse(init.body);return Response.json(path==='/api/admin/roles'?{people}:{policy});};
  const render=()=>{hooks.i=0;const tree=SuperAdminPanel();hooks.effects.splice(0).forEach(fn=>fn());return tree;};render();await setImmediate();let tree=render();
@@ -23,7 +23,14 @@ test('admin view selector cannot offer a superadmin view; users get no selector'
 
 test('directory has two nested role checkboxes, with superadmin implying Admin and locked root',async()=>{
  const {DirectoryRoleCheckboxes}=await load('features/market-pulse/directory-access.tsx');let value;
- let tree=DirectoryRoleCheckboxes({name:'A',role:'user',locked:false,onChange:r=>{value=r;}});let inputs=nodes(tree).filter(n=>n.type==='input');assert.equal(inputs.length,2);assert.equal(inputs[0].props.checked,false);inputs[1].props.onChange({target:{checked:true}});assert.equal(value,'superadmin');
+ let tree=DirectoryRoleCheckboxes({name:'A',role:'user',locked:false,onChange:r=>{value=r;}});let inputs=nodes(tree).filter(n=>n.type==='input');assert.equal(inputs.length,3);assert.equal(inputs[0].props.checked,false);inputs[1].props.onChange({target:{checked:true}});assert.equal(value,'superadmin');
  tree=DirectoryRoleCheckboxes({name:'A',role:'superadmin',locked:false,onChange:r=>{value=r;}});inputs=nodes(tree).filter(n=>n.type==='input');assert.equal(inputs[0].props.checked,true);assert.equal(inputs[0].props.disabled,true);inputs[1].props.onChange({target:{checked:false}});assert.equal(value,'admin');
  tree=DirectoryRoleCheckboxes({name:'Root',role:'superadmin',locked:true,onChange(){}});assert.ok(nodes(tree).filter(n=>n.type==='input').every(n=>n.props.disabled));
+});
+
+test('sales access checkbox grants read-only role and sales job cannot be promoted',async()=>{
+ const {DirectoryRoleCheckboxes}=await load('features/market-pulse/directory-access.tsx');let value;
+ let inputs=nodes(DirectoryRoleCheckboxes({name:'V',role:'user',locked:false,onChange:r=>{value=r;}})).filter(n=>n.type==='input');
+ inputs[2].props.onChange({target:{checked:true}});assert.equal(value,'sales');
+ inputs=nodes(DirectoryRoleCheckboxes({name:'V',role:'sales',salesJob:true,locked:false,onChange(){}})).filter(n=>n.type==='input');assert.ok(inputs.every(n=>n.props.disabled));assert.equal(inputs[0].props.checked,false);assert.equal(inputs[2].props.checked,true);
 });

@@ -29,7 +29,7 @@ test('only superadmins can assign roles and policies; root cannot be demoted',as
  assert.equal((await f.call('B1234567','/api/admin/audit')).status,200);
  assert.equal((await f.call('B1234567','/api/admin/roles','PUT',{usercode:'C1234567',name:'C',role:'superadmin'})).status,403);
  assert.equal((await f.call(ROOT_ADMIN,'/api/admin/roles','PUT',{usercode:'C1234567',name:'C',role:'superadmin'})).status,200);
- assert.equal((await f.call('C1234567','/api/admin/roles','PUT',{usercode:ROOT_ADMIN,name:'Administrateur exemple',role:'user'})).status,409);
+ assert.equal((await f.call('C1234567','/api/admin/roles','PUT',{usercode:ROOT_ADMIN,name:'Utilisateur Exemple',role:'user'})).status,409);
  assert.equal((await f.call('B1234567','/api/admin/policy')).status,403);
  assert.equal((await f.call('B1234567','/api/admin/audit','DELETE')).status,405);
 });
@@ -81,4 +81,21 @@ test('analyst activity follows analyst access while data tabs and mail settings 
  assert.equal(canView('user','stats'),true);
  assert.equal(hasPermission({role:'user'},'settings.mail'),false);
  assert.equal(hasPermission({role:'admin'},'settings.mail'),true);
+});
+
+test('sales job and assigned sales role enforce read-only permissions even with permissive policy',async()=>{
+ const job=resolvePerson('V1234567',[{usercode:'V1234567',name:'Vente',role:'vente'}],[{usercode:'V1234567',name:'Vente',role:'superadmin'}]);
+ assert.equal(job.role,'sales');assert.equal(job.readOnly,true);assert.deepEqual(allowedViews('sales'),['sales']);assert.equal(effectivePerson(job,'admin'),null);
+ const assigned=resolvePerson('V1234567',[],[{usercode:'V1234567',name:'Vente',role:'sales'}]);assert.equal(assigned.readOnly,true);
+ const policy=Object.fromEntries(Object.keys(defaultPolicy()).map(k=>[k,'user']));
+ for(const person of [job,assigned,{role:'sales'}]){
+  for(const permission of ['point.read','stats.read','suppliers.read','exports.html'])assert.equal(hasPermission(person,permission,policy),true);
+  for(const permission of ['point.edit','point.assets','directory.edit','imports.planner','settings.open','feedback.submit','admin.open'])assert.equal(hasPermission(person,permission,policy),false);
+ }
+ const f=fixture();assert.equal((await f.call(ROOT_ADMIN,'/api/admin/roles','PUT',{usercode:'V1234567',name:'Vente',role:'sales'})).status,200);
+ assert.equal((await f.call('V1234567','/api/points')).status,200);
+ for(const [path,method] of [['/api/points','POST'],['/api/point-drafts','PUT'],['/api/point-assets','POST'],['/api/feedback','POST'],['/api/planner-tasks','POST'],['/api/unknown','POST']])assert.equal((await f.call('V1234567',path,method,{})).status,403,path);
+ assert.equal((await f.call('V1234567','/api/points','POST',{},'user')).status,403);
+ assert.equal((await f.call('V1234567','/api/activity','POST',{action:'Lecture'})).status,200);
+ assert.equal((await f.call(ROOT_ADMIN,'/api/admin/roles','PUT',{usercode:'V1234567',name:'Vente',role:'user',expectedRole:'sales'})).status,200);
 });

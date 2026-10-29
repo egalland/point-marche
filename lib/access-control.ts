@@ -1,9 +1,9 @@
 export const ROOT_ADMIN = "A0000001";
-export type AccessRole = "user" | "admin" | "superadmin";
+export type AccessRole = "user" | "admin" | "superadmin" | "sales";
 export type AccessView = AccessRole | "reader";
 export type AccessPerson = { usercode: string; name: string; role: AccessRole; jobRole?: string; readOnly?: boolean };
 export type AuditEvent = { id: string; at: string; usercode: string; device: string; action: string; target: string; status: number; detail: string };
-export const roleNames: Record<AccessRole, string> = { user: "Utilisateur", admin: "Admin", superadmin: "Super admin" };
+export const roleNames: Record<AccessRole, string> = { user: "Utilisateur", sales: "Vente · lecture seule", admin: "Admin", superadmin: "Super admin" };
 export const levelNames = { superadmin: "Super admin", admin: "Admin et Super admin", user: "Tous les utilisateurs" } as const;
 export type AccessLevel = keyof typeof levelNames;
 export const permissionCatalog = [
@@ -53,9 +53,11 @@ export const normalizeUserCode = (value: unknown) => typeof value === "string" ?
 export function resolvePerson(usercode: string, directory: { usercode: string; name: string; role: string }[], overrides: {usercode: string; name: string; role: string}[]): AccessPerson {
   const person = directory.find(p => normalizeUserCode(p.usercode) === usercode), override = overrides.find(p => normalizeUserCode(p.usercode) === usercode);
   const legacyJob = override?.role === "analyst" ? "analyste-tarif-referentiel" : override?.role === "manager" ? "manager-tarif" : "";
-  return { usercode, name: override?.name || person?.name || usercode, role: usercode === ROOT_ADMIN || override?.role === "superadmin" ? "superadmin" : override?.role === "user" ? "user" : override?.role === "admin" || ["analyst","manager"].includes(override?.role || "") || ["analyste-tarif-referentiel","manager-tarif"].includes(person?.role || "") ? "admin" : "user", jobRole: person?.role || legacyJob };
+  const sales = person?.role === "vente" || override?.role === "sales";
+  const role: AccessRole = usercode === ROOT_ADMIN ? "superadmin" : sales ? "sales" : override?.role === "superadmin" ? "superadmin" : override?.role === "user" ? "user" : override?.role === "admin" || ["analyst","manager"].includes(override?.role || "") || ["analyste-tarif-referentiel","manager-tarif"].includes(person?.role || "") ? "admin" : "user";
+  return { usercode, name: override?.name || person?.name || usercode, role, jobRole: person?.role || legacyJob, ...(role === "sales" ? {readOnly:true} : {}) };
 }
-export function allowedViews(role: AccessRole): AccessView[] { return role === "superadmin" ? ["superadmin", "admin", "reader"] : role === "admin" ? ["admin", "reader"] : ["user"]; }
+export function allowedViews(role: AccessRole): AccessView[] { return role === "superadmin" ? ["superadmin", "admin", "reader"] : role === "admin" ? ["admin", "reader"] : [role]; }
 export function effectivePerson(person: AccessPerson, view?: string): AccessPerson | null {
   if (!view) return person;
   if (!allowedViews(person.role).includes(view as AccessView)) return null;
@@ -63,7 +65,7 @@ export function effectivePerson(person: AccessPerson, view?: string): AccessPers
 }
 const readerPermissions = new Set<Permission>(["point.read", "stats.read", "suppliers.read", "exports.open", "exports.mail", "exports.html", "exports.json", "exports.charts", "feedback.submit"]);
 export function hasPermission(person: AccessPerson, permission: Permission, policy: AccessPolicy = defaultPolicy()) {
-  if (person.readOnly && !readerPermissions.has(permission)) return false;
+  if ((person.readOnly || person.role === "sales") && (!readerPermissions.has(permission) || (person.role === "sales" && permission === "feedback.submit"))) return false;
   if (person.role === "superadmin") return true;
   const rank = person.role === "admin" ? 2 : 0;
   return rank >= ({ user:0, admin:2, superadmin:3 }[policy[permission] ?? defaultPolicy()[permission]]);
@@ -92,6 +94,7 @@ export function requestPermission(path: string, method: string, scope?: unknown)
 }
 export function canRequest(person: AccessPerson | AccessRole, path: string, method: string, scope?: unknown, policy = defaultPolicy()) {
   const p = typeof person === "string" ? {usercode:"",name:"",role:person} : person;
+  if (p.role === "sales" && !["GET", "HEAD"].includes(method) && path !== "/api/activity") return false;
   if (path.startsWith("/api/admin") && !["/api/admin/policy","/api/admin/roles","/api/admin/audit"].includes(path)) return false;
   const permission = requestPermission(path,method,scope);
   return permission === "superadmin" ? p.role === "superadmin" : permission ? hasPermission(p,permission,policy) : true;
