@@ -51,13 +51,13 @@ test('mail and HTML simulation details carry the same dated milestones and escap
 });
 test('Planner enrichment never inserts the same external task twice',async()=>{
  const {enrichMarketPointFromPlanner}=await import(moduleUrl('../../lib/point-planner-enrichment.ts'));
- const source={...task,category:'',goal:'',plannerStatus:'',effectiveMonth:'2026-10',taskName:'2026-10-TEST',labels:['REV-PB'],metrics:{supplierCode:'F1',globalVariation:null,weightedVariation:null,purchases12m:null}};
- const point=enrichMarketPointFromPlanner({meetingDate:'2026-10-19',operations:[]},[source,source],['REV-PB']);
+ const source={...task,category:'',goal:'',plannerStatus:'',effectiveMonth:'2026-10',taskName:'2026-10-TEST',labels:['TEST-A'],metrics:{supplierCode:'F1',globalVariation:null,weightedVariation:null,purchases12m:null}};
+ const point=enrichMarketPointFromPlanner({meetingDate:'2026-10-19',operations:[]},[source,source],['TEST-A']);
  assert.equal(point.operations.length,1);
  assert.equal(point.operations[0].plannerSource.checklist[1].date,'2026-10-04');
 });
 test('template eligibility uses Planner tags or applicable checklist labels, not every simulation',()=>{
- assert.equal(lifecycle.hasTemplateTracking({labels:['REV-PB'],checklist:[step('Avis de hausse','2026-10-01')]}),false);
+ assert.equal(lifecycle.hasTemplateTracking({labels:['TEST-A'],checklist:[step('Avis de hausse','2026-10-01')]}),false);
  assert.equal(lifecycle.hasTemplateTracking({labels:['Trame WORKSPACE'],checklist:[]}),true);
  assert.equal(lifecycle.hasTemplateTracking({labels:['Sans trame'],checklist:[]}),false);
  assert.equal(lifecycle.hasTemplateTracking({labels:[],checklist:[step('Trame WORKSPACE envoyée')]}),true);
@@ -67,7 +67,7 @@ test('template eligibility uses Planner tags or applicable checklist labels, not
 });
 test('an untracked simulation adds no artificial zero to supplier denominators or delay samples',async()=>{
  const {buildSupplierProfiles,supplierProfileSummary}=await import(moduleUrl('../../lib/supplier-profile.ts'));
- const tracked={...task,externalId:'tracked',taskName:'2026-10-OCTOBRE-Test',effectiveMonth:'2026-10',category:'1 - À faire',goal:'',plannerStatus:'',labels:['REV-PB'],metrics:{supplierCode:'A0001',globalVariation:null,weightedVariation:null}};
+ const tracked={...task,externalId:'tracked',taskName:'2026-10-OCTOBRE-Test',effectiveMonth:'2026-10',category:'1 - À faire',goal:'',plannerStatus:'',labels:['TEST-A'],metrics:{supplierCode:'A0001',globalVariation:null,weightedVariation:null}};
  const untracked={...tracked,externalId:'untracked',checklist:[step('Avis de hausse','2026-10-01'),step('Tarif fournisseur','2026-10-03')]};
  const summary=supplierProfileSummary(buildSupplierProfiles([tracked,untracked],[])[0]);
  assert.equal(summary.total,2);assert.equal(summary.tracked,1);assert.equal(summary.sent,1);assert.deepEqual(summary.preparation,{days:3,count:1});assert.deepEqual(summary.supplierReturn,{days:6,count:1});

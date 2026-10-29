@@ -70,3 +70,15 @@ test('directory checkbox changes are superadmin-only, retain root and refuse sta
  assert.equal((await f.call(ROOT_ADMIN,'/api/admin/roles','PUT',{usercode:'A1234567',name:'A',role:'user',expectedRole:'admin'})).status,409);
  assert.equal((await f.call(ROOT_ADMIN,'/api/admin/roles','PUT',{usercode:'A1234567',name:'A',role:'admin',expectedRole:'superadmin'})).status,200);
 });
+
+
+test('analyst activity follows analyst access while data tabs and mail settings retain their policy',()=>{
+ for(const role of ['admin','superadmin'])for(const view of ['analyst','analyst-activity'])assert.equal(canView(role,view),true);
+ assert.equal(canView('user','analyst-activity'),false);
+ const policy={...defaultPolicy(),'analyst.read':'superadmin'};
+ assert.equal(canView('admin','analyst-activity',policy),false);
+ assert.equal(canView('superadmin','analyst-activity',policy),true);
+ assert.equal(canView('user','stats'),true);
+ assert.equal(hasPermission({role:'user'},'settings.mail'),false);
+ assert.equal(hasPermission({role:'admin'},'settings.mail'),true);
+});

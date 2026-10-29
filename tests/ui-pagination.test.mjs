@@ -29,16 +29,16 @@ test("paginates a 12,491 row table without gaps or duplicate rows", () => {
 
 test("groups activities in one pass and retains each simulation amount without adding it", () => {
   const contributions = [
-    { taskId: "one", taskName: "Simulation exemple", date: "2026-08-25", purchases12m: 89613.02, specialty: "simulation" },
+    { taskId: "one", taskName: "Simulation exemple", date: "2026-08-25", purchases12m: 23456.12, specialty: "simulation" },
     { taskId: "two", taskName: "Autre simulation", date: "2026-08-27", purchases12m: 0, specialty: "simulation" },
-    { taskId: "one", taskName: "Simulation exemple", date: "2026-08-26", purchases12m: 89613.02, specialty: "control" },
+    { taskId: "one", taskName: "Simulation exemple", date: "2026-08-26", purchases12m: 23456.12, specialty: "control" },
   ];
   const expected = Array.from(new Map(contributions.map((item) => [item.taskId, { taskId: item.taskId, taskName: item.taskName, purchases12m: item.purchases12m, date: item.date, activities: contributions.filter((candidate) => candidate.taskId === item.taskId) }])).values()).sort((a, b) => b.date.localeCompare(a.date));
   assert.deepEqual(groupAnalystActivities(contributions), expected);
   const volume = Array.from({ length: 20000 }, (_, index) => ({ ...contributions[0], taskId: String(index % 5000) }));
   const grouped = groupAnalystActivities(volume);
   assert.equal(grouped.length, 5000);
-  assert.ok(grouped.every((item) => item.activities.length === 4 && item.purchases12m === 89613.02));
+  assert.ok(grouped.every((item) => item.activities.length === 4 && item.purchases12m === 23456.12));
 });
 
 test("supplier chart exposes keyboard navigation, toggles, and bounded labels", () => {
@@ -90,4 +90,6 @@ test("analyst table pagination does not truncate KPI totals", async () => {
   assert.match(html, />12491 activités dans la sélection</);
   assert.match(html, />12491<\/strong>/);
   assert.match(html, /Page 1 \/ 125/);
+  assert.match(html, /<h1>Activité analystes<\/h1>/);
+  assert.doesNotMatch(html, /Vue des statistiques|>Variations fournisseurs<\/button>/);
 });

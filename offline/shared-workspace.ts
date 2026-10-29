@@ -44,6 +44,7 @@ function hydrate(parts: PartMap, local: WorkspaceData, at: string): WorkspaceDat
   validateWorkspace(result); return result;
 }
 const label = (name: string) => {
+  if (name === 'preferences/purchaseData-source') return 'Import PURCHASES';
   const [kind, id] = name.split('/');
   return `${({ meta: 'Classeur', jira: 'Import Jira', planner: 'Import Planner', points: 'Point marché', analystPoints: 'Point analyste', drafts: 'Brouillon', markets: 'Marché', users: 'Personne', preferences: 'Paramètre' } as Record<string, string>)[kind] ?? kind}${id ? ` · ${decodeURIComponent(id)}` : ''}`;
 };

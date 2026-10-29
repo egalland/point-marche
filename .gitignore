@@ -41,5 +41,26 @@ next-env.d.ts
 /outputs/
 /work/
 
+# Runtime data and delivery artifacts stay outside public source.
+/data/
+/imports/
+/donnees/
+/sauvegardes/
+/history/
+*.marketpulse.json
+point-sync-*.json
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.xlsm
+*.sqlite
+*.db
+*.zip
+*.bundle
+*.eml
+*.pdf
+/public/qa-*
+
 # Generated TypeScript cache
 *.tsbuildinfo

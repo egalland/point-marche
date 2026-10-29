@@ -46,7 +46,7 @@ export function newWorkspace(): WorkspaceData {
 
 export function isEmptyStarterWorkspace(data: WorkspaceData) {
   const market = data.markets[0];
-  return data.name === "Mes points marché" && data.markets.length === 1 && market?.id === "market-local" && market.name === "Mon marché" && market.shortCode === "MARCHÉ" && market.tone === "mint" && market.colorHex === "" && !market.plannerTags.length && market.jiraWarningDays === 10 && market.jiraCriticalDays === 20 && !data.users.length && !data.points.length && !data.analystPoints.length && !data.plannerTasks.length && !data.jiraTickets.length && !data.jiraImports.length && !data.drafts.length && !data.source;
+  return data.name === "Mes points marché" && data.markets.length === 1 && market?.id === "market-local" && market.name === "Mon marché" && market.shortCode === "MARCHÉ" && market.tone === "mint" && market.colorHex === "" && !market.plannerTags.length && market.jiraWarningDays === 10 && market.jiraCriticalDays === 20 && !data.users.length && !data.points.length && !data.analystPoints.length && !data.plannerTasks.length && !data.jiraTickets.length && !data.jiraImports.length && !data.drafts.length && !data.preferences["purchaseData-source"] && !data.source;
 }
 
 /** Retire the old CSV requirement when opening an earlier portable workbook. */

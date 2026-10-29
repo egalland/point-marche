@@ -1,3 +1,4 @@
+import { localPURCHASES } from "./purchaseData-api";
 import { guardLocalApi } from "./access-api";
 import { validFeedbackRecipients, parseFeedbackRequest, feedbackSummary, updateFeedbackStatus, type FeedbackRequest } from "../lib/feedback";
 import type { AppTransport } from "../lib/app-transport";
@@ -100,6 +101,10 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
       const url = new URL(input instanceof Request ? input.url : String(input), "https://local.market-pulse.invalid");
       if (url.origin !== "https://local.market-pulse.invalid") throw new LocalApiError("Le mode local ne communique pas avec un serveur.", 403);
       const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+      if (url.pathname === "/api/purchaseData") {
+        try { return await localPURCHASES(new Request(input instanceof Request ? input : url, init), store); }
+        catch (error) { throw new LocalApiError(error instanceof Error ? error.message : "Import PURCHASES impossible."); }
+      }
       const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {};
       const data = store.read();
       const path = url.pathname;

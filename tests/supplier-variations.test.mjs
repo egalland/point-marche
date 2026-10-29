@@ -14,7 +14,7 @@ function task(id, period, name, supplierCode, globalVariation, weightedVariation
     externalId: id,
     taskName: `${period}-MOIS-${name}`,
     effectiveMonth: period,
-    labels: ["REV-PB"],
+    labels: ["TEST-A"],
     metrics: { supplierCode, globalVariation, weightedVariation },
   };
 }
@@ -42,7 +42,7 @@ test("uses the normalized task supplier when no supplier code exists", () => {
 });
 
 test("preserves the amount for each observation rather than a supplier total", () => {
-  const amounts = [473398.58, 89613.02, 0, null];
+  const amounts = [123456.78, 23456.12, 0, null];
   const tasks = amounts.map((purchases12m, index) => {
     const item = task(`sim-${index}`, `2026-0${index + 5}`, "JOHN INDUSTRY", "A1234", 3, 2.8);
     return { ...item, metrics: { ...item.metrics, purchases12m } };
@@ -92,13 +92,13 @@ test("supplier search matches accented names and codes without losing the all op
 });
 
 test("supplier month keeps V2 instead of averaging the original and its revision", () => {
-  const original = {...task("placo-v1", "2025-11", "PLACOPLATRE", "B7795", -2.63, 3), checklist:[{label:"Intégration",date:"2025-10-15"}]};
-  const revised = {...task("placo-v2", "2025-11", "PLACOPLATRE V2", "B7795", -11.46, null), checklist:[{label:"Intégration",date:"2025-11-03"}]};
+  const original = {...task("supplierBeta-v1", "2025-11", "SUPPLIER-BETA", "F0002", -2.63, 3), checklist:[{label:"Intégration",date:"2025-10-15"}]};
+  const revised = {...task("supplierBeta-v2", "2025-11", "SUPPLIER-BETA V2", "F0002", -11.46, null), checklist:[{label:"Intégration",date:"2025-11-03"}]};
   for (const tasks of [[original, revised], [revised, original]]) {
     const points = variations.buildSupplierVariations(tasks);
     assert.equal(points.length, 2);
     const retained = variations.latestSupplierVariations(points);
-    assert.equal(retained[0].taskId, "placo-v2");
+    assert.equal(retained[0].taskId, "supplierBeta-v2");
     assert.equal(retained[0].globalVariation, -11.46);
     assert.equal(retained[0].weightedVariation, null);
     assert.equal(variations.averageVariation(points, "globalVariation"), -11.46);
@@ -137,16 +137,16 @@ test("integration date beats revision name, creation, completion and import date
 });
 
 test("a later blank profile does not erase the available variation for January", () => {
-  const old={...task('old','2026-01','PLACOPLATRE','B7795',1.45,null),integratedAt:'2025-11-24'};
-  const recent={...task('new','2026-01','PLACOPLATRE PROFILES','B7795',null,null),integratedAt:'2025-12-02'};
+  const old={...task('old','2026-01','SUPPLIER-BETA','F0002',1.45,null),integratedAt:'2025-11-24'};
+  const recent={...task('new','2026-01','SUPPLIER-BETA PROFILES','F0002',null,null),integratedAt:'2025-12-02'};
   const raw=variations.buildSupplierVariations([old,recent]);
   assert.equal(raw.length,1);
   assert.equal(variations.aggregateMonthlyVariations(raw,'2026-01-01','2026-01-31')[0].globalVariation,1.45);
 });
 
-test("reversed Isover title keeps a clean supplier label", () => {
-  assert.equal(variations.supplierLabelFromTask('2026-AVRIL-04-ISOVER'),'ISOVER');
-  assert.equal(variations.supplierLabelFromTask('2026-04-AVRIL-ISOVER'),'ISOVER');
+test("reversed Supplier-Alpha title keeps a clean supplier label", () => {
+  assert.equal(variations.supplierLabelFromTask('2026-AVRIL-04-SUPPLIER-ALPHA'),'SUPPLIER-ALPHA');
+  assert.equal(variations.supplierLabelFromTask('2026-04-AVRIL-SUPPLIER-ALPHA'),'SUPPLIER-ALPHA');
 });
 
 test("history view keeps calendar months empty or only the observations, including zero", () => {

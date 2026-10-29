@@ -2,7 +2,7 @@
 
 Application pour préparer, présenter et diffuser les points hebdomadaires des marchés et des analystes : dossiers, simulations, promotions, activité Jira et variations fournisseurs.
 
-**Version des sources : V106** · Interface en français · Ordinateur et mobile
+**Version des sources : V108** · Interface en français · Ordinateur et mobile
 
 
 
@@ -141,3 +141,12 @@ Le bouton fixe bug / ampoule ouvre un formulaire commun avec choix du type. Le s
 Les profils Admin et Super admin, les cases de l’annuaire, les vues restreintes, le journal et la grille des autorisations sont intégrés. L’identifiant initial est fictif : `A0000001`. L’identification demeure déclarative, sans mot de passe.
 
 Le build portable utilise exclusivement les données du classeur et le journal du dossier partagé. Il exclut la base D1, les routes serveur, les Workers et les files de brouillons hébergées. Le script vérifie les modules réellement embarqués et refuse une dépendance serveur accidentelle. Le ZIP de distribution doit contenir uniquement le HTML autonome et son mode d’emploi ; le dépôt conserve les sources nécessaires aux deux versions. Les exports mail et HTML suivent les blocs visibles du point.
+
+
+## Révision V108
+
+Le point affiche une synthèse de la semaine et une liste de vérifications avant diffusion (sources, actions, destinataires, sauvegarde). Les adresses invalides bloquent le fichier Outlook. Le lecteur Excel borne aussi la décompression. L’import des données achats fonctionne dans le classeur autonome, avec conservation du registre précédent si une ligne est invalide.
+
+L’espace Analystes regroupe le point et l’activité. Les variations fournisseurs et les achats disposent de rubriques distinctes. La distribution distingue `application/`, `donnees/` et `sauvegardes/`. Une mise à jour contient seulement `application/` ; les données restent à leur emplacement. Voir [mise à jour locale](docs/mise-a-jour-locale.md).
+
+Les exemples de tests sont fictifs et le modèle Excel ne contient aucune cellule de données ni cache de graphique. `node scripts/check-public-source.mjs` contrôle les sources suivies avant publication. Le contrôle peut charger une liste privée via `PUBLIC_SOURCE_TERMS_FILE`, placée hors du dépôt. Ce contrôle automatique complète la relecture ; il ne prouve pas l’absence de toute information confidentielle et ne nettoie pas l’historique distant.

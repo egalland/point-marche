@@ -136,7 +136,7 @@ test("market Jira excludes analysts and completed tickets, retaining stable mark
   const data = fixture();
   data.jiraTickets = [ticket("GLOBAL-1", { status: "En cours" }), ticket("GLOBAL-2", { status: "En cours", assigneeUserCode: "B1234567" }), ticket("GLOBAL-3", { assigneeUserCode: "B1234567" })];
   const api = createLocalApi(new WorkspaceStore(data));
-  const changed = await call(api, "/api/markets", { id: "market-local", name: "Nouveau nom", shortCode: "TEST", jiraWarningDays: 10, jiraCriticalDays: 8, plannerTags: ["MEN-PB"] }, "PATCH");
+  const changed = await call(api, "/api/markets", { id: "market-local", name: "Nouveau nom", shortCode: "TEST", jiraWarningDays: 10, jiraCriticalDays: 8, plannerTags: ["TEST-B"] }, "PATCH");
   assert.equal(changed.market.id, "market-local");
   assert.equal(changed.market.jiraCriticalDays, 11);
   const result = await call(api, "/api/jira-week?marketId=market-local&year=2026&week=35");
@@ -202,9 +202,9 @@ test("imports and links 25,000 CSV rows with repeated participant columns withou
 });
 
 test("Planner imports preserve per-simulation turnover without changing saved points on read", async () => {
-  const data = fixture(); data.markets[0].plannerTags = ["MEN-PB"];
+  const data = fixture(); data.markets[0].plannerTags = ["TEST-B"];
   const store = new WorkspaceStore(data); const api = createLocalApi(store);
-  const rawText = "ID de tâche\tNom de tâche\tCatégorie\tStatut\tÉtiquettes\tCommentaires\nTASK1\t2026-08-AOUT-FOURNISSEUR TEST\tSimulation\tNon démarrées\tMEN-PB\tAchats 12 mG : 1 234,56 €;Code Fournisseur : X0001;Variation GLOBAL : 2%;Variation pondérée : 1,5%";
+  const rawText = "ID de tâche\tNom de tâche\tCatégorie\tStatut\tÉtiquettes\tCommentaires\nTASK1\t2026-08-AOUT-FOURNISSEUR TEST\tSimulation\tNon démarrées\tTEST-B\tAchats 12 mG : 1 234,56 €;Code Fournisseur : X0001;Variation GLOBAL : 2%;Variation pondérée : 1,5%";
   const imported = await call(api, "/api/planner-tasks", { rawText });
   assert.equal(imported.status, 201);
   assert.equal(imported.imported, 1);

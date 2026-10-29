@@ -1,5 +1,5 @@
 import type { WorkspaceView } from "../features/market-pulse/workspace-navigation";
-const views = new Set<WorkspaceView>(["read", "edit", "analyst", "stats", "suppliers", "imports", "mail", "settings", "admin", "superadmin"]);
+const views = new Set<WorkspaceView>(["read", "edit", "analyst", "analyst-activity", "stats", "purchaseData", "suppliers", "imports", "mail", "settings", "admin", "superadmin"]);
 export function workspaceViewFromUrl(href: string): WorkspaceView {
   const mode = new URL(href).searchParams.get("mode") as WorkspaceView | null;
   return mode && views.has(mode) ? mode === "edit" ? "read" : mode : "read";

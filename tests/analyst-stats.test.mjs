@@ -32,23 +32,23 @@ const baseTask = {
   checklist: [
     { order: 0, label: "Avis de hausse", date: "2026-05-20", kind: "other", analystName: "", nonApplicable: false },
     { order: 1, label: "Tarif fournisseur", date: "2026-05-25", kind: "other", analystName: "", nonApplicable: false },
-    { order: 2, label: "Simulation Anaïs", date: "2026-06-01", kind: "simulation", analystName: "Anaïs", nonApplicable: false },
+    { order: 2, label: "Simulation Zoé", date: "2026-06-01", kind: "simulation", analystName: "Zoé", nonApplicable: false },
     { order: 3, label: "Validation CDM", date: "2026-06-04", kind: "other", analystName: "", nonApplicable: false },
     { order: 4, label: "Intégration", date: "2026-06-05", kind: "other", analystName: "", nonApplicable: false },
     { order: 5, label: "Contrôle", date: "2026-06-07", kind: "control", analystName: "", nonApplicable: false },
     { order: 6, label: "Simulation Legacy Name", date: "2026-06-03", kind: "simulation", analystName: "Legacy Name", nonApplicable: false },
   ],
-  labels: ["REV-PB"],
+  labels: ["TEST-A"],
   comments: "",
   metrics: { purchases12m: null, supplierCode: "", announcedVariation: null, globalVariation: null, weightedVariation: null, tariffStructure: "" },
   workflowState: "completed",
 };
 
 const users = [
-  { id: "analyst-1", name: "Anaïs MARTIN", email: "anais@example.test", usercode: "", plannerAlias: "Anaïs", role: "analyste-tarif-referentiel", marketIds: ["market-rev"] },
+  { id: "analyst-1", name: "Zoé EXEMPLE", email: "zoe@example.test", usercode: "", plannerAlias: "Zoé", role: "analyste-tarif-referentiel", marketIds: ["market-rev"] },
   { id: "lead-1", name: "John DOE", email: "john@example.test", usercode: "A1234567", plannerAlias: "John", role: "chef-produit", marketIds: ["market-rev"] },
 ];
-const markets = [{ id: "market-rev", name: "Revêtements", plannerTags: ["REV-PB"] }];
+const markets = [{ id: "market-rev", name: "Revêtements", plannerTags: ["TEST-A"] }];
 
 test("a freely chosen comparison period uses the same filters for volumes and delays", () => {
   const old = { ...baseTask, externalId: "old", checklist: baseTask.checklist.map((step) => ({ ...step, date: step.date.replace("2026", "2025") })) };
@@ -79,7 +79,7 @@ test("counts old unnamed activities globally and matches configured Planner alia
   assert.equal(stats.controls, 1);
   assert.equal(stats.coverageRate, 1 / 3);
   assert.deepEqual(stats.unmatchedNames, ["Legacy Name"]);
-  assert.equal(stats.contributions.find((item) => item.analystLabel === "Anaïs")?.analystId, "analyst-1");
+  assert.equal(stats.contributions.find((item) => item.analystLabel === "Zoé")?.analystId, "analyst-1");
   assert.equal(stats.contributions.find((item) => item.analystLabel === "")?.analystName, "Non attribué");
   assert.deepEqual(stats.delaySummaries.map((item) => [item.kind, item.average, item.median, item.sampleCount]), [
     ["templatePreparation", null, null, 0],
@@ -103,12 +103,12 @@ test("supports combined analyst, market and specialty filters", () => {
   assert.equal(stats.totalActivities, 1);
   assert.equal(stats.simulations, 1);
   assert.equal(stats.controls, 0);
-  assert.equal(stats.byAnalyst[0].name, "Anaïs MARTIN");
+  assert.equal(stats.byAnalyst[0].name, "Zoé EXEMPLE");
   assert.equal(stats.delaySummaries.filter(item => !item.kind.startsWith("template")).every((item) => item.sampleCount === 1), true);
 });
 
 test("keeps the imported supplier amount on each activity without a cumulative KPI", () => {
-  const amounts = [473398.58, 89613.02, 0, null];
+  const amounts = [123456.78, 23456.12, 0, null];
   const tasks = amounts.map((purchases12m, index) => ({
     ...baseTask,
     externalId: `simulation-${index}`,

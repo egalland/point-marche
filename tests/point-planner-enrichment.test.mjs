@@ -43,7 +43,7 @@ function task(externalId, effectiveMonth, globalVariation, weightedVariation) {
     checklistCompleted: 0,
     checklistTotal: 0,
     checklist: [],
-    labels: ["REV-PB"],
+    labels: ["TEST-A"],
     comments: "",
     metrics: { purchases12m: null, supplierCode: "F1000", announcedVariation: null, globalVariation, weightedVariation, tariffStructure: "" },
     workflowState: "active",
@@ -77,9 +77,9 @@ test("injects missing current and next month Planner simulations into a market p
   const july = task("july", "2026-07", 2.5, 2.2);
   const august = task("august", "2026-08", 3.1, 2.8);
   const september = task("september", "2026-09", 3.4, 3);
-  const otherMarket = { ...task("other", "2026-08", 4, 3.8), labels: ["PAN-GM"] };
+  const otherMarket = { ...task("other", "2026-08", 4, 3.8), labels: ["TEST-C"] };
 
-  const result = enrichment.enrichMarketPointFromPlanner(payload, [july, august, september, otherMarket], ["REV-PB"]);
+  const result = enrichment.enrichMarketPointFromPlanner(payload, [july, august, september, otherMarket], ["TEST-A"]);
 
   assert.deepEqual(result.operations.map((operation) => operation.id), ["manual", "planner:august", "planner:september"]);
   assert.equal(result.operations[1].plannerSource.variationHistory.length, 4);
@@ -89,14 +89,14 @@ test("reuses imported amounts by task ID for the current point and older simulat
   const july = task("july", "2026-07", 2.5, 2.2);
   const august = task("august", "2026-08", 3.1, 2.8);
   const september = task("september", "2026-09", 3.4, 3);
-  july.metrics.purchases12m = 473398.58;
-  august.metrics.purchases12m = 89613.02;
+  july.metrics.purchases12m = 123456.78;
+  august.metrics.purchases12m = 23456.12;
   september.metrics.purchases12m = 0;
   const payload = { meetingDate: "2026-08-27", operations: [{
     id: "planner:july", name: july.taskName,
     plannerSource: { externalId: "july", metrics: { purchases12m: null, supplierCode: "F1000" } },
   }] };
-  const result = enrichment.enrichMarketPointFromPlanner(payload, [july, august, september], ["REV-PB"]);
-  assert.deepEqual(result.operations.map((operation) => operation.plannerSource.metrics.purchases12m), [473398.58, 89613.02, 0]);
+  const result = enrichment.enrichMarketPointFromPlanner(payload, [july, august, september], ["TEST-A"]);
+  assert.deepEqual(result.operations.map((operation) => operation.plannerSource.metrics.purchases12m), [123456.78, 23456.12, 0]);
   assert.equal(payload.operations[0].plannerSource.metrics.purchases12m, null);
 });

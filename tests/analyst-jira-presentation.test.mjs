@@ -134,7 +134,7 @@ test("keeps the white mail and interactive HTML aligned without exposing open st
 test("exports the supplier amount of each simulation without cumulating it", () => {
   const analyst = { id: "analyst", name: "Jane DOE", role: "analyste-tarif-referentiel", marketIds: [] };
   const point = initialAnalystPoint(analyst);
-  const amounts = [473398.58, 89613.02, 0, null];
+  const amounts = [123456.78, 23456.12, 0, null];
   const stats = {
     contributions: amounts.map((purchases12m, index) => ({
       taskId: `simulation-${index}`, taskName: `Fournisseur exemple · simulation ${index}`,
@@ -145,8 +145,8 @@ test("exports the supplier amount of each simulation without cumulating it", () 
   for (const output of [analystMailHtml(point, analyst, stats, stats, null), analystInteractiveHtml(point, analyst, stats, null)]) {
     const normalized = output.replace(/[\u00a0\u202f]/g, " ");
     assert.equal(output.split("CA fournisseur · 12 mG").length - 1, 4);
-    assert.match(normalized, /473 398,58 €/);
-    assert.match(normalized, /89 613,02 €/);
+    assert.match(normalized, /123 456,78 €/);
+    assert.match(normalized, /23 456,12 €/);
     assert.match(normalized, />0,00 €</);
     assert.match(normalized, />—</);
     assert.doesNotMatch(normalized, /563 011,60/);

@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import postcss from "postcss";
 import tailwindcss from "@tailwindcss/postcss";
@@ -66,6 +66,7 @@ const html = `<!doctype html>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'self' blob: data:; worker-src blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="color-scheme" content="light dark"><title>Point marché Revêtements et Menuiserie</title><link rel="icon" href="data:image/svg+xml;base64,${favicon}">
 <script>${appearanceBootstrapScript}</script><style>${stylesheet}</style></head><body class="${fontLayout.bodyClass}">${embeddedData}<div id="root"></div><script>${safeJavascript}</script></body></html>`;
+await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, html, "utf8");
 if (process.env.OFFLINE_BUILD_REPORT) await writeFile(resolve(process.env.OFFLINE_BUILD_REPORT), JSON.stringify({inputFiles:Object.keys(bundle.metafile.inputs),javascriptBytes:Buffer.byteLength(javascript),htmlBytes:Buffer.byteLength(html),serverModules:forbiddenInputs},null,2)+"\n");
 console.log(outputPath);

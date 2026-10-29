@@ -31,7 +31,7 @@ test('sitemap uses real application deep links, excludes APIs and stays valid XM
   assert.ok(pages.some(page => page.href === '/?mode=analyst'));
   assert.ok(pages.some(page => page.href === '/aide'));
   const xml = siteMapXml('https://example.test');
-  assert.equal((xml.match(/<url>/g) ?? []).length, 11);
+  assert.equal((xml.match(/<url>/g) ?? []).length, 13);
   assert.doesNotMatch(xml, /\/api\/|analystId|supplier=/);
   assert.match(siteMapXml('https://example.test/?x=1&y=2'), /<urlset/);
   const response = GET(new Request('https://example.test/sitemap.xml'));

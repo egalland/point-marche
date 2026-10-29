@@ -4,9 +4,9 @@ import { moduleUrl, sourceUrl } from './helpers/module-url.mjs';
 const feedbackUrl = moduleUrl('../../lib/feedback.ts');
 const { feedbackMail, validFeedbackEmail } = await import(feedbackUrl);
 test('mail preserves accents and multiline details without injecting recipients or headers', () => {
-  const mail = feedbackMail('support+test@example.fr', 'bug', 'Écran & filtre\r\nBcc: test', 'Étape 1\nÉchec & résultat', 'Rubrique : Fournisseurs');
+  const mail = feedbackMail('support+test@example.test', 'bug', 'Écran & filtre\r\nBcc: test', 'Étape 1\nÉchec & résultat', 'Rubrique : Fournisseurs');
   const url = new URL(mail.url);
-  assert.equal(decodeURIComponent(url.pathname), 'support+test@example.fr');
+  assert.equal(decodeURIComponent(url.pathname), 'support+test@example.test');
   assert.equal(url.searchParams.size, 2);
   assert.equal(url.searchParams.get('subject').includes('\n'), false);
   assert.match(url.searchParams.get('body'), /Étape 1\nÉchec & résultat/);
@@ -20,22 +20,22 @@ const { GET, PUT } = await import(moduleUrl('../../app/api/feedback-settings/rou
 const request = email => new Request('https://example.test/api/feedback-settings', { method: 'PUT', body: JSON.stringify({ email }) });
 test('shared contact survives reads, rejects invalid changes and reports storage failures', async () => {
   assert.deepEqual(await (await GET()).json(), { email: '' });
-  assert.equal((await PUT(request('contact@example.fr'))).status, 200);
-  assert.deepEqual(await (await GET()).json(), { email: 'contact@example.fr' });
+  assert.equal((await PUT(request('contact@example.test'))).status, 200);
+  assert.deepEqual(await (await GET()).json(), { email: 'contact@example.test' });
   assert.equal((await PUT(request('bad'))).status, 400);
-  assert.deepEqual(await (await GET()).json(), { email: 'contact@example.fr' });
+  assert.deepEqual(await (await GET()).json(), { email: 'contact@example.test' });
   state.fail = true;
-  assert.equal((await PUT(request('other@example.fr'))).status, 503);
+  assert.equal((await PUT(request('other@example.test'))).status, 503);
   state.fail = false; state.editor = false;
-  assert.equal((await PUT(request('other@example.fr'))).status, 401);
+  assert.equal((await PUT(request('other@example.test'))).status, 401);
 });
 
 test('notification mail supports several recipients without allowing extra headers', async () => {
   const { validFeedbackRecipients } = await import(feedbackUrl);
-  assert.equal(validFeedbackRecipients('first@example.fr; second@example.fr'), true);
-  assert.equal(validFeedbackRecipients('first@example.fr;bad'), false);
-  const mail = feedbackMail('first@example.fr; second@example.fr', 'idea', 'Idée', 'Description', 'USERCODE : A1234567');
-  assert.equal(decodeURIComponent(new URL(mail.url).pathname), 'first@example.fr,second@example.fr');
+  assert.equal(validFeedbackRecipients('first@example.test; second@example.test'), true);
+  assert.equal(validFeedbackRecipients('first@example.test;bad'), false);
+  const mail = feedbackMail('first@example.test; second@example.test', 'idea', 'Idée', 'Description', 'USERCODE : A1234567');
+  assert.equal(decodeURIComponent(new URL(mail.url).pathname), 'first@example.test,second@example.test');
 });
 
 test('status changes preserve creation, captures and reporter; stale revisions cannot overwrite history', async () => {

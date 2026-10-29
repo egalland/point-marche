@@ -19,7 +19,7 @@ const app = await bundled('features/market-pulse/market-pulse-app.tsx', '\nexpor
 const { jiraAttention, buildAlerts } = await bundled("features/market-pulse/point-model.ts");
 const market = app.defaultMarkets[0];
 const config = { fromA:'2025-05',toA:'2025-05',fromB:'2026-05',toB:'2026-05',marketId:market.id,supplierKey:'all',metric:'count' };
-const mkTask = (id, month, variation = null, extra = {}) => ({ externalId:id,taskName:`${month}-Fournisseur test`,effectiveMonth:month,labels:['REV-PB'],workflowState:'completed',metrics:{supplierCode:'F1',globalVariation:variation,weightedVariation:variation},...extra });
+const mkTask = (id, month, variation = null, extra = {}) => ({ externalId:id,taskName:`${month}-Fournisseur test`,effectiveMonth:month,labels:['TEST-A'],workflowState:'completed',metrics:{supplierCode:'F1',globalVariation:variation,weightedVariation:variation},...extra });
 test('Excel paste keeps table cells, Unicode and line breaks without executable markup', () => {
   const html = rich.excelTextToHtml('Fournisseur\tVariation\nÉté\t-2 %');
   assert.match(html, /<table/); assert.equal((html.match(/<td /g)??[]).length,4); assert.match(html,/Été/);

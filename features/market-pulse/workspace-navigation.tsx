@@ -8,18 +8,19 @@ import { isLocalWorkspace, openLocalFiles } from "@/lib/app-transport";
 import { AppDialog } from "@/components/app-dialog";
 import { AppIcon } from "@/components/app-icon";
 
-export type WorkspaceView = "read" | "edit" | "analyst" | "stats" | "suppliers" | "imports" | "mail" | "settings" | "admin" | "superadmin";
+export type WorkspaceView = "read" | "edit" | "analyst" | "analyst-activity" | "stats" | "purchaseData" | "suppliers" | "imports" | "mail" | "settings" | "admin" | "superadmin";
 export const workspaceTitles: Record<WorkspaceView, string> = {
-  read: "Point marché", edit: "Point marché", analyst: "Point analyste", stats: "Statistiques", suppliers: "Fournisseurs", imports: "Centre d’import", mail: "Mail du marché", settings: "Paramètres", admin: "Administration", superadmin: "Super admin",
+  read: "Point marché", edit: "Point marché", analyst: "Analystes", "analyst-activity": "Analystes", stats: "Variations fournisseurs", purchaseData: "PURCHASES", suppliers: "Fournisseurs", imports: "Centre d’import", mail: "Mail du marché", settings: "Paramètres", admin: "Administration", superadmin: "Super admin",
 };
 
 const groups = [
   { label: "Points hebdomadaires", items: [
     { id: "read", icon: "eye", label: "Point marché" },
-    { id: "analyst", icon: "user", label: "Point analyste" },
+    { id: "analyst", icon: "user", label: "Analystes" },
   ] },
   { label: "Données et suivi", items: [
-    { id: "stats", icon: "trend", label: "Statistiques" },
+    { id: "stats", icon: "trend", label: "Variations fournisseurs" },
+    { id: "purchaseData", icon: "database", label: "PURCHASES" },
     { id: "suppliers", icon: "database", label: "Fournisseurs" },
     { id: "imports", icon: "upload", label: "Centre d’import" },
   ] },
@@ -48,7 +49,7 @@ export function WorkspaceNavigation({ view, userName, onSelect }: Props) {
     <button type="button" className="workspace-brand" onClick={() => select("read")} aria-label="Market Pulse, ouvrir le point marché"><span className="workspace-brand-mark"><AppIcon name="trend" size={24}/></span><span><strong>Market Pulse</strong><small>Espace GLOBAL · {APP_VERSION}</small></span></button>
     <button type="button" className="workspace-menu-size" onClick={toggleCompact} aria-expanded={!compact} aria-label={compact ? "Développer le menu avec les textes" : "Réduire le menu aux pictogrammes"} title={compact ? "Afficher les textes" : "Pictogrammes seuls"}><AppIcon name="menu"/><span>{compact ? "Afficher les textes" : "Réduire le menu"}</span></button>
     <nav className="workspace-nav" aria-label="Navigation principale">
-      {groups.map((group) => <div className="workspace-nav-group" key={group.label}><span>{group.label}</span>{group.items.filter(item => canView(effective, item.id, policy)).map((item) => <button key={item.id} type="button" className={view === item.id ? "active" : ""} aria-label={item.label} title={item.label} aria-current={view === item.id ? "page" : undefined} onClick={() => select(item.id)}><AppIcon name={item.icon} size={20}/><span>{item.label}</span>{view === item.id && <i aria-hidden="true"/>}</button>)}</div>)}
+      {groups.map((group) => <div className="workspace-nav-group" key={group.label}><span>{group.label}</span>{group.items.filter(item => canView(effective, item.id, policy)).map((item) => <button key={item.id} type="button" className={(view === item.id || (item.id === "analyst" && view === "analyst-activity")) ? "active" : ""} aria-label={item.label} title={item.label} aria-current={(view === item.id || (item.id === "analyst" && view === "analyst-activity")) ? "page" : undefined} onClick={() => select(item.id)}><AppIcon name={item.icon} size={20}/><span>{item.label}</span>{(view === item.id || (item.id === "analyst" && view === "analyst-activity")) && <i aria-hidden="true"/>}</button>)}</div>)}
 
     </nav>
     <footer className="workspace-account">

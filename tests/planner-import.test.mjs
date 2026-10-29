@@ -37,27 +37,27 @@ function exportTable(rows) {
 }
 
 test("parses Planner tasks, analyst names, tags and business completion", () => {
-  const checklist = "1-Tarif fournisseur : 28/05/2026;3-Validation CDM : 29/05/2026;2-Simulation Anaïs : 29/05/2026;4-Intégration : 01/06/2026;0-Avis de hausse : 02/04/2026;5-Controle Ismahane : 05/06/2026;Trame WORKSPACE envoyée : XX/XX/XXXX";
+  const checklist = "1-Tarif fournisseur : 28/05/2026;3-Validation CDM : 29/05/2026;2-Simulation Zoé : 29/05/2026;4-Intégration : 01/06/2026;0-Avis de hausse : 02/04/2026;5-Controle Camille : 05/06/2026;Trame WORKSPACE envoyée : XX/XX/XXXX";
   const row = [
-    "NaIUAKs6o0G24dNV-UCVypYAI6t0",
-    "2026-06-JUIN-UNILIN FLOORING",
+    "test-task-import-001",
+    "2026-06-JUIN-SUPPLIER-GAMMA",
     "9-Tarif Vente terminÃ© - Attente Ctrl Marge",
     "",
     "Terminées",
     "Moyen",
-    "Willefert, Xavier",
-    "Dufresne, Nicolas",
+    "Exemple, Alex",
+    "Exemple, Camille",
     "2026-04-02",
     "2026-06-01",
     "",
     "",
     "false",
     "2026-06-08",
-    "Willefert, Xavier",
+    "Exemple, Alex",
     "6/7",
     checklist,
-    "REV-PB",
-    "Achats 12 mG : 473 398,58€<br>Code Fournisseur : B0854<br>Variation GLOBAL : 4,5 %<br>Variation pondérée : 4.5 %<br>Structure tarifaire : TARIFS NET AU SKU",
+    "TEST-A",
+    "Achats 12 mG : 123 456,78€<br>Code Fournisseur : F0004<br>Variation GLOBAL : 4,5 %<br>Variation pondérée : 4.5 %<br>Structure tarifaire : TARIFS NET AU SKU",
   ];
 
   const result = planner.parsePlannerTasks(exportTable([row]));
@@ -66,13 +66,13 @@ test("parses Planner tasks, analyst names, tags and business completion", () => 
   assert.equal(result.format, "tabulated");
   assert.equal(task.effectiveMonth, "2026-06");
   assert.match(task.category, /terminé/);
-  assert.deepEqual(task.labels, ["REV-PB"]);
+  assert.deepEqual(task.labels, ["TEST-A"]);
   assert.equal(task.workflowState, "completed");
   assert.equal(task.checklist.find((item) => item.kind === "trame")?.nonApplicable, true);
-  assert.equal(task.checklist.find((item) => item.kind === "simulation")?.analystName, "Anaïs");
-  assert.equal(task.checklist.find((item) => item.kind === "control")?.analystName, "Ismahane");
-  assert.equal(task.metrics.supplierCode, "B0854");
-  assert.equal(task.metrics.purchases12m, 473398.58);
+  assert.equal(task.checklist.find((item) => item.kind === "simulation")?.analystName, "Zoé");
+  assert.equal(task.checklist.find((item) => item.kind === "control")?.analystName, "Camille");
+  assert.equal(task.metrics.supplierCode, "F0004");
+  assert.equal(task.metrics.purchases12m, 123456.78);
   assert.equal(task.metrics.globalVariation, 4.5);
 });
 
@@ -95,7 +95,7 @@ test("keeps old unnamed simulation and control steps without failure", () => {
     "Jane DOE",
     "2/2",
     "2-Simulation : 13/05/2026;5-Controle : 18/05/2026",
-    "MEN-PB",
+    "TEST-B",
     "",
   ];
 
@@ -110,7 +110,7 @@ test("keeps old unnamed simulation and control steps without failure", () => {
 test("distinguishes a complete active task that still needs Planner closure", () => {
   const row = [
     "active-complete",
-    "2026-07-JUILLET-ARPA France",
+    "2026-07-JUILLET-SUPPLIER-DELTA",
     "9-Tarif Vente terminé - Attente Ctrl Marge",
     "",
     "Non démarrées",
@@ -126,7 +126,7 @@ test("distinguishes a complete active task that still needs Planner closure", ()
     "",
     "2/2",
     "2-Simulation John : 15/06/2026;5-Controle Jane : 18/06/2026",
-    "PAN-GM",
+    "TEST-C",
     "",
   ];
 
@@ -156,14 +156,14 @@ test("parses supplier metrics when Planner flattens the comments into one line",
     "",
     "0/0",
     "",
-    "REV-PB",
-    "Achats 12 mG : 89 613,02 € Code Fournisseur : D6218 Annoncé : 4% Variation GLOBAL : 3,53% Variation pondérée : 3,36% Structure tarifaire : PAB + Remise CGV CPV",
+    "TEST-A",
+    "Achats 12 mG : 23 456,12 € Code Fournisseur : F0005 Annoncé : 4% Variation GLOBAL : 3,53% Variation pondérée : 3,36% Structure tarifaire : PAB + Remise CGV CPV",
   ];
 
   const task = planner.parsePlannerTasks(exportTable([row])).tasks[0];
 
-  assert.equal(task.metrics.purchases12m, 89613.02);
-  assert.equal(task.metrics.supplierCode, "D6218");
+  assert.equal(task.metrics.purchases12m, 23456.12);
+  assert.equal(task.metrics.supplierCode, "F0005");
   assert.equal(task.metrics.announcedVariation, 4);
   assert.equal(task.metrics.globalVariation, 3.53);
   assert.equal(task.metrics.weightedVariation, 3.36);
@@ -189,7 +189,7 @@ test("keeps quoted and unquoted multiline Planner comments in their task row", (
     "",
     "0/0",
     "",
-    "MEN-PB",
+    "TEST-B",
   ];
   const comments = "Achats 12 mG : 100 000 €\nCode Fournisseur : B1234\nVariation GLOBAL : 2,7%\nVariation pondérée : 2,4%";
   const quoted = [headers.join("\t"), [...prefix, `"${comments}"`].join("\t")].join("\n");
@@ -204,23 +204,23 @@ test("keeps quoted and unquoted multiline Planner comments in their task row", (
   }
 });
 
-test("recognizes the reversed Isover title month without using integration month", () => {
-  assert.equal(planner.plannerTaskEffectiveMonth("2026-AVRIL-04-ISOVER"), "2026-04");
-  assert.equal(planner.plannerTaskEffectiveMonth("2026-04-AVRIL-ISOVER"), "2026-04");
-  assert.equal(planner.plannerTaskEffectiveMonth("2026-FÉVRIER-02-ISOVER"), "2026-02");
-  assert.equal(planner.plannerTaskEffectiveMonth("2026-AVRIL-05-ISOVER"), "");
-  const data = planner.parsePlannerTasks("ID de tâche\tNom de tâche\tNotes\niso-avr\t2026-AVRIL-04-ISOVER\tCode Fournisseur : A1941 Variation GLOBAL : 5 % Variation pondérée : 5 %");
+test("recognizes the reversed Supplier-Alpha title month without using integration month", () => {
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-AVRIL-04-SUPPLIER-ALPHA"), "2026-04");
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-04-AVRIL-SUPPLIER-ALPHA"), "2026-04");
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-FÉVRIER-02-SUPPLIER-ALPHA"), "2026-02");
+  assert.equal(planner.plannerTaskEffectiveMonth("2026-AVRIL-05-SUPPLIER-ALPHA"), "");
+  const data = planner.parsePlannerTasks("ID de tâche\tNom de tâche\tNotes\niso-avr\t2026-AVRIL-04-SUPPLIER-ALPHA\tCode Fournisseur : F0001 Variation GLOBAL : 5 % Variation pondérée : 5 %");
   assert.equal(data.tasks[0].effectiveMonth,"2026-04");
 });
 
-test("NOVLEK uses the percentage after agency 3517, not the agency number or the later agency breakdown", () => {
-  const notes = "Achats 12 mG : €\nCode Fournisseur : D3053\nVariation GLOBAL :\n3517 -1.43%\nAGENCES -0.12%\nPONDERE AU CA -1.69%\nStructure tarifaire :";
+test("SUPPLIER-EPSILON uses the percentage after agency 1234, not the agency number or the later agency breakdown", () => {
+  const notes = "Achats 12 mG : €\nCode Fournisseur : F0006\nVariation GLOBAL :\n1234 -1.43%\nAGENCES -0.12%\nPONDERE AU CA -1.69%\nStructure tarifaire :";
   const result = planner.parsePlannerTaskMetrics(notes);
   assert.equal(result.globalVariation, -1.43);
   assert.equal(result.weightedVariation, -1.69);
-  assert.equal(result.supplierCode, "D3053");
+  assert.equal(result.supplierCode, "F0006");
   assert.equal(result.purchases12m, null);
-  const repaired = planner.rehydratePlannerTaskMetrics(notes, { ...result, globalVariation: 3517, weightedVariation: null });
+  const repaired = planner.rehydratePlannerTaskMetrics(notes, { ...result, globalVariation: 1234, weightedVariation: null });
   assert.equal(repaired.globalVariation, -1.43);
   assert.equal(repaired.weightedVariation, -1.69);
   const flat = planner.parsePlannerTaskMetrics(notes.replace(/\n/g, " "));
@@ -229,7 +229,7 @@ test("NOVLEK uses the percentage after agency 3517, not the agency number or the
 });
 
 test("percentage parsing preserves signs, zero and bare legacy rates without inventing rates from annotations", () => {
-  for (const [text, expected] of [["Agence 3517 : +2,7 %",2.7],["3517 − 1,43 %",-1.43],["3517 : 0 %",0],["-2.3",-2.3],["Agence 3517",null],["3517 : à compléter",null]]) {
+  for (const [text, expected] of [["Agence 1234 : +2,7 %",2.7],["1234 − 1,43 %",-1.43],["1234 : 0 %",0],["-2.3",-2.3],["Agence 1234",null],["1234 : à compléter",null]]) {
     assert.equal(planner.parsePlannerTaskMetrics(`Variation GLOBAL : ${text}`).globalVariation, expected, text);
   }
   assert.equal(planner.parsePlannerTaskMetrics("Variation GLOBAL : 1,2 % Variation pondérée : 1,5 %").weightedVariation, 1.5);

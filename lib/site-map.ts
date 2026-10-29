@@ -2,10 +2,12 @@
 export const siteMapGroups = [
   { title: "Points hebdomadaires", pages: [
     { href: "/", title: "Point marché", description: "Semaine, synthèse, dossiers, opérations commerciales, activité Jira et achats." },
-    { href: "/?mode=analyst", title: "Point analyste", description: "Synthèse, tickets terminés, simulations et contrôles, cycle du 20 au 20 et dossiers." },
+    { href: "/?mode=analyst", title: "Analystes · Point analyste", description: "Synthèse, tickets terminés, simulations et contrôles, cycle du 20 au 20 et dossiers." },
+    { href: "/?mode=analyst-activity", title: "Analystes · Activité analystes", description: "Activité et indicateurs par période, accessibles aux Admins et Super admins." },
   ] },
   { title: "Données et suivi", pages: [
-    { href: "/?mode=stats", title: "Statistiques", description: "Indicateurs et analyses des activités par période." },
+    { href: "/?mode=purchaseData", title: "PURCHASES", description: "Suivi des achats dans un onglet dédié." },
+    { href: "/?mode=stats", title: "Variations fournisseurs", description: "Évolutions tarifaires et comparaison des périodes." },
     { href: "/?mode=suppliers", title: "Fournisseurs", description: "Recherche, fiches et suivi des fournisseurs." },
     { href: "/?mode=imports", title: "Centre d’import", description: "Actualisation des sources et vérification des imports." },
   ] },

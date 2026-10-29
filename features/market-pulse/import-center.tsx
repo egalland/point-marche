@@ -96,6 +96,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
     setMessage("");
     setProgress(0);
     try {
+      if (nextFile.size > 32 * 1024 * 1024) throw new Error("Le CSV dépasse 32 Mio. Réduis le périmètre de l’export avant de le charger.");
       const decoded = decodeJiraCsv(await nextFile.arrayBuffer());
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       const parsed = parseJiraCsv(decoded.text);
@@ -119,6 +120,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
     setProgress(0);
     setMessage("Création de l’import…");
     let importId = "";
+    let committed = false;
     try {
       const startedResponse = await fetch("/api/jira-imports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "start", filename: file.name, rowCount: preview.rows }) });
       const started = await startedResponse.json() as { batch?: ImportBatch; maxChunkSize?: number; error?: string };
@@ -135,12 +137,14 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
       const finishedResponse = await fetch("/api/jira-imports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "finish", importId, expectedTicketCount: preview.tickets.length, expectedParticipantCount: preview.participantCount, rejectedCount: preview.rejectedRows, repairedTextCount, unknownUserCodeCount: unknownUserCodes.length }) });
       const finished = await finishedResponse.json() as { batch?: ImportBatch; error?: string };
       if (!finishedResponse.ok || !finished.batch) throw new Error(finished.error || "Finalisation impossible.");
+      committed = true;
       await Promise.all([loadHistory(), onJiraImported()]);
       setMessage(`${preview.tickets.length} tickets enregistrés : ${preview.openTicketCount} non terminés et ${preview.closedTicketCount} terminés.${preview.abandonedTicketCount ? ` ${preview.abandonedTicketCount} abandonné(s) conservé(s) dans l’import, exclu(s) des points.` : ""} Les points sont maintenant alimentés.`);
       setProgress(100);
     } catch (error) {
-      if (importId) await fetch("/api/jira-imports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "fail", importId }) }).catch(() => undefined);
-      setMessage(error instanceof Error ? error.message : "Import Jira impossible.");
+      if (importId && !committed) await fetch("/api/jira-imports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "fail", importId }) }).catch(() => undefined);
+      setMessage(committed ? "Import enregistré. Le rafraîchissement de l’écran a échoué : recharge la page, sans réimporter le fichier." : error instanceof Error ? error.message : "Import Jira impossible.");
+      if (committed) setProgress(100);
       await loadHistory().catch(() => undefined);
     } finally {
       setImporting(false);
@@ -172,7 +176,7 @@ export function ImportCenter({ users, markets, plannerTasks, plannerRegistry, pl
         <header><div><span>Source 01 · Jira</span><h2 id="import-jira-title">Tickets et participants</h2><p>Dépose ton export CSV, vérifie les données détectées puis lance l’import.</p></div><b>CSV</b></header>
         <details className="import-file-guide"><summary>Colonnes à conserver dans le CSV</summary><p>Clé, ID, État, Résumé, Création, Personne assignée, Mise à jour et les colonnes Participants à la requête. La date de résolution reste facultative.</p></details>
         <input ref={inputRef} type="file" disabled={loadingFile || importing} accept=".csv,text/csv,text/plain" hidden onChange={(event) => { const nextFile = event.target.files?.[0]; if (nextFile) void readFile(nextFile); }}/>
-        {!file ? <button type="button" className="jira-file-drop" disabled={loadingFile || importing} onClick={() => inputRef.current?.click()} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); const dropped = event.dataTransfer.files?.[0]; if (dropped) void readFile(dropped); }}><span>CSV</span><strong>{loadingFile ? "Lecture du fichier…" : "Déposer le fichier Jira"}</strong><small>ou cliquer pour sélectionner un CSV</small></button> : <div className="jira-file-selected"><div><span>{encoding}</span><strong>{file.name}</strong><small>{formatBytes(file.size)} · {preview?.rows ?? 0} lignes lues</small></div><button type="button" className="secondary-button" disabled={importing || loadingFile} onClick={clearFile}>Changer de fichier</button></div>}
+        {!file ? <button type="button" className="jira-file-drop" disabled={loadingFile || importing} onClick={() => inputRef.current?.click()} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); const dropped = event.dataTransfer.files?.[0]; if (dropped) void readFile(dropped); }}><span>CSV</span><strong>{loadingFile ? "Lecture du fichier…" : "Déposer le fichier Jira"}</strong><small>ou cliquer pour sélectionner un CSV · 32 Mio maximum</small></button> : <div className="jira-file-selected"><div><span>{encoding}</span><strong>{file.name}</strong><small>{formatBytes(file.size)} · {preview?.rows ?? 0} lignes lues</small></div><button type="button" className="secondary-button" disabled={importing || loadingFile} onClick={clearFile}>Changer de fichier</button></div>}
         {!preview && message && <p className="import-feedback" role="alert">{message}</p>}
 
         {preview && <>

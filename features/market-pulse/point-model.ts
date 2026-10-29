@@ -53,10 +53,10 @@ export type DirectoryEditor = { id: string; draft: DirectoryDraft };
 export type ConfirmRequest = { title: string; detail: string; confirmLabel: string; destructive?: boolean };
 
 export const defaultMarkets: Market[] = [
-  { id: "revetements-menuiserie", name: "Revêtements & Menuiserie", short: "REV–MEN", tone: "mint", colorHex: "", plannerTags: ["REV-PB", "MEN-PB"], position: 0, jiraWarningDays: 10, jiraCriticalDays: 20 },
+  { id: "revetements-menuiserie", name: "Revêtements & Menuiserie", short: "REV–MEN", tone: "mint", colorHex: "", plannerTags: ["TEST-A", "TEST-B"], position: 0, jiraWarningDays: 10, jiraCriticalDays: 20 },
   { id: "bois-amex", name: "Bois amin / AMEX", short: "BOIS", tone: "peach", colorHex: "", plannerTags: [], position: 1, jiraWarningDays: 10, jiraCriticalDays: 20 },
   { id: "outillage-quincaillerie", name: "Outillage & Quincaillerie", short: "OUT–QUIN", tone: "aqua", colorHex: "", plannerTags: [], position: 2, jiraWarningDays: 10, jiraCriticalDays: 20 },
-  { id: "panneaux", name: "Panneaux", short: "PAN", tone: "violet", colorHex: "", plannerTags: ["PAN-GM"], position: 3, jiraWarningDays: 10, jiraCriticalDays: 20 },
+  { id: "panneaux", name: "Panneaux", short: "PAN", tone: "violet", colorHex: "", plannerTags: ["TEST-C"], position: 3, jiraWarningDays: 10, jiraCriticalDays: 20 },
 ];
 
 export const themes: { id: ThemeKey; label: string; accent: string; soft: string }[] = [

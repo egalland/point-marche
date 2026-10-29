@@ -1,3 +1,4 @@
+import { inspectMailRecipients } from "./mail-recipients";
 type MailAttachment = { name: string; html: string };
 export type MailDraft = { to: string; cc: string; subject: string; html: string; attachment: MailAttachment };
 
@@ -20,7 +21,9 @@ const encodedHeader = (value: string) => {
   return chunks.map((chunk) => `=?UTF-8?B?${utf8Base64(chunk)}?=`).join("\r\n ");
 };
 function addresses(value: string) {
-  return Array.from(new Set(value.split(/[;,\r\n]/).map((address) => address.trim()).filter((address) => /^[^\s<>:@]+@[^\s<>:@]+\.[^\s<>:@]+$/.test(address)))).join(", ");
+  const result = inspectMailRecipients(value);
+  if (result.invalid.length) throw new Error("Une ou plusieurs adresses sont invalides. Corrige les destinataires du mail.");
+  return result.valid.join(", ");
 }
 
 export function mailPlainText(html: string) {

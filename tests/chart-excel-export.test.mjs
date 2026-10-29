@@ -3,9 +3,9 @@ import test from "node:test";
 import { moduleUrl } from "./helpers/module-url.mjs";
 const {chartExcelParts,chartExcelBytes,chartExcelFilename}=await import(moduleUrl("../../lib/chart-excel-export.ts"));
 const points=[
- {supplierKey:"A1941",supplierLabel:"ISOVER",supplierCode:"A1941",period:"2025-11",globalVariation:2,weightedVariation:5},
- {supplierKey:"A1941",supplierLabel:"ISOVER",supplierCode:"A1941",period:"2026-01",globalVariation:0,weightedVariation:null},
- {supplierKey:"A1941",supplierLabel:"ISOVER",supplierCode:"A1941",period:"2026-02",globalVariation:null,weightedVariation:-1},
+ {supplierKey:"F0001",supplierLabel:"SUPPLIER-ALPHA",supplierCode:"F0001",period:"2025-11",globalVariation:2,weightedVariation:5},
+ {supplierKey:"F0001",supplierLabel:"SUPPLIER-ALPHA",supplierCode:"F0001",period:"2026-01",globalVariation:0,weightedVariation:null},
+ {supplierKey:"F0001",supplierLabel:"SUPPLIER-ALPHA",supplierCode:"F0001",period:"2026-02",globalVariation:null,weightedVariation:-1},
 ];
 const info={title:"Variations",subtitle:"Historique & filtres",global:false,weighted:false,exportedAt:new Date("2026-10-15T22:30:00Z")};
 
@@ -32,7 +32,7 @@ test("every export contains presentation, five views, editable charts and naviga
  const parts=chartExcelParts(points,info),cover=parts["xl/worksheets/sheet1.xml"];
  assert.equal((parts["xl/workbook.xml"].match(/<x:sheet /g)||[]).length,6);
  assert.equal(Object.keys(parts).filter(p=>/^xl\/drawings\/charts\/chart/.test(p)).length,5);
- assert.match(cover,/ISOVER/);assert.match(cover,/A1941/);assert.match(cover,/<x:c r="B5" s="4"><x:v>46311\.020833/);
+ assert.match(cover,/SUPPLIER-ALPHA/);assert.match(cover,/F0001/);assert.match(cover,/<x:c r="B5" s="4"><x:v>46311\.020833/);
  assert.equal((cover.match(/<x:hyperlink /g)||[]).length,5);
  for(let i=1;i<=5;i++){
   const chart=parts[`xl/drawings/charts/chart${i}.xml`],sheet=parts[`xl/worksheets/sheet${i+1}.xml`];
@@ -76,8 +76,8 @@ test("missing entire series still exports blank averages and a blank editable ta
 });
 
 test("filename uses supplier, Code and Paris export date with safe characters",()=>{
- assert.equal(chartExcelFilename(points,info),"Point-marche_ISOVER_Code-A1941_2026-10-16_00-30.xlsx");
- assert.equal(chartExcelFilename(points,{...info,supplierLabel:"Établissements / Bois",supplierCode:"B7795"}),"Point-marche_Etablissements-Bois_Code-B7795_2026-10-16_00-30.xlsx");
+ assert.equal(chartExcelFilename(points,info),"Point-marche_SUPPLIER-ALPHA_Code-F0001_2026-10-16_00-30.xlsx");
+ assert.equal(chartExcelFilename(points,{...info,supplierLabel:"Établissements / Bois",supplierCode:"F0002"}),"Point-marche_Etablissements-Bois_Code-F0002_2026-10-16_00-30.xlsx");
 });
 
 test("labels are escaped literal text and the ZIP contains all workbook parts",()=>{

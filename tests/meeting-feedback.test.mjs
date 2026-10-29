@@ -117,10 +117,10 @@ test("manual market Jira bypasses refresh and remains manual after normalization
 
 test("manual Planner values cannot be enriched or inserted into the imported registry", () => {
   const payload = { plannerMode: "manual", meetingDate: "2026-09-03", operations: [{ id: "manual", name: "Décision prise en réunion", state: "En attente", steps: [["Contrôle", "Fait"]], plannerSource: { externalId: "one", metrics: { purchases12m: 123 } } }] };
-  const imported = [{ externalId: "one", effectiveMonth: "2026-09", labels: ["REV-PB"], metrics: { purchases12m: 999 } }];
+  const imported = [{ externalId: "one", effectiveMonth: "2026-09", labels: ["TEST-A"], metrics: { purchases12m: 999 } }];
   assert.strictEqual(enrichment.enrichPointPlannerHistory(payload, imported), payload);
-  assert.strictEqual(enrichment.enrichMarketPointFromPlanner(payload, imported, ["REV-PB"]), payload);
-  assert.deepEqual(plannerRegistry.recoverPlannerTasksFromPoints([{ marketId: "a", payload }], { a: ["REV-PB"] }), []);
+  assert.strictEqual(enrichment.enrichMarketPointFromPlanner(payload, imported, ["TEST-A"]), payload);
+  assert.deepEqual(plannerRegistry.recoverPlannerTasksFromPoints([{ marketId: "a", payload }], { a: ["TEST-A"] }), []);
 });
 
 test("mail and standalone comparison follow the visible point despite legacy destination flags", () => {
@@ -207,7 +207,8 @@ test("email draft contains a formatted body, plain alternative, inline chart and
 });
 
 test("draft headers cannot be injected by a subject or attachment filename", () => {
-  const result = mail.buildMailDraft({ to: "jane@example.test\r\nBcc: unwanted@example.test", cc: "", subject: "Point\r\nBcc: unwanted@example.test", html: "<p>Texte</p>", attachment: { name: 'point"\r\nBcc: unwanted@example.test.html', html: "<p>Page</p>" } });
+  assert.throws(() => mail.buildMailDraft({ to: "jane@example.test\r\nBcc: unwanted@example.test", cc: "", subject: "Point", html: "<p>Texte</p>", attachment: { name: "point.html", html: "<p>Page</p>" } }), /adresses sont invalides/);
+  const result = mail.buildMailDraft({ to: "jane@example.test", cc: "", subject: "Point\r\nBcc: unwanted@example.test", html: "<p>Texte</p>", attachment: { name: 'point"\r\nBcc: unwanted@example.test.html', html: "<p>Page</p>" } });
   assert.doesNotMatch(result, /^Bcc:/mi);
   assert.match(result, /^To: jane@example.test\r$/m);
 });

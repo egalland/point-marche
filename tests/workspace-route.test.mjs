@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {moduleUrl} from './helpers/module-url.mjs';
 const {workspaceViewFromUrl,workspaceViewUrl}=await import(moduleUrl('../../lib/workspace-route.ts'));
 test('each tab is restored from its direct URL, including mail and supplier legacy links',()=>{
- for(const view of ['read','analyst','stats','suppliers','imports','mail','settings'])assert.equal(workspaceViewFromUrl(`https://site.test/?mode=${view}`),view);
+ for(const view of ['read','analyst','analyst-activity','purchaseData','stats','suppliers','imports','mail','settings'])assert.equal(workspaceViewFromUrl(`https://site.test/?mode=${view}`),view);
  assert.equal(workspaceViewFromUrl('https://site.test/?mode=edit'),'read');assert.equal(workspaceViewFromUrl('https://site.test/?mode=unknown'),'read');assert.equal(workspaceViewFromUrl('https://site.test/'),'read');
 });
 test('tab changes keep unrelated parameters but remove a supplier selection and anchors from the previous tab',()=>{

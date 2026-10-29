@@ -16,7 +16,7 @@ const csv = await import(`data:text/javascript;base64,${Buffer.from(csvSource).t
 test("parses repeated Jira participant columns and repairs mojibake only when present", () => {
   const value = [
     'ClÃ© de ticket,ID de ticket,Ã‰tat,RÃ©sumÃ©,CrÃ©ation,Personne assignÃ©e,Mise Ã  jour,Participants Ã  la requÃªte,Participants Ã  la requÃªte',
-    'GLOBAL-12515,1648151,En cours,"MEN : erreur, tarif",12/08/2026 09:15,B6549679,13/08/2026 11:20,B6549679(JIRAUSER70973),A8512790(JIRAUSER79013)',
+    'TEST-101,100001,En cours,"MEN : erreur, tarif",12/08/2026 09:15,T0000003,13/08/2026 11:20,T0000003(JIRAUSER001),T0000001(JIRAUSER002)',
   ].join("\n");
   const decoded = csv.decodeJiraCsv(new TextEncoder().encode(value));
   const result = csv.parseJiraCsv(decoded.text);
@@ -28,8 +28,8 @@ test("parses repeated Jira participant columns and repairs mojibake only when pr
   assert.equal(result.tickets[0].createdAt, "2026-08-12T09:15:00");
   assert.equal(result.tickets[0].updatedAt, "2026-08-13T11:20:00");
   assert.deepEqual(result.tickets[0].participants, [
-    { usercode: "B6549679", jiraUserId: "JIRAUSER70973" },
-    { usercode: "A8512790", jiraUserId: "JIRAUSER79013" },
+    { usercode: "T0000003", jiraUserId: "JIRAUSER001" },
+    { usercode: "T0000001", jiraUserId: "JIRAUSER002" },
   ]);
 });
 
@@ -100,12 +100,12 @@ test("preserves abandoned import rows without counting them as open or completed
 test("recognizes the full Jira custom-field participant header", () => {
   const value = [
     "Clé de ticket;ID de ticket;État;Résumé;Création;Personne assignée;Mise à jour;Champs personnalisés (Participants à la requête)",
-    "GLOBAL-12502;1646977;En attente de changement;CAT : Fournisseur exemple;12/08/2026 09:00;X0000002;27/08/2026 13:38;A0000001(JIRAUSER134623)",
+    "TEST-102;100002;En attente de changement;CAT : Fournisseur exemple;12/08/2026 09:00;X0000002;27/08/2026 13:38;A0000001(JIRAUSER003)",
   ].join("\n");
   const result = csv.parseJiraCsv(value);
 
   assert.equal(result.tickets.length, 1);
-  assert.deepEqual(result.tickets[0].participants, [{ usercode: "A0000001", jiraUserId: "JIRAUSER134623" }]);
+  assert.deepEqual(result.tickets[0].participants, [{ usercode: "A0000001", jiraUserId: "JIRAUSER003" }]);
 });
 
 test("handles more than twelve thousand Jira rows", () => {

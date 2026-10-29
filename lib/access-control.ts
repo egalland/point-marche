@@ -11,9 +11,9 @@ export const permissionCatalog = [
   { id: "point.edit", group: "Point marché", label: "Créer, modifier, réinitialiser et organiser les blocs", level: "user" },
   { id: "point.import", group: "Point marché", label: "Importer un point JSON", level: "admin" },
   { id: "point.assets", group: "Point marché", label: "Ajouter des fichiers et pièces jointes", level: "user" },
-  { id: "analyst.read", group: "Point analyste", label: "Consulter le point analyste et ses tickets", level: "admin" },
+  { id: "analyst.read", group: "Point analyste", label: "Consulter les points analystes, leurs tickets et l’activité des analystes", level: "admin" },
   { id: "analyst.edit", group: "Point analyste", label: "Créer et modifier le point analyste", level: "admin" },
-  { id: "stats.read", group: "Données", label: "Consulter les statistiques analystes et variations", level: "user" },
+  { id: "stats.read", group: "Données", label: "Consulter les variations fournisseurs et les PURCHASES", level: "user" },
   { id: "suppliers.read", group: "Données", label: "Consulter les fiches fournisseurs", level: "user" },
   { id: "imports.open", group: "Imports", label: "Ouvrir le Centre d’import", level: "admin" },
   { id: "imports.jira", group: "Imports", label: "Importer et actualiser le registre Jira", level: "admin" },
@@ -71,7 +71,7 @@ export function hasPermission(person: AccessPerson, permission: Permission, poli
 export function canView(person: AccessPerson | AccessRole, view: string, policy = defaultPolicy()) {
   const p = typeof person === "string" ? {usercode:"",name:"",role:person} : person;
   if (view === "superadmin") return p.role === "superadmin";
-  const key: Permission = ({read:"point.read",edit:"point.edit",analyst:"analyst.read",stats:"stats.read",suppliers:"suppliers.read",imports:"imports.open",mail:"exports.open",settings:"settings.open",admin:"admin.open"} as Record<string,Permission>)[view] || "point.read";
+  const key: Permission = ({read:"point.read",edit:"point.edit",analyst:"analyst.read","analyst-activity":"analyst.read",stats:"stats.read",purchaseData:"stats.read",suppliers:"suppliers.read",imports:"imports.open",mail:"exports.open",settings:"settings.open",admin:"admin.open"} as Record<string,Permission>)[view] || "point.read";
   return hasPermission(p,key,policy);
 }
 export function requestPermission(path: string, method: string, scope?: unknown): Permission | "superadmin" | null {
