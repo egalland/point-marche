@@ -104,3 +104,7 @@ test('an expired assignment cannot inherit editing from a saved administrator ov
  const p=resolvePerson('A1234567',[{usercode:'A1234567',name:'Test',role:'autre',profileInactive:true}],[{usercode:'A1234567',name:'Test',role:'admin'}]);
  assert.equal(p.readOnly,true);assert.equal(hasPermission(p,'point.read'),true);assert.equal(hasPermission(p,'point.edit'),false);assert.equal(hasPermission(p,'directory.create'),false);
 });
+
+ test('Jira standalone page uses analyst read authorization independently of point editing',()=>{
+ assert.equal(canView('admin','jira'),true);assert.equal(canView('user','jira'),false);assert.equal(canView('sales','jira'),false);
+ });

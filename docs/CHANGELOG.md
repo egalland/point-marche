@@ -1,3 +1,10 @@
+## V130 — 29 octobre 2026
+
+- Page Jira dédiée dans le menu latéral : tout le registre, personnes, catégories, comparaisons, stock historique et frise.
+- Vue des tickets des analystes conservée dans leur activité.
+- Frise calculée sans répéter les KPI, les délais et les tris ; périodes identiques réutilisées.
+- Cache serveur borné de 15 secondes, renouvelé par import ou par le bouton Actualiser.
+
 # Historique des versions
 
 ## V127 · 2026-10-29

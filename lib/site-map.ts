@@ -6,6 +6,7 @@ export const siteMapGroups = [
     { href: "/?mode=analyst-activity", title: "Analystes · Activité analystes", description: "Activité et indicateurs par période, accessibles aux Admins et Super admins." },
   ] },
   { title: "Données et suivi", pages: [
+    { href: "/?mode=jira", title: "Jira", description: "Registre complet : KPI, stock historique, filtres, comparaisons et frise hebdomadaire." },
     { href: "/?mode=purchaseData", title: "PURCHASES", description: "Suivi des achats dans un onglet dédié." },
     { href: "/?mode=stats", title: "Variations fournisseurs", description: "Évolutions tarifaires et comparaison des périodes." },
     { href: "/?mode=suppliers", title: "Fournisseurs", description: "Recherche, fiches et suivi des fournisseurs." },

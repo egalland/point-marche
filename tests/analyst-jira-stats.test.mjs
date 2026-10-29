@@ -27,3 +27,44 @@ test('analytics pages details without truncating chart/KPI totals and validates 
  const stock=buildAnalystJiraStats([...data,data[0]],users,markets,query('&basis=stock'));assert.equal(stock.a.total,2);assert.equal(stock.a.open,2);assert.equal(stock.a.completed,0);assert.equal(stock.a.mean,null);assert.deepEqual(stock.a.rows.map(t=>t.key),['TEST-10','TEST-12']);assert.equal(stock.a.charts.category[0].value,2);assert.equal(stock.b.total,4);
  const narrower=buildAnalystJiraStats(data,users,markets,{...query('&basis=stock'),a:{from:'2026-10-29',to:'2026-10-29'}});assert.equal(narrower.a.stockAtEnd,2);assert.equal(narrower.a.total,2);
  });
+
+test('weekly timeline includes empty and partial weeks, market scope, and independent reference dates',()=>{
+ const q={...query('&basis=resolved'),a:{from:'2026-10-20',to:'2026-11-02'},b:{from:'2026-10-01',to:'2026-10-04'}};
+ const r=buildAnalystJiraStats([ticket,{...ticket,key:'TEST-2',resolutionAt:'2026-11-02T12:00:00'}],users,markets,q);
+ assert.deepEqual(r.timeline.a.map(w=>[w.from,w.to,w.total]),[['2026-10-20','2026-10-25',0],['2026-10-26','2026-11-01',1],['2026-11-02','2026-11-02',1]]);
+ assert.equal(r.timeline.a.reduce((n,w)=>n+w.total,0),r.a.total);
+ assert.equal(r.timeline.a[1].markets.find(m=>m.id==='m').value,1);
+ assert.equal(r.timeline.a[1].markets.find(m=>m.id==='other').value,0);
+ assert.deepEqual(r.timeline.b.map(w=>[w.from,w.to,w.total]),[['2026-10-01','2026-10-04',0]]);
+ const filtered=buildAnalystJiraStats([ticket],users,markets,{...q,category:'Autre'});assert.equal(filtered.timeline.a.reduce((n,w)=>n+w.total,0),0);
+});
+test('weekly stock is reconstructed at each week end instead of grouping tickets by creation',()=>{
+ const q={...query('&basis=stock'),a:{from:'2026-10-19',to:'2026-11-01'}};
+ const r=buildAnalystJiraStats([{...ticket,createdAt:'2026-09-01T10:00:00',resolutionAt:'2026-10-27T12:00:00'}],users,markets,q);
+ assert.deepEqual(r.timeline.a.map(w=>w.total),[1,0]);
+ assert.deepEqual(r.timeline.a.map(w=>w.markets.find(m=>m.id==='m').value),[1,0]);
+});
+test('weekly timeline uses ISO week year across New Year',()=>{
+ const r=buildAnalystJiraStats([],users,markets,{...query(),a:{from:'2026-12-31',to:'2027-01-05'}});
+ assert.deepEqual(r.timeline.a.map(w=>w.label),['S53 · 2026','S01 · 2027']);
+});
+
+test('global Jira registry includes non-analysts and unassigned tickets, with optional person filters',()=>{
+ const manager={...users[0],id:'manager',usercode:'C1234567',name:'Morgan',role:'chef-produit'};
+ const data=[ticket,{...ticket,key:'TEST-40',assigneeUserCode:'C1234567',participants:[]},{...ticket,key:'TEST-41',assigneeUserCode:'',participants:[]}];
+ const q={...query(),scope:'registry'};
+ const report=buildAnalystJiraStats(data,[...users,manager],markets,q);
+ assert.equal(report.a.total,3);assert.equal(report.a.charts.analyst.find(i=>i.label==='Morgan').value,1);
+ assert.equal(buildAnalystJiraStats(data,[...users,manager],markets,query()).a.total,1);
+ assert.equal(buildAnalystJiraStats(data,[...users,manager],markets,{...q,analystIds:['manager']}).a.total,1);
+ assert.equal(report.timeline.a.reduce((n,w)=>n+w.total,0),3);
+});
+
+test('lightweight weekly counts agree with complete reports for every basis, filters and historical market memberships',()=>{
+ const data=[ticket,{...ticket,key:'TEST-50',status:'En cours',resolutionAt:''},{...ticket,key:'TEST-51',createdAt:'2026-08-01',resolutionAt:'2026-11-01',category:'Autre'}];
+ for(const basis of ['activity','created','updated','resolved','stock'])for(const marketId of ['all','m','other']){
+  const q={...query(),scope:'registry',basis,marketId,a:{from:'2026-10-01',to:'2026-11-02'}};
+  const r=buildAnalystJiraStats(data,users,markets,q);
+  for(const w of r.timeline.a){const expected=buildAnalystJiraStats(data,users,markets,{...q,a:{from:w.from,to:w.to},b:{from:w.from,to:w.to}});assert.equal(w.total,expected.a.total,`${basis} ${marketId} ${w.from}`);assert.deepEqual(w.markets,expected.a.marketCounts);}
+ }
+});

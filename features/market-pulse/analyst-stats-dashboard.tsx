@@ -13,6 +13,7 @@ import {AnalystJiraStatsPanel} from "./analyst-jira-stats";
 import { ActivityPeriodComparison } from "./activity-period-comparison";
 
 type Props = {
+  jiraPage?: boolean;
   tasks: PlannerTask[];
   users: GlobalDirectoryUser[];
   markets: AnalystStatsMarket[];
@@ -88,9 +89,10 @@ function delayMovementLabel(summary: PlannerDelaySummary) {
   return `${summary.movement > 0 ? "+" : ""}${daysLabel(summary.movement)} vs période B`;
 }
 
-export function AnalystStatsDashboard({ tasks, users, markets, registry, updatedAt, onImport }: Props) {
-  const [activityView,setActivityView]=useState<"planner"|"jira">("planner");
-  const analysts = useMemo(() => users.filter(hasAnalystHistory).sort((left, right) => left.name.localeCompare(right.name, "fr")), [users]);
+export function AnalystStatsDashboard({ jiraPage = false, tasks, users, markets, registry, updatedAt, onImport }: Props) {
+  const [jiraComparison,setJiraComparison]=useState(false);
+  const [activityView,setActivityView]=useState<"planner"|"jira">(jiraPage ? "jira" : "planner");
+  const analysts = useMemo(() => users.filter(user => jiraPage || hasAnalystHistory(user)).sort((left, right) => left.name.localeCompare(right.name, "fr")), [users, jiraPage]);
   const initialFrom = useMemo(() => monthsAgo(5), []);
   const initialTo = useMemo(() => today(), []);
   const [from, setFrom] = useState(initialFrom);
@@ -113,7 +115,7 @@ export function AnalystStatsDashboard({ tasks, users, markets, registry, updated
   const [specialty, setSpecialty] = useState<PlannerSpecialty | "all">("all");
   const [analystIds, setAnalystIds] = useState<string[]>([]);
   const [detailSort, setDetailSort] = useState<{ key: DetailSort; direction: "asc" | "desc" }>({ key: "date", direction: "desc" });
-  const stats = useMemo(() => buildAnalystStats(tasks, users, markets, { from: appliedRange.from, to: appliedRange.to, marketId, specialty, analystIds, comparisonRange: comparisonValid ? comparisonRange : undefined }), [analystIds, appliedRange, comparisonRange, comparisonValid, marketId, markets, specialty, tasks, users]);
+  const stats = useMemo(() => buildAnalystStats(activityView === "planner" ? tasks : [], users, markets, { from: appliedRange.from, to: appliedRange.to, marketId, specialty, analystIds, comparisonRange: comparisonValid ? comparisonRange : undefined }), [activityView, analystIds, appliedRange, comparisonRange, comparisonValid, marketId, markets, specialty, tasks, users]);
   const maxMonth = Math.max(1, ...stats.monthly.map((item) => item.total));
   const maxAnalyst = Math.max(1, ...stats.byAnalyst.map((item) => item.total));
   const [delayKind, setDelayKind] = useState("all");
@@ -154,27 +156,27 @@ export function AnalystStatsDashboard({ tasks, users, markets, registry, updated
 
   return <main className="analyst-stats-page">
     <header className="stats-hero">
-      <div><span>Activité tarif et référentiel</span><h1>Activité analystes</h1><p>Lecture des simulations, contrôles et tickets Jira importés, avec filtres et comparatifs.</p></div>
+      <div><span>Activité tarif et référentiel</span><h1>{jiraPage ? "Jira" : "Activité analystes"}</h1><p>{jiraPage ? "Tous les tickets du registre importé, avec KPI, filtres, comparaisons et stock à la date choisie." : "Lecture des simulations, contrôles et tickets Jira des analystes, avec filtres et comparatifs."}</p></div>
       {activityView==="planner"&&<div className="stats-hero-actions"><PlannerImportDialog markets={markets} onImport={onImport}/><div className="stats-freshness"><span>Source actualisée</span><strong>{updatedAt ? new Date(updatedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "Aucun import"}</strong><small>{tasks.length} tâche{tasks.length > 1 ? "s" : ""} Planner disponible{tasks.length > 1 ? "s" : ""}</small></div><small>L’import actualise aussi les simulations du point actif.</small></div>}
     </header>
 
-    <div className="activity-view-tabs"><button type="button" aria-pressed={activityView==="planner"} onClick={()=>setActivityView("planner")}>Simulations et contrôles</button><button type="button" aria-pressed={activityView==="jira"} onClick={()=>setActivityView("jira")}>Tickets Jira</button></div>
+    {!jiraPage && <div className="activity-view-tabs"><button type="button" aria-pressed={activityView==="planner"} onClick={()=>setActivityView("planner")}>Simulations et contrôles</button><button type="button" aria-pressed={activityView==="jira"} onClick={()=>setActivityView("jira")}>Tickets Jira</button></div>}
     <section className="surface stats-filters" aria-label="Filtres des statistiques">
       <div className="stats-period-presets"><span>Période rapide</span><div><button type="button" onClick={() => applyPeriod("previousWeek")}>Semaine dernière</button><button type="button" onClick={() => applyPeriod("cycle20")}>Mois dernier · 20 au 20</button><button type="button" onClick={() => applyPeriod("30d")}>30 jours</button><button type="button" onClick={() => applyPeriod("3m")}>3 mois</button><button type="button" onClick={() => applyPeriod("6m")}>6 mois</button><button type="button" onClick={() => applyPeriod("year")}>Cette année</button></div></div>
-      <label><span>Période A · du</span><input type="date" value={from} max={isIsoDate(to) ? to : undefined} onChange={(event) => updateFrom(event.target.value)} onBlur={() => { if (!isIsoDate(from)) setFrom(appliedRange.from); }}/></label>
+      <label><span>{activityView==="jira"?"Période · du":"Période A · du"}</span><input type="date" value={from} max={isIsoDate(to) ? to : undefined} onChange={(event) => updateFrom(event.target.value)} onBlur={() => { if (!isIsoDate(from)) setFrom(appliedRange.from); }}/></label>
       <label><span>Au</span><input type="date" value={to} min={isIsoDate(from) ? from : undefined} onChange={(event) => updateTo(event.target.value)} onBlur={() => { if (!isIsoDate(to)) setTo(appliedRange.to); }}/></label>
       <label><span>Marché</span><select value={marketId} onChange={(event) => setMarketId(event.target.value)}><option value="all">Tous les marchés</option>{markets.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}</select></label>
       {activityView==="planner"&&<div className="stats-specialty"><span>Spécialité</span><div>{(["all", "simulation", "control"] as const).map((value) => <button type="button" key={value} className={specialty === value ? "active" : ""} onClick={() => setSpecialty(value)}>{value === "all" ? "Tout" : value === "simulation" ? "Simulation" : "Contrôle"}</button>)}</div></div>
-      }<div className="stats-analysts"><div><span>Analystes</span><button type="button" onClick={() => setAnalystIds([])}>{analystIds.length ? "Revenir à tous" : "Tous les analystes"}</button></div><div>{analysts.map((analyst) => <button type="button" key={analyst.id} className={!analystIds.length || analystIds.includes(analyst.id) ? "active" : ""} onClick={() => selectAnalyst(analyst.id)}>{analyst.name}</button>)}</div></div>
+      }<div className="stats-analysts"><div><span>{jiraPage ? "Personnes" : "Analystes"}</span><button type="button" onClick={() => setAnalystIds([])}>{analystIds.length ? "Revenir à tous" : jiraPage ? "Toutes les personnes" : "Tous les analystes"}</button></div><div>{analysts.map((analyst) => <button type="button" key={analyst.id} className={!analystIds.length || analystIds.includes(analyst.id) ? "active" : ""} onClick={() => selectAnalyst(analyst.id)}>{analyst.name}</button>)}</div></div>
     </section>
 
     <section className="surface stats-period-comparison" aria-label="Comparaison des périodes">
-      <header><strong>Comparer la période A à…</strong><div className="period-comparison-modes">{(["previous", "year", "custom"] as const).map((mode) => <button type="button" key={mode} aria-pressed={comparisonMode === mode} className={comparisonMode === mode ? "active" : ""} onClick={() => setComparisonMode(mode)}>{mode === "previous" ? "La période précédente" : mode === "year" ? "L’année précédente" : "Des dates libres"}</button>)}</div></header>
-      {comparisonMode === "custom" && <div className="period-b-fields"><label>Période B · du<input type="date" value={customRange.from} onChange={(e) => setCustomRange({ ...customRange, from: e.target.value })}/></label><label>Au<input type="date" value={customRange.to} onChange={(e) => setCustomRange({ ...customRange, to: e.target.value })}/></label></div>}
-      {comparisonValid && activityView === "planner" ? <ActivityPeriodComparison stats={stats} rangeA={appliedRange} rangeB={comparisonRange}/> : !comparisonValid && <p role="alert">Choisis une période B complète, avec une fin égale ou postérieure au début.</p>}
+      <header>{activityView==="jira"?<label className="jira-comparison-toggle"><input type="checkbox" checked={jiraComparison} onChange={e=>setJiraComparison(e.target.checked)}/> Comparaison</label>:<strong>Comparer la période A à…</strong>}{(activityView!=="jira"||jiraComparison)&&<div className="period-comparison-modes">{(["previous", "year", "custom"] as const).map((mode) => <button type="button" key={mode} aria-pressed={comparisonMode === mode} className={comparisonMode === mode ? "active" : ""} onClick={() => setComparisonMode(mode)}>{mode === "previous" ? "La période précédente" : mode === "year" ? "L’année précédente" : "Des dates libres"}</button>)}</div>}</header>
+      {(activityView!=="jira"||jiraComparison) && comparisonMode === "custom" && <div className="period-b-fields"><label>{activityView==="jira"?"Référence · du":"Période B · du"}<input type="date" value={customRange.from} onChange={(e) => setCustomRange({ ...customRange, from: e.target.value })}/></label><label>Au<input type="date" value={customRange.to} onChange={(e) => setCustomRange({ ...customRange, to: e.target.value })}/></label></div>}
+      {comparisonValid && activityView === "planner" ? <ActivityPeriodComparison stats={stats} rangeA={appliedRange} rangeB={comparisonRange}/> : (activityView!=="jira"||jiraComparison) && !comparisonValid && <p role="alert">Choisis une période de comparaison complète, avec une fin égale ou postérieure au début.</p>}
     </section>
 
-    {activityView==="jira" ? <AnalystJiraStatsPanel rangeA={appliedRange} rangeB={comparisonRange} marketId={marketId} analystIds={analystIds} analysts={analysts}/> : <>
+    {activityView==="jira" ? <AnalystJiraStatsPanel registryScope={jiraPage} rangeA={appliedRange} rangeB={comparisonValid?comparisonRange:appliedRange} comparisonEnabled={jiraComparison&&comparisonValid} onSelectRange={(range,reference)=>{if(reference){setComparisonMode("custom");setCustomRange(range);}else setRange(range);}} marketId={marketId} analystIds={analystIds} analysts={analysts}/> : <>
     <section className="stats-kpis" aria-label="Indicateurs principaux">
       <article><span>Activités identifiées</span><strong>{stats.totalActivities}</strong><small>{comparisonValid ? movementLabel(stats.movement) : "Comparaison B indisponible"}</small></article>
       <article><span>Tâches distinctes</span><strong>{stats.distinctTasks}</strong><small>Une tâche n’est comptée qu’une fois</small></article>

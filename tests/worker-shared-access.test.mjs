@@ -108,3 +108,19 @@ test('built Worker creates Vente profiles, custom roles and dated multi-market h
  insert.run('TEST-20','Fini','Terminé plus tard','Tarifs','2026-09-01T10:00:00','A1234567','2026-11-02T10:00:00','2026-11-01T10:00:00');insert.run('TEST-21','Fini','Date absente','Tarifs','2026-09-01T10:00:00','A1234567','2026-10-28T10:00:00','');
  const r=await request('/api/analyst-activity?from=2026-10-26&to=2026-10-29&compareFrom=2026-10-19&compareTo=2026-10-22&basis=stock');assert.equal(r.status,200,JSON.stringify(r.body));assert.equal(r.body.report.a.stockAtEnd,1);assert.equal(r.body.report.a.stockUnknown,1);assert.equal(r.body.report.a.total,1);assert.equal(r.body.report.a.rows[0].key,'TEST-20');assert.equal(r.body.report.b.stockAtEnd,1);
  });
+
+test('built Worker global Jira page includes unassigned tickets and refreshes cache after request or import',async t=>{
+ const request=fixture(t),db=request.sqlite;
+ db.exec("INSERT INTO jira_import_batches(id,status,completed_at) VALUES ('global-batch','completed','2026-10-29T10:00:00Z')");
+ const insert=db.prepare('INSERT INTO jira_tickets(ticket_key,status,summary,jira_created_at,jira_updated_at) VALUES (?,?,?,?,?)');
+ insert.run('GLOBAL-1','En cours','Sans analyste','2026-09-01','2026-10-28');
+ const url='/api/jira-activity?from=2026-10-26&to=2026-10-29&compareFrom=2026-10-19&compareTo=2026-10-22';
+ assert.equal((await request(url)).body.report.a.total,1);
+ const analyst=await request(url.replace('/jira-activity','/analyst-activity'));assert.equal(analyst.body.report.a.total,0);
+ insert.run('GLOBAL-2','En cours','Ajout','2026-09-01','2026-10-28');
+ assert.equal((await request(url+'&refresh=1')).body.report.a.total,2);
+ insert.run('GLOBAL-3','En cours','Import suivant','2026-09-01','2026-10-28');
+ db.exec("INSERT INTO jira_import_batches(id,status,completed_at) VALUES ('global-next','completed','2026-10-29T11:00:00Z')");
+ assert.equal((await request(url)).body.report.a.total,3);
+ assert.equal((await request(url,'GET',undefined,'','U1234567')).status,403);
+});

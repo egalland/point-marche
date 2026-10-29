@@ -10,9 +10,9 @@ import { LocalFileButton } from "@/components/local-file-button";
 import { ChangelogDialog } from "@/components/changelog-dialog";
 import { AppIcon } from "@/components/app-icon";
 
-export type WorkspaceView = "read" | "edit" | "analyst" | "analyst-activity" | "stats" | "purchaseData" | "suppliers" | "imports" | "mail" | "settings" | "admin" | "superadmin";
+export type WorkspaceView = "read" | "edit" | "analyst" | "analyst-activity" | "jira" | "stats" | "purchaseData" | "suppliers" | "imports" | "mail" | "settings" | "admin" | "superadmin";
 export const workspaceTitles: Record<WorkspaceView, string> = {
-  read: "Point marché", edit: "Point marché", analyst: "Analystes", "analyst-activity": "Analystes", stats: "Variations fournisseurs", purchaseData: "PURCHASES", suppliers: "Fournisseurs", imports: "Centre d’import", mail: "Mail du marché", settings: "Paramètres", admin: "Administration", superadmin: "Super admin",
+  read: "Point marché", edit: "Point marché", analyst: "Analystes", "analyst-activity": "Analystes", jira: "Jira", stats: "Variations fournisseurs", purchaseData: "PURCHASES", suppliers: "Fournisseurs", imports: "Centre d’import", mail: "Mail du marché", settings: "Paramètres", admin: "Administration", superadmin: "Super admin",
 };
 
 const groups = [
@@ -21,6 +21,7 @@ const groups = [
     { id: "analyst", icon: "user", label: "Analystes" },
   ] },
   { label: "Données et suivi", items: [
+    { id: "jira", icon: "ticket", label: "Jira" },
     { id: "stats", icon: "trend", label: "Variations fournisseurs" },
     { id: "purchaseData", icon: "layers", label: "PURCHASES" },
     { id: "suppliers", icon: "building", label: "Fournisseurs" },

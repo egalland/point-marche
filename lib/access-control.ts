@@ -74,14 +74,14 @@ export function hasPermission(person: AccessPerson, permission: Permission, poli
 export function canView(person: AccessPerson | AccessRole, view: string, policy = defaultPolicy()) {
   const p = typeof person === "string" ? {usercode:"",name:"",role:person} : person;
   if (view === "superadmin") return p.role === "superadmin";
-  const key: Permission = ({read:"point.read",edit:"point.edit",analyst:"analyst.read","analyst-activity":"analyst.read",stats:"stats.read",purchaseData:"stats.read",suppliers:"suppliers.read",imports:"imports.open",mail:"exports.open",settings:"settings.open",admin:"admin.open"} as Record<string,Permission>)[view] || "point.read";
+  const key: Permission = ({read:"point.read",edit:"point.edit",analyst:"analyst.read","analyst-activity":"analyst.read",jira:"analyst.read",stats:"stats.read",purchaseData:"stats.read",suppliers:"suppliers.read",imports:"imports.open",mail:"exports.open",settings:"settings.open",admin:"admin.open"} as Record<string,Permission>)[view] || "point.read";
   return hasPermission(p,key,policy);
 }
 export function requestPermission(path: string, method: string, scope?: unknown): Permission | "superadmin" | null {
   const write = !["GET", "HEAD"].includes(method);
   if (path === "/api/admin/roles" || path === "/api/admin/policy") return "superadmin";
   if (path === "/api/admin/audit") return "audit.read";
-  if (/^\/api\/analyst-/.test(path) || (path === "/api/point-drafts" && scope === "analyst")) return write ? "analyst.edit" : "analyst.read";
+  if (path === "/api/jira-activity" || /^\/api\/analyst-/.test(path) || (path === "/api/point-drafts" && scope === "analyst")) return write ? "analyst.edit" : "analyst.read";
   if (path === "/api/point-drafts" || path === "/api/points") return write ? "point.edit" : "point.read";
   if (path === "/api/point-assets") return write ? "point.assets" : "point.read";
   if (path === "/api/directory-roles" && write) return "directory.create";

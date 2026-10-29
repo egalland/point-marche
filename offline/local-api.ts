@@ -303,7 +303,7 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
         return json({ snapshot: { year, week, rawText: "", summary: marketJiraSummary(tickets,isIsoDate(url.searchParams.get("date")??"")?url.searchParams.get("date")!:isoWeekRange(year,week).to), updatedAt: data.jiraUpdatedAt, source: "central" }, assignments });
       }
 
-      if(path === "/api/analyst-activity" && method === "GET"){ const q=parseJiraStatsQuery(url); return json({report:buildAnalystJiraStats(data.jiraTickets,data.users,data.markets,q),updatedAt:data.jiraUpdatedAt,hasSource:!!data.jiraUpdatedAt||data.jiraTickets.length>0}); }
+      if((path === "/api/analyst-activity" || path === "/api/jira-activity") && method === "GET"){ const q=parseJiraStatsQuery(url); if(path === "/api/jira-activity")q.scope="registry"; return json({report:buildAnalystJiraStats(data.jiraTickets,data.users,data.markets,q),updatedAt:data.jiraUpdatedAt,hasSource:!!data.jiraUpdatedAt||data.jiraTickets.length>0}); }
       if (path === "/api/analyst-jira" && method === "GET") {
         const analystId = url.searchParams.get("analystId") ?? "";
         const person = data.users.find((user) => user.id === analystId && (user.role === "analyste-tarif-referentiel"||Boolean(user.assignments?.some(a=>a.role==="analyste-tarif-referentiel"))));

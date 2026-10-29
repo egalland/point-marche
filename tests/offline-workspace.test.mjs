@@ -417,3 +417,11 @@ test('local custom roles and multi-market career periods persist, reject stale w
  const r=await api(path);assert.equal(r.status,200);const body=await r.json();assert.equal(body.report.a.total,1);assert.equal(body.report.b.total,0);assert.equal(body.report.a.charts.category[0].label,'Tarifs');
  const denied=await guardedApi(store)(path,{headers:{'X-Market-USERCODE':'U1234567'}});assert.equal(denied.status,403);
  });
+
+test('offline global Jira analysis includes tickets without an analyst and preserves authorization',async()=>{
+ const data=fixture();data.jiraTickets=[ticket('GLOBAL-1',{status:'En cours',assigneeUserCode:'',participants:[],updatedAt:'2026-10-28T10:00:00'})];
+ const store=new WorkspaceStore(data),api=createLocalApi(store);
+ const path='/api/jira-activity?from=2026-10-26&to=2026-10-29&compareFrom=2026-10-19&compareTo=2026-10-22';
+ const response=await api(path);assert.equal(response.status,200);assert.equal((await response.json()).report.a.total,1);
+ assert.equal((await guardedApi(store)(path,{headers:{'X-Market-USERCODE':'U1234567'}})).status,403);
+});

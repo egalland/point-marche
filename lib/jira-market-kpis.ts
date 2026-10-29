@@ -15,7 +15,13 @@ export function frenchHolidays(year:number) {
 export function workingDays(from:string,to:string):number|null {
  const start=from?.slice(0,10),end=to?.slice(0,10);
  if(!isIsoDate(start)||!isIsoDate(end)||end<start||Number(end.slice(0,4))-Number(start.slice(0,4))>30)return null;
- let count=0;for(let day=addIsoDays(start,1);day<=end;day=addIsoDays(day,1)){const dow=new Date(`${day}T12:00:00Z`).getUTCDay();if(dow!==0&&dow!==6&&!frenchHolidays(Number(day.slice(0,4))).has(day))count++;}return count;
+ const startDate=new Date(`${start}T12:00:00Z`),span=Math.round((Date.parse(`${end}T12:00:00Z`)-startDate.valueOf())/86400000);
+ let count=Math.floor(span/7)*5;
+ for(let offset=1;offset<=span%7;offset++){const dow=(startDate.getUTCDay()+offset)%7;if(dow!==0&&dow!==6)count++;}
+ for(let year=Number(start.slice(0,4));year<=Number(end.slice(0,4));year++)for(const day of frenchHolidays(year)){
+  if(day>start&&day<=end){const dow=new Date(`${day}T12:00:00Z`).getUTCDay();if(dow!==0&&dow!==6)count--;}
+ }
+ return count;
 }
 const mean=(v:number[])=>v.length?v.reduce((a,b)=>a+b,0)/v.length:null;
 const median=(v:number[])=>{if(!v.length)return null;const s=[...v].sort((a,b)=>a-b),m=Math.floor(s.length/2);return s.length%2?s[m]:(s[m-1]+s[m])/2;};

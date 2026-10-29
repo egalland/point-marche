@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 async function load(file){const b=await build({entryPoints:[file],bundle:true,platform:'node',packages:'external',format:'cjs',write:false});const m={exports:{}};new Function('require','module','exports',b.outputFiles[0].text)(require,m,m.exports);return m.exports;}
-const {workingDays,jiraMarketKpis}=await load('lib/jira-market-kpis.ts');
+const {workingDays,jiraMarketKpis,frenchHolidays}=await load('lib/jira-market-kpis.ts');
 const {selectMarketTickets}=await load('lib/jira-market-scope.ts');
 const {sanitizePointHtml}=await load('lib/point-rich-content.ts');
 const {initialData,defaultMarkets,normalizePointData,jiraTicketsFromSummary}=await load('features/market-pulse/point-model.ts');
@@ -53,4 +53,11 @@ test('central monthly KPI snapshot is saved without embedding closed ticket rows
  const payload=await response.json();assert.equal(payload.snapshot.summary.resolutionMetrics.mean,2);assert.equal(payload.snapshot.summary.resolutionMetrics.asOf,'2026-10-28');assert.equal(payload.snapshot.summary.detailedTickets.length,1);
  const point=initialData('market-local');point.meetingDate='2026-10-28';point.jiraResolution=payload.snapshot.summary.resolutionMetrics;
  const reopened=normalizePointData(JSON.parse(JSON.stringify(point)),'market-local');assert.equal(reopened.jiraResolution.mean,2);
+});
+
+test('fast working-day count matches daily enumeration across leap years, Easter and weekends',()=>{
+ const slow=(from,to)=>{let count=0;for(let d=new Date(from+'T12:00:00Z');;){d.setUTCDate(d.getUTCDate()+1);const day=d.toISOString().slice(0,10);if(day>to)return count;const weekday=d.getUTCDay();if(weekday!==0&&weekday!==6&&!frenchHolidays(d.getUTCFullYear()).has(day))count++;}};
+ for(const year of [2024,2025,2026,2027])for(const month of [1,3,4,5,12])for(const span of [0,1,6,7,8,30,80,400]){
+  const from=`${year}-${String(month).padStart(2,'0')}-15`,d=new Date(from+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+span);const to=d.toISOString().slice(0,10);assert.equal(workingDays(from,to),slow(from,to),`${from} ${to}`);
+ }
 });
