@@ -1,0 +1,97 @@
+/* Sidebar controls fit their container. Full settings are outside the icon rail. */
+.workspace-sidebar{overflow-x:hidden;min-width:0}
+.workspace-sidebar .workspace-nav{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}
+.workspace-sidebar .workspace-account-compact{flex:0 0 auto;display:grid;gap:8px;padding:12px 0 0;margin-top:12px;border-top:1px solid var(--line)}
+.workspace-account-compact>button{width:100%;justify-content:flex-start;min-width:0;white-space:nowrap}
+.workspace-account-compact>button svg{flex:0 0 auto}
+.workspace-sidebar.is-compact .workspace-account-compact{padding:10px 0 0;gap:8px}
+.workspace-sidebar.is-compact .workspace-account-compact>button{display:flex!important;justify-content:center;width:44px;min-width:0;padding:10px;margin:0 auto}
+.workspace-sidebar.is-compact .workspace-account-compact>button>span{display:none!important}
+.workspace-sidebar.is-compact{overflow-x:hidden}
+.workspace-menu-dialog .workspace-account-compact{border-top:1px solid var(--line);padding-top:12px}
+.workspace-menu-dialog .workspace-account-compact>button{width:100%;justify-content:flex-start}
+.workspace-preferences-dialog{width:min(500px,calc(100vw - 24px));padding:26px;max-height:calc(100dvh - 32px);overflow-y:auto;overflow-x:hidden}
+.workspace-preferences-dialog h2{font-size:21px;margin:0 38px 4px 0}
+.workspace-preferences-version{font-size:12px;color:var(--muted);margin:0 0 20px}
+.workspace-preferences-dialog .sidebar-reading-tools{display:flex;flex-direction:column;align-items:stretch;gap:12px;width:100%;margin:0 0 20px}
+.workspace-preferences-dialog .appearance-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:4px;padding:5px;min-width:0}
+.workspace-preferences-dialog .appearance-switch button{min-width:0;width:100%;padding:10px 5px;white-space:nowrap;word-break:normal;overflow-wrap:normal}
+.workspace-preferences-dialog .appearance-option-label{display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.workspace-preferences-dialog .appearance-option-label strong{font-size:12px;word-break:normal;overflow-wrap:normal;white-space:nowrap}
+.workspace-preferences-dialog .appearance-option-label svg{flex:0 0 auto}
+.workspace-preferences-dialog .access-view-select{display:grid;width:100%;gap:8px;margin:0 0 20px}
+.workspace-preferences-dialog .access-view-select select{width:100%;min-width:0}
+.workspace-profile-summary{display:flex;align-items:center;gap:12px;padding-top:16px;border-top:1px solid var(--line)}
+.workspace-profile-summary>div{display:grid;gap:4px;min-width:0}
+.workspace-profile-summary small{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.workspace-preferences-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+/* Block content never owns a scroll container; its full version lives in a dialog. */
+.point-quiet-canvas .v51-block>.v51-content{display:flex;flex:1;min-height:0;padding:0!important;overflow:hidden!important}
+.point-block-body{position:relative;display:flex;flex-direction:column;flex:1;min-height:0;width:100%;overflow:hidden}
+.point-block-viewport{flex:1;min-height:0;overflow:hidden;padding:16px 18px 12px}
+.point-block-inner{min-width:0;overflow:visible}
+.point-block-inner :where(div,section,article,ul,ol,details){max-height:none!important;overflow:visible!important}
+.point-block-inner>.report-focus,.point-block-inner>.jira-command-center{margin:0;min-height:0!important}
+.point-block-inner .report-heading{display:none}
+.point-block-inner .rich-content img{max-width:100%;height:auto}
+.point-block-inner table{max-width:100%;table-layout:fixed;overflow-wrap:anywhere}
+.point-block-details-button{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;border:0;border-top:1px solid var(--line);background:var(--surface);color:var(--muted);padding:9px 16px;font-size:12px;text-align:left;cursor:pointer}
+.point-block-details-button:hover,.point-block-details-button:focus-visible{color:var(--text);background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
+.point-block-open-note{font-size:13px;color:var(--muted);padding:20px}
+.point-block-dialog{width:min(1120px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overflow-y:auto;overflow-x:hidden;padding:24px}
+.point-block-dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 42px 16px 0;margin-bottom:16px;border-bottom:1px solid var(--line)}
+.point-block-dialog-heading h2{margin:0;font-size:20px}
+.point-block-detail-content{min-width:0;overflow:visible}
+.point-block-detail-content :where(div,section,article,ul,ol,details){max-height:none!important;overflow:visible!important}
+.point-block-detail-content .report-heading{display:none}
+.point-block-detail-content .data-table-wrap{max-width:100%}
+.point-block-detail-content table{width:100%;table-layout:fixed;overflow-wrap:anywhere}
+.point-block-detail-content .jira-read-ticket{flex-wrap:wrap;min-width:0}
+.point-block-detail-content .dossier-publications{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px}
+.point-block-detail-content .dossier-publication{grid-column:span 6;min-width:0}
+.point-block-detail-content .dossier-width-half{grid-column:span 3}
+.point-block-detail-content .dossier-width-third{grid-column:span 2}
+.point-block-detail-content .dossier-publication:has(.inline-dossier-editor){grid-column:span 6}
+/* Text tools belong to the editor, with normal buttons and collapsible advanced options. */
+.dossier-editor-tools{position:sticky;top:0;z-index:4;display:grid;gap:8px;padding:12px;margin-bottom:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.dossier-editor-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px}
+.dossier-editor-tools .rich-toolbar{position:static!important;display:flex!important;flex-wrap:wrap;align-items:center;gap:6px;margin:0!important;padding:0!important;box-shadow:none!important;background:transparent!important}
+.dossier-editor-tools .rich-toolbar>span{font-size:11px;color:var(--muted)}
+.dossier-editor-tools .rich-toolbar button,.dossier-editor-tools .v51-rich-extras button,.dossier-editor-tools .dossier-templates button{min-height:32px;min-width:32px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);padding:5px 8px;font-size:12px;cursor:pointer}
+.dossier-editor-tools button:hover{border-color:var(--accent)}
+.dossier-editor-tools button:focus-visible,.dossier-editor-tools select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dossier-editor-tools select,.dossier-editor-tools input{min-height:32px;max-width:100%;border:1px solid var(--line);border-radius:6px;padding:4px 6px;color:var(--text);background:var(--surface);font-size:12px}
+.dossier-editor-tools input[type=color]{width:34px;padding:3px}
+.dossier-editor-tools .v51-rich-extras{display:flex;flex-wrap:wrap;gap:6px;padding:0}
+.dossier-editor-tools .dossier-templates{display:block;padding:0;margin:0}
+.dossier-editor-tools .dossier-templates summary,.dossier-editor-tools .dossier-details summary{font-size:12px;cursor:pointer;padding:6px 0;color:var(--muted)}
+.dossier-editor-tools .dossier-templates>div{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0}
+.dossier-editor-tools .dossier-details{padding:0;margin:0}
+.dossier-publication:has(.v51-inline-editor){outline:0;box-shadow:none}
+.v51-inline-editor .editable-dossier-title{padding:10px!important;font-size:20px;line-height:1.4;border-bottom:1px solid var(--line)!important}
+.v51-inline-editor .rich-editor{padding:12px 10px!important;min-height:180px!important;border:1px solid var(--line)!important;border-radius:8px;line-height:1.7;overflow:visible!important}
+.rich-content ul,.rich-content ol{padding-left:24px;margin:8px 0}
+.rich-content ul{list-style:disc}.rich-content ol{list-style:decimal}
+.rich-content li{display:list-item;margin:3px 0}
+.point-placement-status{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 0 12px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:12px}
+.point-placement-status>span{flex:1;min-width:180px}
+.point-placement-status button{border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px;color:var(--text);background:var(--surface);cursor:pointer}
+.point-quiet-canvas .v51-block:hover>.v73-resize{visibility:visible;pointer-events:auto;opacity:.6}
+.point-quiet-canvas .v51-block.selected>.v73-resize{visibility:visible;pointer-events:auto;opacity:1}
+.point-quiet-canvas .v70-module-header strong{cursor:grab;user-select:none}
+.point-quiet-canvas .v70-module-actions{flex-shrink:0;gap:4px}
+.point-quiet-canvas .v70-module-actions button{min-width:28px;width:auto;white-space:nowrap}
+@media(max-width:760px){
+ .point-quiet-canvas .v51-block>.v51-content{min-height:240px;max-height:560px;flex:none}
+ .point-block-body{max-height:560px;min-height:240px}
+ .point-block-viewport{flex:1;max-height:510px;min-height:0}
+ .point-block-dialog{padding:16px;width:calc(100vw - 16px);max-height:calc(100dvh - 16px)}
+ .point-block-dialog-heading h2{font-size:18px}
+ .point-block-detail-content .dossier-width-half,.point-block-detail-content .dossier-width-third{grid-column:span 6}
+ .dossier-editor-tools{position:static;padding:10px}
+ .dossier-editor-tools .rich-toolbar select{max-width:115px}
+ .workspace-preferences-dialog{padding:20px;width:calc(100vw - 24px)}
+}
+@media print{.point-block-details-button,.point-placement-status{display:none!important}.point-quiet-canvas .v51-block>.v51-content,.point-block-body,.point-block-viewport{display:block!important;max-height:none!important;height:auto!important;overflow:visible!important}.point-block-dialog{display:none!important}}
+.workspace-preferences-dialog .appearance-option-label strong{display:inline!important}
+.point-week-current strong{white-space:nowrap}

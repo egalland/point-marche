@@ -62,3 +62,14 @@ test('V92 a nearby touching edge wins over a distracting centre alignment',async
  const result=alignPresentationRect({x:0,y:487,width:600,height:240},neighbours,null,true);
  assert.equal(result.rect.y,480);assert.equal(result.guides.y,480);
 });
+
+test('V110 compaction removes only vertical gaps, preserving columns, widths, heights and spanning block order',async()=>{
+ const {compactPresentationBlocks,arrangePresentationBlocks}=await load('lib/free-point-layout.ts');
+ const blocks={left:{x:0,y:120,width:588,height:260},right:{x:600,y:320,width:600,height:160},next:{x:0,y:800,width:588,height:220},across:{x:0,y:1500,width:1200,height:144}};
+ const before=structuredClone(blocks),result=compactPresentationBlocks(['left','right','next','across'],blocks);
+ assert.equal(result.left.y,0);assert.equal(result.right.y,0);assert.equal(result.next.y,260);assert.equal(result.across.y,480);
+ for(const id of Object.keys(blocks)){assert.equal(result[id].x,blocks[id].x);assert.equal(result[id].width,blocks[id].width);assert.equal(result[id].height,blocks[id].height);assert.ok(result[id].y<=blocks[id].y);}
+ assert.deepEqual(blocks,before);assert.deepEqual(arrangePresentationBlocks(Object.keys(result),result),result);
+ assert.deepEqual(compactPresentationBlocks(Object.keys(result),result),result);
+ assert.deepEqual(compactPresentationBlocks([],{}),{});
+});

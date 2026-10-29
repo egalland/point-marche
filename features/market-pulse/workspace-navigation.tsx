@@ -42,6 +42,7 @@ type Props = {
 export function WorkspaceNavigation({ view, userName, onSelect, tools }: Props) {
   const { person, effective, policy, changeUser } = useAccess();
   const [open, setOpen] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [compact, setCompact] = useState(false);
   useEffect(() => { try { setCompact(localStorage.getItem("market-pulse:compact-menu") === "true"); } catch {} }, []);
   const toggleCompact = () => setCompact(current => { const next = !current; try { localStorage.setItem("market-pulse:compact-menu", String(next)); } catch {} return next; });
@@ -53,18 +54,15 @@ export function WorkspaceNavigation({ view, userName, onSelect, tools }: Props) 
       {groups.map((group) => <div className="workspace-nav-group" key={group.label}><span>{group.label}</span>{group.items.filter(item => canView(effective, item.id, policy)).map((item) => <button key={item.id} type="button" className={(view === item.id || (item.id === "analyst" && view === "analyst-activity")) ? "active" : ""} aria-label={item.label} title={item.label} aria-current={(view === item.id || (item.id === "analyst" && view === "analyst-activity")) ? "page" : undefined} onClick={() => select(item.id)}><AppIcon name={item.icon} size={20}/><span>{item.label}</span>{(view === item.id || (item.id === "analyst" && view === "analyst-activity")) && <i aria-hidden="true"/>}</button>)}</div>)}
 
     </nav>
-    <footer className="workspace-account">
-      <div className="sidebar-reading-tools">{tools}</div><AccessViewSelector/>
-      <div className="access-profile"><button type="button" onClick={changeUser} title="Changer d’utilisateur">Changer d’utilisateur</button></div>
-      <a href="/plan-du-site" aria-label="Plan du site" title="Plan du site"><AppIcon name="menu" size={16}/><span>Plan du site</span></a>
-      <div><span className="workspace-avatar"><AppIcon name={userName ? "user" : "eye"}/></span><span><strong>{person.name}</strong><small>{person.usercode} · {roleNames[person.role]}</small></span></div>
-      {isLocalWorkspace() && <button type="button" aria-label="Fichier local" title="Fichier local" onClick={() => { setOpen(false); openLocalFiles(); }}><AppIcon name="download" size={16}/><span>Fichier local</span></button>}
-
+    <footer className="workspace-account workspace-account-compact">
+      <button type="button" className="workspace-preferences-trigger" aria-label="Affichage et compte" aria-haspopup="dialog" title={`${person.name} · Affichage et compte`} onClick={()=>{setOpen(false);setPreferencesOpen(true);}}><AppIcon name="settings" size={20}/><span>Affichage et compte</span></button>
+      {isLocalWorkspace() && <button type="button" className="workspace-file-trigger" aria-label="Fichier local" title="Fichier local" onClick={()=>{setOpen(false);openLocalFiles();}}><AppIcon name="download" size={20}/><span>Fichier local</span></button>}
     </footer>
   </>;
   return <>
     <aside className={`workspace-sidebar ${compact ? "is-compact" : ""}`}>{content}</aside>
     <button type="button" className="icon-button workspace-menu-trigger" aria-label="Ouvrir la navigation" aria-expanded={open} aria-controls="workspace-menu-title" onClick={() => setOpen(true)}><AppIcon name="menu" size={22}/></button>
+    <AppDialog open={preferencesOpen} onClose={()=>setPreferencesOpen(false)} labelledBy="workspace-preferences-title" className="workspace-preferences-dialog"><h2 id="workspace-preferences-title">Affichage et compte</h2><p className="workspace-preferences-version">Market Pulse · {APP_VERSION}</p><div className="sidebar-reading-tools">{tools}</div><AccessViewSelector/><div className="workspace-profile-summary"><span className="workspace-avatar"><AppIcon name="user"/></span><div><strong>{person.name}</strong><small>{person.usercode} · {roleNames[person.role]}</small></div></div><div className="workspace-preferences-links"><button type="button" className="secondary-button" onClick={()=>{setPreferencesOpen(false);changeUser();}}>Changer d’utilisateur</button><a className="secondary-button" href="/plan-du-site"><AppIcon name="menu" size={16}/> Plan du site</a></div></AppDialog>
     <AppDialog open={open} onClose={() => setOpen(false)} labelledBy="workspace-menu-title" className={`workspace-menu-dialog ${compact ? "is-compact" : ""}`} backdropClassName="workspace-menu-backdrop"><h2 className="sr-only" id="workspace-menu-title">Navigation de Market Pulse</h2>{content}</AppDialog>
   </>;
 }

@@ -17,7 +17,7 @@ let hooks;
 const react = require("react");
 const reactStub = {
   ...react,
-  useContext(context) { const value = context._currentValue; return value?.person ? {...value, person:{usercode:"A0000001",name:"Administrateur exemple",role:"superadmin"}, effective:{usercode:"A0000001",name:"Administrateur exemple",role:"superadmin"}, can:()=>true} : value; },
+  useContext(context) { const value = context._currentValue; return value?.person ? {...value, person:{usercode:"A0000001",name:"Utilisateur Exemple",role:"superadmin"}, effective:{usercode:"A0000001",name:"Utilisateur Exemple",role:"superadmin"}, can:()=>true} : value; },
   useId() { const index = hooks.cursor++; return hooks.slots[index] ??= `test-id-${index}`; },
   useState(initial) { const index = hooks.cursor++; if (!(index in hooks.slots)) hooks.slots[index] = typeof initial === "function" ? initial() : initial; return [hooks.slots[index], (next) => { hooks.slots[index] = typeof next === "function" ? next(hooks.slots[index]) : next; }]; },
   useRef(initial) { const index = hooks.cursor++; return hooks.slots[index] ??= { current: initial }; },
@@ -269,4 +269,20 @@ test("a failed automatic save keeps edits and exposes retry", async () => {
   assert.equal(preview().data.priority,"Ne pas perdre cette saisie");
   assert.ok(nodes(tree).some(node => node.type === "button" && node.props.children === "Réessayer"));
   assert.equal(autoTimers.size,0,"A failed save must not loop endlessly");
+});
+
+test('reset confirms first, clears free text and content only in the current week; layout reset preserves data',async()=>{
+ const other=[...records.entries()].filter(([id])=>id!==preview().market.id).map(([id,rows])=>[id,JSON.stringify(rows)]);
+ preview().actions.addDossier();await settle();
+ const layout={mode:'windows',enabled:true,snap:true,showGrid:false,blocks:{'copy-note':{x:0,y:600,width:600,height:300}},titles:{'copy-note':'Note'},copies:[{id:'copy-note',title:'Note',html:'<p>À conserver avant confirmation</p>'}],order:['copy-note','dossiers']};
+ preview().actions.updateFreeLayout(layout);await settle();
+ preview().actions.resetLayout();await settle();
+ assert.equal(preview().data.dossiers.length,1);assert.equal(preview().data.preferences.freeLayout.copies.length,1);assert.deepEqual(preview().data.preferences.freeLayout.blocks,{});assert.equal(preview().data.preferences.freeLayout.mode,'windows');
+ preview().actions.resetPoint();await settle();
+ assert.equal(preview().data.dossiers.length,1);
+ find(node=>node.type==='button'&&node.props.children==='Annuler').props.onClick();await settle();
+ assert.equal(preview().data.dossiers.length,1);
+ preview().actions.resetPoint();await settle();find(node=>node.type==='button'&&node.props.children==='Créer un brouillon vide').props.onClick();await settle();
+ assert.equal(preview().data.dossiers.length,0);assert.equal(preview().data.preferences.freeLayout.copies.length,0);
+ for(const [id,rows] of other)assert.equal(JSON.stringify(records.get(id)),rows);
 });

@@ -118,6 +118,7 @@ export type PointCanvasActions = {
   moveModule: (module: PointModule, amount: number) => void;
   updateModuleWidth: (module: PointModule, width: ModuleWidth) => void;
   resetLayout: () => void;
+  resetPoint?: () => void;
   openPointSettings?: () => void;
 };
 

@@ -74,3 +74,10 @@ export function alignPresentationRect(raw:BlockRect,neighbours:BlockRect[],edge:
  }
  return {rect,guides};
 }
+
+/** Remove vertical gaps without changing columns, dimensions or the order within a column. */
+export function compactPresentationBlocks(ids:string[],blocks:Record<string,BlockRect>):Record<string,BlockRect>{
+ const result={...blocks},placed:BlockRect[]=[];
+ const order=ids.filter(id=>blocks[id]).sort((a,b)=>blocks[a].y-blocks[b].y||blocks[a].x-blocks[b].x||ids.indexOf(a)-ids.indexOf(b));
+ for(const id of order){const original=blocks[id];const above=placed.filter(p=>original.x<p.x+p.width&&original.x+original.width>p.x);const rect={...original,y:Math.max(0,...above.map(p=>p.y+p.height))};result[id]=rect;placed.push(rect);}return result;
+}
