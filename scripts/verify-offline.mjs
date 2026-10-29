@@ -88,14 +88,16 @@ assert.match(freeCanvas, /updateFreeLayout/);
 assert.match(freeCanvas, /gesture\(e,id,edge\)/);
 assert.match(freeCanvas, /Aimantation/);
 const dossier = await readFile(resolve(root, 'features/market-pulse/dossier-board.tsx'), 'utf8');
-assert.match(dossier, /FloatingTools/);
+assert.match(dossier, /dossier-editor-tools/);
+assert.match(css, /point-block-dialog/);
+assert.match(html, /Affichage et compte/);
 assert.match(dossier, /contentEditable/);
 assert.match(html, /v51-help-page/);
 assert.ok(html.includes(appVersion));
 assert.doesNotMatch(marketPoint, /planner-source-pill/);
 const navigation = await readFile(resolve(root, 'features/market-pulse/workspace-navigation.tsx'), 'utf8');
 assert.doesNotMatch(navigation, /Préparer le point/);
-const featurePaths = ['lib/app-version.ts', 'app/globals.css', 'app/styles/meeting.css', 'features/market-pulse/market-pulse-app.tsx', 'features/market-pulse/workspace-navigation.tsx', 'features/market-pulse/analyst-point-dashboard.tsx', 'features/market-pulse/import-center.tsx', 'features/market-pulse/source-mode-control.tsx', 'features/market-pulse/manual-analyst-jira.tsx', 'features/market-pulse/market-comparison.tsx', 'lib/analyst-point.ts', 'lib/analyst-point-export.ts', 'lib/market-simulation.ts', 'lib/simulation-lifecycle.ts', 'lib/simulation-details.ts', 'features/market-pulse/simulation-details.tsx', 'components/loading-status.tsx', 'features/market-pulse/use-point-exports.ts', 'app/styles/point-review-v74.css', 'lib/point-source-mode.ts', 'lib/point-planner-enrichment.ts', 'lib/planner-registry.ts', 'lib/market-comparison.ts', 'lib/mail-draft.ts', 'features/market-pulse/free-point-canvas.tsx', 'components/floating-tools.tsx', 'components/workspace-help.tsx', 'offline/shared-workspace.ts', 'docs/partage-local.md', 'lib/free-point-layout.ts', 'lib/point-help.ts', 'app/styles/point-workspace-v51.css'];
+const featurePaths = ['lib/app-version.ts', 'app/styles/point-composition-v110.css', 'features/market-pulse/point-block-body.tsx', 'lib/point-export-modals.ts', 'app/globals.css', 'app/styles/meeting.css', 'features/market-pulse/market-pulse-app.tsx', 'features/market-pulse/workspace-navigation.tsx', 'features/market-pulse/analyst-point-dashboard.tsx', 'features/market-pulse/import-center.tsx', 'features/market-pulse/source-mode-control.tsx', 'features/market-pulse/manual-analyst-jira.tsx', 'features/market-pulse/market-comparison.tsx', 'lib/analyst-point.ts', 'lib/analyst-point-export.ts', 'lib/market-simulation.ts', 'lib/simulation-lifecycle.ts', 'lib/simulation-details.ts', 'features/market-pulse/simulation-details.tsx', 'components/loading-status.tsx', 'features/market-pulse/use-point-exports.ts', 'app/styles/point-review-v74.css', 'lib/point-source-mode.ts', 'lib/point-planner-enrichment.ts', 'lib/planner-registry.ts', 'lib/market-comparison.ts', 'lib/mail-draft.ts', 'features/market-pulse/free-point-canvas.tsx', 'components/floating-tools.tsx', 'components/workspace-help.tsx', 'offline/shared-workspace.ts', 'docs/partage-local.md', 'lib/free-point-layout.ts', 'lib/point-help.ts', 'app/styles/point-workspace-v51.css'];
 const featureSources = [];
 for (const path of featurePaths) featureSources.push({ path, sha256: sha(await readFile(resolve(root, path))) });
 const report = {
@@ -106,7 +108,7 @@ const report = {
   opensSharedApplication: true, separateWelcomeOrTopBar: false,
   data: data ? { embedded: true, markets: data.markets.length, people: data.users.length, marketPoints: data.points.length, analystPoints: data.analystPoints.length, plannerTasks: data.plannerTasks.length, jiraTickets: data.jiraTickets.length, jiraImports: data.jiraImports.length } : { embedded: false },
   sharedImportCenter: true, originalCsvRequired: false,
-  requestedFeatures: ['Inline editing with floating tools', 'Free 2D point blocks with width and height, optional snapping', 'Separate manual promotions block', 'Final business state only for simulations', 'Persistent field overrides over Jira and Planner imports', 'Email draft with formatted body and HTML page attachment', 'Persistent manual source modes', 'Interactive optional market comparison pie chart', 'Font scale, density, theme and presentation toolbar', 'Undo, redo and keyboard shortcuts', 'Searchable illustrated help and contextual helpers', 'Shared directory journal with immutable causal changes', 'Three-second polling and deferred updates during input', 'Concurrent point versions and explicit conflict resolution'],
+  requestedFeatures: ['Rich text editing with integrated controls', 'Free 2D point blocks with width and height, optional snapping', 'Separate manual promotions block', 'Final business state only for simulations', 'Persistent field overrides over Jira and Planner imports', 'Email draft with formatted body and HTML page attachment', 'Persistent manual source modes', 'Interactive optional market comparison pie chart', 'Font scale, density, theme and presentation toolbar', 'Undo, redo and keyboard shortcuts', 'Searchable illustrated help and contextual helpers', 'Shared directory journal with immutable causal changes', 'Three-second polling and deferred updates during input', 'Concurrent point versions and explicit conflict resolution'],
   featureSources,
   adaptations: ['File commands replace the server session action', 'Saving uses a local data file'],
   interactiveBrowserComparison: false,
