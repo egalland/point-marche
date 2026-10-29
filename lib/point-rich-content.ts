@@ -44,14 +44,15 @@ export function sanitizePointHtml(value: unknown): string {
     return `<${tag}${output}>`;
   });
 }
+export function safeAttachmentUrl(value:string){if(/^data:application\/octet-stream;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)&&value.length<2_800_000)return value;return safeAssetUrl(value);}
 export function normalizeAttachments(value: unknown): PointAttachment[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((v) => v && typeof v === "object" && typeof v.id === "string" && typeof v.name === "string" && typeof v.url === "string" && safeAssetUrl(v.url) ? [{ id: v.id, name: v.name.slice(0, 240), url: safeAssetUrl(v.url), size: Math.max(0, Number(v.size) || 0), type: typeof v.type === "string" ? v.type : "" }] : []).slice(0, 30);
+  return value.flatMap((v) => v && typeof v === "object" && typeof v.id === "string" && typeof v.name === "string" && typeof v.url === "string" && safeAttachmentUrl(v.url) ? [{ id: v.id, name: v.name.slice(0, 240), url: safeAttachmentUrl(v.url), size: Math.max(0, Number(v.size) || 0), type: typeof v.type === "string" ? v.type : "" }] : []).slice(0, 30);
 }
 export function dossierContentHtml(item: { richHtml?: string; action?: string; comment?: string; attachments?: PointAttachment[] }, origin = "") {
   const html = sanitizePointHtml(item.richHtml) || `<p>${escapeRichText(item.action || item.comment || "")}</p>`;
   const absolute = origin ? html.replace(/(src|href)="(\/api\/point-assets\?id=[0-9a-f-]{36})"/g, (_, key, path) => `${key}="${escapeRichText(origin)}${path}"`) : html;
-  return absolute + normalizeAttachments(item.attachments).map((a) => `<p><a href="${escapeRichText(a.url.startsWith("/") ? origin + a.url : a.url)}" target="_blank" rel="noopener noreferrer">📎 ${escapeRichText(a.name)}</a></p>`).join("");
+  return absolute + normalizeAttachments(item.attachments).map((a) => `<p><a download="${escapeRichText(a.name)}" href="${escapeRichText(a.url.startsWith("/") ? origin + a.url : a.url)}" target="_blank" rel="noopener noreferrer">📎 ${escapeRichText(a.name)}</a></p>`).join("");
 }
 export function excelTextToHtml(value: string) {
   if (!value.includes("\t")) return `<p>${escapeRichText(value).replace(/\r?\n/g, "<br>")}</p>`;

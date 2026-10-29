@@ -296,7 +296,7 @@ function MarketPulseWorkspace() {
   useEffect(() => {
     if (!session.user || !ready || archiveLoading || !plannerReady || !plannerTasks.length || data.plannerMode === "manual" || activeRecordId) return;
     if (resumedDrafts.current.has(`${marketId}:${isoWeekYear(data.meetingDate)}:${isoWeek(data.meetingDate)}`)) return;
-    const timer = window.setTimeout(() => setData((current) => current.plannerMode === "manual" ? current : ({ ...current, sourceFreshness: { ...current.sourceFreshness, planner: plannerUpdatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate), plannerTasks) })), 0);
+    const timer = window.setTimeout(() => setData((current) => current.plannerMode === "manual" ? current : ({ ...current, sourceFreshness: { ...current.sourceFreshness, planner: plannerUpdatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate,current.preferences.simulationPeriods), plannerTasks) })), 0);
     return () => window.clearTimeout(timer);
   }, [activeRecordId, archiveLoading, data.meetingDate, data.plannerMode, market, marketId, marketPlannerTagsKey, plannerReady, plannerTasks, plannerUpdatedAt, ready, session.user]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(timer); }, [toast]);
@@ -470,7 +470,7 @@ function MarketPulseWorkspace() {
 
   const synchronizePlannerPoint = (tasks = plannerTasks) => {
     if (data.plannerMode === "manual") { setToast("Le point est en saisie manuelle. Repasse en import automatique pour le synchroniser."); return 0; }
-    const relevant = plannerTasksForPoint(tasks, market, data.meetingDate);
+    const relevant = plannerTasksForPoint(tasks, market, data.meetingDate,data.preferences.simulationPeriods);
     setData((current) => ({ ...current, sourceFreshness: { ...current.sourceFreshness, planner: plannerUpdatedAt }, operations: mergePlannerOperations(current.operations, relevant, tasks) }));
     setToast(relevant.length ? `${relevant.length} simulation${relevant.length > 1 ? "s" : ""} Planner synchronisée${relevant.length > 1 ? "s" : ""}.` : "Aucune simulation Planner pour ce marché et cette période.");
     return relevant.length;
@@ -486,7 +486,7 @@ function MarketPulseWorkspace() {
     setPlannerRegistry(refreshed.registry);
     setPlannerUpdatedAt(refreshed.updatedAt);
     setPlannerReady(true);
-    const relevant = plannerTasksForPoint(refreshed.tasks, market, data.meetingDate);
+    const relevant = plannerTasksForPoint(refreshed.tasks, market, data.meetingDate,data.preferences.simulationPeriods);
     if (selection === archiveRequest.current && context === comparisonContext.current) setData((current) => current.plannerMode === "manual" ? current : ({ ...current, sourceFreshness: { ...current.sourceFreshness, planner: refreshed.updatedAt }, operations: mergePlannerOperations(current.operations, relevant, refreshed.tasks) }));
     return {
       imported: payload.imported ?? 0,
@@ -520,7 +520,7 @@ function MarketPulseWorkspace() {
       if (planner.status === "fulfilled" && planner.value) {
         const source = planner.value;
         setPlannerTasks(source.tasks); setPlannerRegistry(source.registry); setPlannerUpdatedAt(source.updatedAt);
-        if (source.updatedAt || source.tasks.length) setData((current) => current.plannerMode === "manual" ? current : { ...current, sourceFreshness: { ...current.sourceFreshness, planner: source.updatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(source.tasks, market, current.meetingDate), source.tasks) });
+        if (source.updatedAt || source.tasks.length) setData((current) => current.plannerMode === "manual" ? current : { ...current, sourceFreshness: { ...current.sourceFreshness, planner: source.updatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(source.tasks, market, current.meetingDate,current.preferences.simulationPeriods), source.tasks) });
         else errors.push("Aucun import Planner disponible.");
       } else if (planner.status === "rejected") errors.push(planner.reason instanceof Error ? planner.reason.message : "Planner indisponible.");
       if (jira.status === "fulfilled" && jira.value) {
@@ -546,7 +546,7 @@ function MarketPulseWorkspace() {
         if (selection === archiveRequest.current && comparisonContext.current === context) setData((current) => ({ ...current, jiraMode: "automatic", jiraResolution: payload.snapshot!.summary.resolutionMetrics, sourceFreshness: { ...current.sourceFreshness, jira: payload.snapshot!.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
       } else {
         if (!plannerReady || (!plannerUpdatedAt && !plannerTasks.length)) throw new Error("Aucun import Planner disponible. La saisie manuelle est conservée.");
-        setData((current) => ({ ...current, plannerMode: "automatic", sourceFreshness: { ...current.sourceFreshness, planner: plannerUpdatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate), plannerTasks) }));
+        setData((current) => ({ ...current, plannerMode: "automatic", sourceFreshness: { ...current.sourceFreshness, planner: plannerUpdatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate,current.preferences.simulationPeriods), plannerTasks) }));
       }
     } catch (error) { setToast(error instanceof Error ? error.message : "Actualisation impossible."); }
     finally { setSourceChanging(null); }
@@ -1050,6 +1050,8 @@ function MarketPulseWorkspace() {
     resetOperation: resetOperationOverride,
     addOperation,
     removeOperation: (id) => setData((current) => ({ ...current, operations: current.operations.filter((item) => item.id !== id) })),
+    setSimulationPeriods: periods=>setData(current=>({...current,preferences:{...current.preferences,simulationPeriods:[...new Set(periods)].slice(0,24)}})),
+    refreshSimulations: ()=>{void refreshImports();},
     updatePromotion,
     addPromotion,
     removePromotion: (id) => setData((current) => ({ ...current, promotions: current.promotions.filter((item) => item.id !== id) })),

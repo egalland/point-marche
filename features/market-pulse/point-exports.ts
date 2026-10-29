@@ -15,6 +15,7 @@ import { hasMarketSimulationOverride } from "@/lib/market-simulation";
 import { PointModule, Dossier, Promotion, PointData, Market, PointRecord, JiraAttentionLevel, pointModules, themes, normalizeHex, isoWeek, isoWeekYear, dateLabel, jiraItemCount, jiraStatusSummary, groupJiraPeople, jiraAttention, jiraDashboardStats, escapeHtml, buildAlerts } from "./point-model";
 
 export function buildMailHtml(data: PointData, market: Market, archive: PointRecord[]) {
+  data=simulationPeriodData(data);
   const alerts = buildAlerts(data, market);
   const stats = jiraDashboardStats(data, market, archive);
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
@@ -55,6 +56,7 @@ export function buildMailHtml(data: PointData, market: Market, archive: PointRec
 }
 
 export function buildInteractiveHtml(data: PointData, market: Market, archive: PointRecord[]) {
+  data=simulationPeriodData(data);
   const stats = jiraDashboardStats(data, market, archive);
   const modules = data.preferences.readModules;
   const theme = themes.find((item) => item.id === data.themeColor) ?? themes[0];
@@ -128,3 +130,5 @@ function jiraSummaryExport(data:PointData,market:Market,archive:PointRecord[]){
  const stats=jiraDashboardStats(data,market,archive),known=data.jiraMode==='manual'||!!data.sourceFreshness?.jira||data.jira.length>0;
  return `<section class="jira-point-summary"><p>${escapeHtml(market.name)} · ${stats.delta===null?'Premier point':`${stats.delta>0?'+':''}${stats.delta} ticket(s) depuis le point précédent`}</p><div class="jira-summary-counts">${[[stats.currentVolume,'Tickets ouverts'],[stats.attentionCount,'À surveiller'],[stats.criticalCount,'Critiques']].map(([value,label])=>`<article><span>${label}</span><strong>${known?value:'—'}</strong></article>`).join('')}</div>${resolutionKpiHtml(data.jira,data.meetingDate,data.jiraMode==='automatic'?data.jiraResolution:undefined)}</section>`;
 }
+
+function simulationPeriodData(data:PointData){const periods=data.preferences.simulationPeriods;if(!periods)return data;const labels=periods.map(p=>new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(p+'-01T12:00:00Z')));return {...data,operations:data.operations.filter(op=>periods.includes(op.month)||labels.some(l=>l.toLowerCase()===op.month.toLowerCase()))};}
