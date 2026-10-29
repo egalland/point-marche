@@ -64,3 +64,6 @@ point-sync-*.json
 
 # Generated TypeScript cache
 *.tsbuildinfo
+
+# Temporary browser verification fixtures, never published.
+/public/qa-*.html

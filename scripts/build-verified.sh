@@ -23,6 +23,11 @@ fi
 [[ -n "${SITES_PROJECT_ROOT:-}" && "${SITES_PROJECT_ROOT}" != "/" ]] || exit 69
 rm -rf -- "${SITES_PROJECT_ROOT}/dist"
 
+if compgen -G "${SITES_PROJECT_ROOT}/public/qa-*.html" > /dev/null; then
+  echo "Remove temporary public QA fixtures before building a release." >&2
+  exit 65
+fi
+
 echo "Running bounded vinext build..."
 timeout \
   --signal=TERM \

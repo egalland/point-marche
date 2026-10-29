@@ -1,3 +1,7 @@
+## V133 — 29 octobre 2026
+
+- Distribution finale des comparaisons Jira et des dates de fin, avec contrôle des fichiers de démonstration avant compilation.
+
 ## V132 — 29 octobre 2026
 
 - Comparaisons Jira regroupées : chiffres principaux en grand, référence en petit, camembert de référence en miniature.
