@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { APP_VERSION } from "@/lib/app-version";
 import { isLocalWorkspace, openLocalFiles } from "@/lib/app-transport";
 import { AppDialog } from "@/components/app-dialog";
+import { LocalFileButton } from "@/components/local-file-button";
 import { AppIcon } from "@/components/app-icon";
 
 export type WorkspaceView = "read" | "edit" | "analyst" | "analyst-activity" | "stats" | "purchaseData" | "suppliers" | "imports" | "mail" | "settings" | "admin" | "superadmin";
@@ -56,7 +57,7 @@ export function WorkspaceNavigation({ view, userName, onSelect, tools }: Props) 
     </nav>
     <footer className="workspace-account workspace-account-compact">
       <button type="button" className="workspace-preferences-trigger" aria-label="Affichage et compte" aria-haspopup="dialog" title={`${person.name} · Affichage et compte`} onClick={()=>{setOpen(false);setPreferencesOpen(true);}}><AppIcon name="settings" size={20}/><span>Affichage et compte</span></button>
-      {isLocalWorkspace() && <button type="button" className="workspace-file-trigger" aria-label="Fichier local" title="Fichier local" onClick={()=>{setOpen(false);openLocalFiles();}}><AppIcon name="download" size={20}/><span>Fichier local</span></button>}
+      {isLocalWorkspace() && <LocalFileButton onOpen={()=>{setOpen(false);openLocalFiles();}}/>}
     </footer>
   </>;
   return <>

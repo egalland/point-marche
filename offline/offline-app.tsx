@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { MarketPulseApp } from "../features/market-pulse/market-pulse-app";
 import { AppDialog } from "../components/app-dialog";
+import { LocalSyncContext } from "../components/local-sync-context";
 import { AppIcon } from "../components/app-icon";
 import { installLocalTransport } from "../lib/app-transport";
 import { createLocalApi } from "./local-api";
@@ -201,9 +202,8 @@ export function OfflineApp() {
 
   return <>
     <input ref={input} className="sr-only" type="file" accept=".json,application/json" onChange={inputChanged} aria-label="Ouvrir un fichier Market Pulse"/>
-    {shared && <div className={`local-share-status status-${shared.status}`} role={shared.status === "error" || shared.status === "conflict" ? "alert" : "status"}><strong>Dossier partagé · {sharedName}</strong><span>{shared.message}</span><button type="button" onClick={() => setFilesOpen(true)}>Détails{shared.conflicts.length ? ` · ${shared.conflicts.length} conflit(s)` : ""}</button></div>}
     <div inert={busy}>
-    {active ? <WorkspaceErrorBoundary key={generation} onRetry={() => setGeneration((value) => value + 1)} onFiles={() => setFilesOpen(true)}><MarketPulseApp/></WorkspaceErrorBoundary> : <p className="local-startup" role="status">Ouverture de tes points…</p>}
+    {active ? <WorkspaceErrorBoundary key={generation} onRetry={() => setGeneration((value) => value + 1)} onFiles={() => setFilesOpen(true)}><LocalSyncContext.Provider value={shared ? { status: shared.status, folder: sharedName, message: shared.message, conflicts: shared.conflicts.length } : null}><MarketPulseApp/></LocalSyncContext.Provider></WorkspaceErrorBoundary> : <p className="local-startup" role="status">Ouverture de tes points…</p>}
     </div>
     {message && !filesOpen && <div className="toast local-file-notice" role="status"><span>{message}</span><button type="button" onClick={() => setMessage("")} aria-label="Fermer la notification">×</button></div>}
     <AppDialog open={filesOpen} onClose={() => { if (!busy) setFilesOpen(false); }} busy={busy} labelledBy="local-file-title" className="local-file-dialog">
