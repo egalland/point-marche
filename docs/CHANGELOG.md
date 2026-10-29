@@ -1,5 +1,10 @@
 # Historique des versions
 
+## V127 · 2026-10-29
+
+- Activité Jira : stock ouvert calculable à la fin des périodes A et B, indépendamment des modifications pendant la période.
+- Vue Stock ouvert avec filtres, camemberts et tickets ; fermetures sans résolution, dates incohérentes et réouvertures connues signalées comme indéterminées.
+
 ## V126 · 2026-10-29
 
 - Jira du point marché : terminés de la semaine et détails, sans augmenter le stock ouvert ; résolution prioritaire, modification identifiée si la résolution manque.

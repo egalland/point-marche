@@ -19,3 +19,11 @@ test('analytics pages details without truncating chart/KPI totals and validates 
  assert.equal(r.a.total,121);assert.equal(r.a.rows.length,21);assert.equal(r.pages,3);assert.equal(r.a.charts.category[0].value,121);assert.equal(r.a.rows[0].key,'TEST-100');
  assert.throws(()=>parseJiraStatsQuery(new URL('https://example.test?from=2026-02-30&to=2026-10-29')));
 });
+
+ test('historical stock counts tickets resolved later, ignores activity dates, and separates uncertain closures',()=>{
+ const long={...ticket,createdAt:'2026-09-01T10:00:00',updatedAt:'2026-12-01T10:00:00'};
+ const data=[{...long,key:'TEST-10',resolutionAt:'2026-11-01T10:00:00'}, {...long,key:'TEST-11',resolutionAt:'2026-10-25T10:00:00'}, {...long,key:'TEST-12',status:'En cours',resolutionAt:''}, {...long,key:'TEST-13',resolutionAt:'',updatedAt:'2026-10-28T10:00:00'}, {...long,key:'TEST-14',createdAt:'',resolutionAt:'2026-11-01T10:00:00'}, {...long,key:'TEST-15',createdAt:'2026-11-01T10:00:00',resolutionAt:'2026-11-03T10:00:00'}, {...long,key:'TEST-16',resolutionAt:'2026-10-29T10:00:00'}, {...long,key:'TEST-17',status:'Abandonnée',resolutionAt:''}];
+ const r=buildAnalystJiraStats(data,users,markets,query());assert.equal(r.a.stockAtEnd,2);assert.equal(r.b.stockAtEnd,4);assert.equal(r.a.stockUnknown,2);assert.equal(r.b.stockUnknown,2);assert.equal(r.a.stockAsOf,'2026-10-29');
+ const stock=buildAnalystJiraStats([...data,data[0]],users,markets,query('&basis=stock'));assert.equal(stock.a.total,2);assert.equal(stock.a.open,2);assert.equal(stock.a.completed,0);assert.equal(stock.a.mean,null);assert.deepEqual(stock.a.rows.map(t=>t.key),['TEST-10','TEST-12']);assert.equal(stock.a.charts.category[0].value,2);assert.equal(stock.b.total,4);
+ const narrower=buildAnalystJiraStats(data,users,markets,{...query('&basis=stock'),a:{from:'2026-10-29',to:'2026-10-29'}});assert.equal(narrower.a.stockAtEnd,2);assert.equal(narrower.a.total,2);
+ });

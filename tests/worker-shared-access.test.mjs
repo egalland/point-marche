@@ -100,3 +100,11 @@ test('built Worker creates Vente profiles, custom roles and dated multi-market h
  assert.equal((await request(url,'GET',undefined,'','U1234567')).status,403);assert.equal((await request('/api/analyst-activity?from=invalid')).status,400);
  const week=await request('/api/jira-week?marketId=shared-test&year=2026&week=44&date=2026-10-29&preferCentral=1');assert.equal(week.status,200);assert.equal(week.body.snapshot.summary.tickets,1);assert.ok(week.body.snapshot.summary.detailedTickets.some(t=>t.key==='TEST-1'));assert.equal(week.body.snapshot.summary.weeklyCoverage.from,'2026-10-26');
  });
+
+ test('built Worker reconstructs end-of-period stock from imported resolution dates and keeps uncertain closures separate',async t=>{
+ const request=fixture(t),db=request.sqlite;
+ db.exec("INSERT INTO global_users(id,name,email,jira_name,role) VALUES ('stock-analyst','Alex test','stock@example.test','A1234567','analyste-tarif-referentiel'); INSERT INTO jira_import_batches(id,status,completed_at) VALUES ('stock-batch','completed','2026-11-02T10:00:00Z')");
+ const insert=db.prepare('INSERT INTO jira_tickets(ticket_key,status,summary,category,jira_created_at,assignee_usercode,jira_updated_at,resolution_at) VALUES (?,?,?,?,?,?,?,?)');
+ insert.run('TEST-20','Fini','Terminé plus tard','Tarifs','2026-09-01T10:00:00','A1234567','2026-11-02T10:00:00','2026-11-01T10:00:00');insert.run('TEST-21','Fini','Date absente','Tarifs','2026-09-01T10:00:00','A1234567','2026-10-28T10:00:00','');
+ const r=await request('/api/analyst-activity?from=2026-10-26&to=2026-10-29&compareFrom=2026-10-19&compareTo=2026-10-22&basis=stock');assert.equal(r.status,200,JSON.stringify(r.body));assert.equal(r.body.report.a.stockAtEnd,1);assert.equal(r.body.report.a.stockUnknown,1);assert.equal(r.body.report.a.total,1);assert.equal(r.body.report.a.rows[0].key,'TEST-20');assert.equal(r.body.report.b.stockAtEnd,1);
+ });
