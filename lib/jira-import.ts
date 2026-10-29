@@ -165,7 +165,7 @@ function detailedTicket(cells: string[]): JiraDetailedTicket | null {
     createdAt: jiraDate(clean[createdIndex]),
     assigneeUserCode: clean[usercodeIndex].toUpperCase(),
     updatedAt: jiraDate(clean[updatedIndex]),
-    link: countAndLink(cells[keyIndex]).link || `https://jira.example.example.net/browse/${key}`,
+    link: countAndLink(cells[keyIndex]).link || `https://jira.example.test/browse/${key}`,
   };
 }
 
