@@ -1,13 +1,12 @@
 "use client";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import type { PlannerTask } from "@/lib/planner-import";
 import { supplierKeyForTask, supplierLabelFromTask } from "@/lib/supplier-variations";
 import { buildSimulationComparison, comparisonValue, type ComparisonConfig, type ComparisonMarket, type ComparisonMetric, type ComparisonSnapshot } from "@/lib/simulation-comparison";
-export function SimulationComparison({ tasks, markets, config, snapshot, editing, updatedAt, onChange }: { tasks: PlannerTask[]; markets: ComparisonMarket[]; config: ComparisonConfig; snapshot?: ComparisonSnapshot; editing: boolean; updatedAt: string; onChange?: (config: ComparisonConfig, snapshot: ComparisonSnapshot) => void }) {
+export function SimulationComparison({ tasks, markets, config, snapshot, editing, updatedAt, onChange, snapshotOnly = false }: { snapshotOnly?: boolean; tasks: PlannerTask[]; markets: ComparisonMarket[]; config: ComparisonConfig; snapshot?: ComparisonSnapshot; editing: boolean; updatedAt: string; onChange?: (config: ComparisonConfig, snapshot: ComparisonSnapshot) => void }) {
   const live = useMemo(() => buildSimulationComparison(tasks, markets, config, updatedAt), [tasks, markets, config, updatedAt]);
-  const signature = JSON.stringify(live);
-  useEffect(() => { if (editing && signature !== JSON.stringify(snapshot)) onChange?.(config, live); }, [signature, editing]);
-  const current = editing ? live : snapshot ?? live;
+  const empty = useMemo(() => buildSimulationComparison([], markets, config, ""), [markets, config]);
+  const current = snapshot ?? (snapshotOnly ? empty : live);
   const suppliers = [...new Map(tasks.map((t) => [supplierKeyForTask(t), supplierLabelFromTask(t.taskName)])).entries()].sort((a, b) => a[1].localeCompare(b[1], "fr"));
   const change = (patch: Partial<ComparisonConfig>) => { const next = { ...config, ...patch }; onChange?.(next, buildSimulationComparison(tasks, markets, next, updatedAt)); };
   const values = current.buckets.flatMap((b) => [b.valueA, b.valueB]).filter((v): v is number => v !== null);

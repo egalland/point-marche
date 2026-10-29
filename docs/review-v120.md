@@ -1,0 +1,3 @@
+# V120 — Points enregistrés conservés après import
+
+Les imports Planner et Jira alimentent leurs registres sans actualiser un point enregistré. Les retours asynchrones vérifient aussi si le point a été enregistré entre-temps. Les nouveaux brouillons conservent leur alimentation automatique. L’action explicite Actualiser les imports reste disponible, préserve les corrections du point et renouvelle ses instantanés. Les comparatifs de simulation et nombres PURCHASES affichent leur instantané enregistré ; ouvrir un éditeur ne relance pas leur calcul. Modifier une configuration dans le point peut recalculer le bloc concerné.

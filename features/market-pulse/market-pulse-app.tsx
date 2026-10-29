@@ -83,6 +83,8 @@ function MarketPulseWorkspace() {
   const [ready, setReady] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [activeRecordId, setActiveRecordId] = useState<string | null>(null);
+  const savedPointRef = useRef(false);
+  savedPointRef.current = Boolean(activeRecordId);
   const [archive, setArchive] = useState<PointRecord[]>([]);
   const [archiveLoading, setArchiveLoading] = useState(true);
   const [archiveError, setArchiveError] = useState("");
@@ -139,9 +141,9 @@ function MarketPulseWorkspace() {
   const themeStyle = ({ ...accentTokens(accent), "--point-font-scale": String(data.preferences.fontScalePercent / 100) }) as CSSProperties;
   const {rows: purchaseDataRows,loaded: purchaseDataLoaded,error: purchaseDataSourceError,updatedAt:purchaseDataUpdatedAt} = usePURCHASES();
   const [exportPreview,setExportPreview]=useState<"mail"|"html">("mail");
-  const exportSourcePending = Boolean(data.purchaseDataConfigs?.length && !purchaseDataLoaded && !purchaseDataSourceError);
-  const purchaseDataConfigs = useMemo(() => {const config=pointPURCHASESConfig(data.purchaseDataConfigs,data.meetingDate);return [purchaseDataLoaded?{...config,report:createPURCHASESPointReport(purchaseDataRows,config,purchaseDataUpdatedAt),snapshot:undefined}:config];}, [data.purchaseDataConfigs,data.meetingDate,purchaseDataLoaded,purchaseDataRows,purchaseDataUpdatedAt]);
-  const simulationSnapshot = useMemo(() => plannerTasks.length ? buildSimulationComparison(plannerTasks, marketOptions, normalizeComparison(data.simulationComparisonConfig, marketId), plannerUpdatedAt) : data.simulationComparisonSnapshot, [plannerTasks, marketOptions, data.simulationComparisonConfig, data.simulationComparisonSnapshot, marketId, plannerUpdatedAt]);
+  const exportSourcePending = Boolean(!activeRecordId && data.purchaseDataConfigs?.length && !purchaseDataLoaded && !purchaseDataSourceError);
+  const purchaseDataConfigs = useMemo(() => {const config=pointPURCHASESConfig(data.purchaseDataConfigs,data.meetingDate);return [!activeRecordId&&purchaseDataLoaded?{...config,report:createPURCHASESPointReport(purchaseDataRows,config,purchaseDataUpdatedAt),snapshot:undefined}:config];}, [activeRecordId,data.purchaseDataConfigs,data.meetingDate,purchaseDataLoaded,purchaseDataRows,purchaseDataUpdatedAt]);
+  const simulationSnapshot = useMemo(() => !activeRecordId && plannerTasks.length ? buildSimulationComparison(plannerTasks, marketOptions, normalizeComparison(data.simulationComparisonConfig, marketId), plannerUpdatedAt) : data.simulationComparisonSnapshot, [activeRecordId, plannerTasks, marketOptions, data.simulationComparisonConfig, data.simulationComparisonSnapshot, marketId, plannerUpdatedAt]);
   const preparedData = useMemo(() => {
     const enriched = { ...data, purchaseDataConfigs, simulationComparisonSnapshot: simulationSnapshot };
     const snapshot = enriched.marketComparison;
@@ -471,7 +473,7 @@ function MarketPulseWorkspace() {
   const synchronizePlannerPoint = (tasks = plannerTasks) => {
     if (data.plannerMode === "manual") { setToast("Le point est en saisie manuelle. Repasse en import automatique pour le synchroniser."); return 0; }
     const relevant = plannerTasksForPoint(tasks, market, data.meetingDate,data.preferences.simulationPeriods);
-    setData((current) => ({ ...current, sourceFreshness: { ...current.sourceFreshness, planner: plannerUpdatedAt }, operations: mergePlannerOperations(current.operations, relevant, tasks) }));
+    setData((current) => ({ ...current, sourceFreshness: { ...current.sourceFreshness, planner: plannerUpdatedAt }, operations: mergePlannerOperations(current.operations, relevant, tasks), simulationComparisonSnapshot:buildSimulationComparison(tasks,marketOptions,normalizeComparison(current.simulationComparisonConfig,marketId),plannerUpdatedAt) }));
     setToast(relevant.length ? `${relevant.length} simulation${relevant.length > 1 ? "s" : ""} Planner synchronisée${relevant.length > 1 ? "s" : ""}.` : "Aucune simulation Planner pour ce marché et cette période.");
     return relevant.length;
   };
@@ -487,18 +489,19 @@ function MarketPulseWorkspace() {
     setPlannerUpdatedAt(refreshed.updatedAt);
     setPlannerReady(true);
     const relevant = plannerTasksForPoint(refreshed.tasks, market, data.meetingDate,data.preferences.simulationPeriods);
-    if (selection === archiveRequest.current && context === comparisonContext.current) setData((current) => current.plannerMode === "manual" ? current : ({ ...current, sourceFreshness: { ...current.sourceFreshness, planner: refreshed.updatedAt }, operations: mergePlannerOperations(current.operations, relevant, refreshed.tasks) }));
+    if (!savedPointRef.current && selection === archiveRequest.current && context === comparisonContext.current) setData((current) => current.plannerMode === "manual" ? current : ({ ...current, sourceFreshness: { ...current.sourceFreshness, planner: refreshed.updatedAt }, operations: mergePlannerOperations(current.operations, relevant, refreshed.tasks) }));
     return {
       imported: payload.imported ?? 0,
-      message: `${payload.imported ?? 0} tâche${(payload.imported ?? 0) > 1 ? "s" : ""} enregistrée${(payload.imported ?? 0) > 1 ? "s" : ""} · ${relevant.length} liée${relevant.length > 1 ? "s" : ""} au point actif.`,
+      message: `${payload.imported ?? 0} tâche${(payload.imported ?? 0) > 1 ? "s" : ""} enregistrée${(payload.imported ?? 0) > 1 ? "s" : ""}. ${savedPointRef.current ? "Le point enregistré est conservé. Utilise Actualiser les imports dans le point pour le mettre à jour." : `${relevant.length} liée${relevant.length > 1 ? "s" : ""} au point actif.`}`,
     };
   };
   const refreshJiraFromRegistry = async () => {
+    if (savedPointRef.current) { setToast("Import Jira enregistré. Le point enregistré est conservé ; actualise-le depuis ses options si nécessaire."); return; }
     if (data.jiraMode === "manual") { setToast("Import enregistré. La saisie manuelle du point est conservée."); return; }
     const selection = archiveRequest.current, context = comparisonContext.current;
     try {
       const payload = await fetchJiraWeek(currentWeekYear, currentWeek, marketId, true, data.meetingDate);
-      if ((selection !== archiveRequest.current || context !== comparisonContext.current)) return;
+      if (savedPointRef.current || selection !== archiveRequest.current || context !== comparisonContext.current) return;
       if (!payload.snapshot) throw new Error("Aucun import Jira disponible pour cette semaine. Les données du point sont conservées.");
       setData((current) => current.jiraMode === "manual" ? current : ({ ...current, jiraResolution: payload.snapshot!.summary.resolutionMetrics, sourceFreshness: { ...current.sourceFreshness, jira: payload.snapshot!.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
       setToast("Registre Jira actualisé. Les corrections du point sont conservées.");
@@ -517,10 +520,11 @@ function MarketPulseWorkspace() {
       ]);
       if ((selection !== archiveRequest.current || context !== comparisonContext.current)) return;
       const errors: string[] = [];
+      if (purchaseDataLoaded) setData(current => { const config = pointPURCHASESConfig(current.purchaseDataConfigs,current.meetingDate); return {...current,purchaseDataConfigs:[{...config,report:createPURCHASESPointReport(purchaseDataRows,config,purchaseDataUpdatedAt),snapshot:undefined}]}; });
       if (planner.status === "fulfilled" && planner.value) {
         const source = planner.value;
         setPlannerTasks(source.tasks); setPlannerRegistry(source.registry); setPlannerUpdatedAt(source.updatedAt);
-        if (source.updatedAt || source.tasks.length) setData((current) => current.plannerMode === "manual" ? current : { ...current, sourceFreshness: { ...current.sourceFreshness, planner: source.updatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(source.tasks, market, current.meetingDate,current.preferences.simulationPeriods), source.tasks) });
+        if (source.updatedAt || source.tasks.length) setData((current) => current.plannerMode === "manual" ? current : { ...current, sourceFreshness: { ...current.sourceFreshness, planner: source.updatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(source.tasks, market, current.meetingDate,current.preferences.simulationPeriods), source.tasks), simulationComparisonSnapshot:buildSimulationComparison(source.tasks,marketOptions,normalizeComparison(current.simulationComparisonConfig,marketId),source.updatedAt) });
         else errors.push("Aucun import Planner disponible.");
       } else if (planner.status === "rejected") errors.push(planner.reason instanceof Error ? planner.reason.message : "Planner indisponible.");
       if (jira.status === "fulfilled" && jira.value) {
@@ -697,6 +701,7 @@ function MarketPulseWorkspace() {
       if ((selection !== archiveRequest.current || context !== comparisonContext.current)) return;
       setData((current) => current === data ? savedData : current);
       if (!newerEdits) writeLocalDraft({ scope: "market", ownerId: marketId, data: savedData });
+      savedPointRef.current = true;
       setArchive((current) => [saved, ...current.filter((item) => !(item.year === saved.year && item.week === saved.week))].sort((a, b) => b.year - a.year || b.week - a.week)); setActiveRecordId(saved.id); setSavedAt(new Date()); setLastSavedSignature(pointSignature(marketId, savedData)); setArchiveError("");
       if (automatic) return;
       if (isLocalWorkspace()) {
@@ -1116,7 +1121,7 @@ function MarketPulseWorkspace() {
     {view === "settings" && session.user && renderEditor()}
     {session.user&&editable&&<AppDialog open={pointSettingsOpen} onClose={()=>setPointSettingsOpen(false)} labelledBy="point-options-title" className="point-options-dialog"><h2 id="point-options-title">Options du point</h2><div className="point-options-actions"><button type="button" className="secondary-button" disabled={!previousPoint} onClick={()=>{setPointSettingsOpen(false);openCarryover();}}><Icon name="copy"/> Reprendre le point précédent</button><button type="button" className="secondary-button" disabled={refreshingImports} onClick={()=>{void refreshImports();}}><Icon name="spark"/> {refreshingImports?"Actualisation…":"Actualiser les imports"}</button><button type="button" className="secondary-button" onClick={()=>{setPointSettingsOpen(false);setComparisonOpen(true);}}><Icon name="trend"/> Comparer les marchés</button><button type="button" className="secondary-button" disabled={!historyAvailability.undo} onClick={undoPoint}>↶ Annuler</button><button type="button" className="secondary-button" disabled={!historyAvailability.redo} onClick={redoPoint}>↷ Rétablir</button><button type="button" className="secondary-button" disabled={!can("point.import")} onClick={()=>fileInput.current?.click()}><Icon name="upload"/> Importer JSON</button><button type="button" className="secondary-button" onClick={()=>exportJson()}><Icon name="download"/> Exporter JSON</button></div>{autoSaveError&&<p role="alert">{autoSaveError}<button type="button" onClick={()=>{failedAutoSave.current="";void savePoint();}}>Réessayer la sauvegarde</button></p>}<button type="button" className="secondary-button danger" onClick={()=>{setPointSettingsOpen(false);void resetPoint();}}>Réinitialiser le contenu de cette semaine</button><h3>Présentation</h3><div className="point-layout-toolbar" role="toolbar" aria-label="Affichage du point"><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent - 5)}>A−</button><output>{data.preferences.fontScalePercent}%</output><button type="button" onClick={() => updateFontScalePercent(data.preferences.fontScalePercent + 5)}>A+</button>{(["compact", "comfortable", "airy"] as Density[]).map((density) => <button type="button" key={density} onClick={() => setData((current) => ({ ...current, preferences: { ...current.preferences, density } }))}>{density === "compact" ? "Compacte" : density === "airy" ? "Aérée" : "Normale"}</button>)}<label>Couleur<input type="color" value={accent} onChange={(event) => setData((current) => ({ ...current, customColor: event.target.value.toUpperCase() }))}/></label><button type="button" onClick={resetCanvasLayout}>Structure initiale</button></div></AppDialog>}
     {view === "read" && !can("point.read") && <p role="alert" className="access-denied">Ton profil ne permet pas de consulter le Point marché.</p>}
-    {view === "read" && can("point.read") && <main className="preview-page">{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Nouveau point · clique sur un bloc pour commencer." : "Aucun brouillon n’est affiché publiquement. L’espace partagé est en cours de chargement."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard key={comparisonContextValue} tasks={plannerTasks} markets={marketOptions} plannerUpdatedAt={plannerUpdatedAt} data={preparedData} market={market} archive={archive} editing={false} actions={session.user && editable ? canvasActions : undefined}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou complète ce point dans l’espace partagé.</p></div>}</main>}
+    {view === "read" && can("point.read") && <main className="preview-page">{!activeRecordId && <div className="reader-empty-banner"><Icon name="calendar"/><div><strong>Aucun point enregistré pour cette sélection</strong><span>{session.user ? "Nouveau point · clique sur un bloc pour commencer." : "Aucun brouillon n’est affiché publiquement. L’espace partagé est en cours de chargement."}</span></div></div>}{(activeRecordId || session.user) ? <PreviewDashboard key={comparisonContextValue} snapshotOnly={Boolean(activeRecordId)} tasks={plannerTasks} markets={marketOptions} plannerUpdatedAt={plannerUpdatedAt} data={preparedData} market={market} archive={archive} editing={false} actions={session.user && editable ? canvasActions : undefined}/> : <div className="surface reader-empty-state"><span className="login-emblem"><Icon name="calendar" size={24}/></span><strong>Cette semaine n’a pas encore de point publié</strong><p>Sélectionne une autre semaine enregistrée ou complète ce point dans l’espace partagé.</p></div>}</main>}
     {(view === "analyst" || view === "analyst-activity") && session.user && <>
       <nav className="stats-view-tabs analyst-workspace-tabs" aria-label="Rubriques analystes"><button type="button" aria-pressed={view === "analyst"} className={view === "analyst" ? "active" : ""} onClick={() => setView("analyst")}>Point analyste</button><button type="button" aria-pressed={view === "analyst-activity"} className={view === "analyst-activity" ? "active" : ""} onClick={() => setView("analyst-activity")}>Activité analystes</button></nav>
       {plannerReady && directoryReady ? (view === "analyst" ? <AnalystPointDashboard onReconnect={retryWorkspace} tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} plannerUpdatedAt={plannerUpdatedAt} onPlannerImport={importPlannerData}/> : <AnalystStatsDashboard tasks={plannerTasks} users={directoryUsers} markets={marketOptions.map((item) => ({ id: item.id, name: item.name, plannerTags: item.plannerTags }))} registry={plannerRegistry} updatedAt={plannerUpdatedAt} onImport={importPlannerData}/>) : <main className="analyst-point-page"><div className="surface stats-loading"><LoadingStatus label="Chargement de Planner et de l’annuaire…"/></div></main>}

@@ -286,3 +286,52 @@ test('reset confirms first, clears free text and content only in the current wee
  assert.equal(preview().data.dossiers.length,0);assert.equal(preview().data.preferences.freeLayout.copies.length,0);
  for(const [id,rows] of other)assert.equal(JSON.stringify(records.get(id)),rows);
 });
+
+test("registry imports leave a saved automatic point unchanged until its explicit refresh", async () => {
+  const id = preview().market.id;
+  const saved = records.get(id)[0];
+  saved.data.plannerMode = "automatic"; saved.data.jiraMode = "automatic";
+  saved.data.sourceFreshness = {planner:"saved-planner",jira:"saved-jira"};
+  saved.data.operations = [{id:"planner:historic",name:"Simulation enregistrée",month:"Septembre 2026",state:"À faire",summary:"Note conservée",steps:[],plannerSource:{externalId:"historic",checklist:[],labels:[],metrics:{globalVariation:1,weightedVariation:2,purchases12m:10,supplierCode:"TEST",announcedVariation:null,tariffStructure:""},supplierLabel:"Exemple",variationHistory:[]}}];
+  const other = app.defaultMarkets.find(m=>m.id!==id);
+  find(node=>node.type?.name==="PointPeriodSelector").props.onMarket(other.id); await settle();
+  find(node=>node.type?.name==="PointPeriodSelector").props.onMarket(id); await settle();
+  const before = JSON.stringify(preview().data);
+  const baseFetch = globalThis.fetch; let jiraCalls=0;
+  globalThis.fetch = async(input,init)=>{
+    const url=new URL(String(input),"https://test.invalid");
+    if(url.pathname==="/api/planner-tasks")return response(init?.method==="POST"?{imported:1}:{tasks:[],updatedAt:"new-planner"});
+    if(url.pathname==="/api/jira-week"){jiraCalls++;return response({snapshot:null,assignments:{}});}
+    return baseFetch(input,init);
+  };
+  navigation().onSelect("imports"); await settle();
+  const imports=find(node=>node.type?.name==="ImportCenter").props;
+  const result=await imports.onPlannerImport("synthetic"); await settle();
+  await imports.onJiraImported(); await settle();
+  assert.match(result.message,/point enregistré est conservé/);
+  navigation().onSelect("read"); await settle();
+  assert.equal(JSON.stringify(preview().data),before);
+  assert.equal(jiraCalls,0);
+  preview().actions.refreshSimulations(); await settle();
+  assert.equal(preview().data.sourceFreshness.planner,"new-planner");
+  assert.equal(preview().data.operations.length,0);
+});
+
+test("an import finishing after a draft was saved cannot update that saved point", async () => {
+  find(node=>node.type?.name==="PointPeriodSelector").props.onWeek("2026-W37"); await settle();
+  assert.equal(preview().snapshotOnly,false);
+  const delayed=deferred(),baseFetch=globalThis.fetch;
+  globalThis.fetch=async(input,init)=>{
+    const url=new URL(String(input),"https://test.invalid");
+    if(url.pathname==="/api/planner-tasks")return init?.method==="POST"?response({imported:1}):delayed.promise;
+    return baseFetch(input,init);
+  };
+  navigation().onSelect("imports");await settle();
+  const importing=find(node=>node.type?.name==="ImportCenter").props.onPlannerImport("synthetic");await settle();
+  navigation().onSelect("read");await settle();
+  preview().actions.updatePriority("Point à conserver");await settle();await triggerAutoSave();await resolveSave();
+  const before=JSON.stringify(preview().data);
+  delayed.resolve(response({tasks:[],updatedAt:"late-import"}));await importing;await settle();
+  assert.equal(preview().snapshotOnly,true);
+  assert.equal(JSON.stringify(preview().data),before);
+});

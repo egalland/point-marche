@@ -132,7 +132,7 @@ export type PointCanvasActions = {
   openPointSettings?: () => void;
 };
 
-export function PreviewDashboard({ data, market, archive, editing = false, actions, tasks = [], markets = [], plannerUpdatedAt = "" }: { data: PointData; market: Market; archive: PointRecord[]; editing?: boolean; actions?: PointCanvasActions; tasks?: PlannerTask[]; markets?: Market[]; plannerUpdatedAt?: string }) {
+export function PreviewDashboard({ data, market, archive, editing = false, actions, tasks = [], markets = [], plannerUpdatedAt = "", snapshotOnly = false }: { snapshotOnly?: boolean; data: PointData; market: Market; archive: PointRecord[]; editing?: boolean; actions?: PointCanvasActions; tasks?: PlannerTask[]; markets?: Market[]; plannerUpdatedAt?: string }) {
 
   const canManage = Boolean(actions);
   const [activeDossier, setActiveDossier] = useState<string | null>(null);
@@ -149,8 +149,8 @@ export function PreviewDashboard({ data, market, archive, editing = false, actio
   const isModuleEditing = (id: PointModule) => canManage && editingModule === id;
   const createDossier = () => { const id = actions?.addDossier(); if (id) { setActiveDossier(id); setEditingModule("dossiers"); } return id; };
   const content: Record<PointModule, ReactNode> = {
-    purchaseData: <PURCHASESPoint configs={data.purchaseDataConfigs} meetingDate={data.meetingDate} onChange={isModuleEditing("purchaseData") ? actions?.updatePURCHASES : undefined}/>,
-    simulationComparison: <SimulationComparison tasks={tasks} markets={markets} config={data.simulationComparisonConfig ?? normalizeComparison(null, market.id)} snapshot={data.simulationComparisonSnapshot} editing={isModuleEditing("simulationComparison")} updatedAt={plannerUpdatedAt} onChange={actions?.updateComparison}/>,
+    purchaseData: <PURCHASESPoint snapshotOnly={snapshotOnly} configs={data.purchaseDataConfigs} meetingDate={data.meetingDate} onChange={isModuleEditing("purchaseData") ? actions?.updatePURCHASES : undefined}/>,
+    simulationComparison: <SimulationComparison snapshotOnly={snapshotOnly} tasks={tasks} markets={markets} config={data.simulationComparisonConfig ?? normalizeComparison(null, market.id)} snapshot={data.simulationComparisonSnapshot} editing={isModuleEditing("simulationComparison")} updatedAt={plannerUpdatedAt} onChange={actions?.updateComparison}/>,
     comparison: <MarketComparisonChart snapshot={data.marketComparison}/>,
     jira: isModuleEditing("jira") ? <JiraCommandCenter key={`${market.id}-${data.meetingDate}`} data={data} archive={archive} market={market} editing onUpdate={actions?.updateJira} onReset={actions?.resetJira} onAdd={actions?.addJira} onRules={actions?.updateJiraRules}/> : <JiraPointSummary data={data} archive={archive} market={market}/>,
     dossiers: <DossierBoard items={data.dossiers} editing={isModuleEditing("dossiers")} onUpdate={actions?.updateDossier} onAdd={actions ? createDossier : undefined} onRemove={actions?.removeDossier} onMove={actions?.moveDossier} activeId={editingModule === "dossiers" ? activeDossier : null} onActivate={(id) => { setActiveDossier(id); setEditingModule("dossiers"); }} onDeactivate={() => { setActiveDossier(null); setEditingModule(null); }}/>,
