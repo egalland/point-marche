@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 
 export function AppIcon({ name, size = 18 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
+    layers: <><path d="m12 3 10 5-10 5L2 8Z"/><path d="m2 12 10 5 10-5M2 16l10 5 10-5"/></>,
+    building: <><path d="M3 21V7l9-4v18M12 10h9v11H3M6 9h3M6 13h3M6 17h3M15 13h3M15 17h3"/></>,
     database: <><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/></>,
     refresh: <><path d="M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 3M18 18A8 8 0 0 1 5 15"/></>,
     search: <><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></>,

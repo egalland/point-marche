@@ -20,17 +20,17 @@ test('V111 splitting two windows persists equal rectangles without changing doss
  const data=initialData();data.dossiers=[row('kept')];const writes=[];
  const props={data,content:{},editingModule:null,onEdit(){},actions:{updateFreeLayout:layout=>writes.push(layout)}};
  const render=harness(FreePointCanvas,props);
- render().find(n=>n.type==='button'&&n.props['aria-label']==='Répartir Dossiers').props.onClick();
+ let menu=context(render,'dossiers');run(menu,'Disposition du bloc');menu=wheel(render());run(menu,'Répartir les blocs');
  const panel=render().find(n=>n.type?.name==='BlockSnapLayouts');assert.ok(panel);
  panel.props.onSplit('jira','columns',false);
  const saved=writes.at(-1);assert.equal(saved.blocks.dossiers.width,saved.blocks.jira.width);assert.equal(saved.blocks.dossiers.height,saved.blocks.jira.height);assert.equal(saved.blocks.dossiers.y,saved.blocks.jira.y);assert.equal(saved.mode,'windows');assert.equal(saved.flow,false);assert.equal(data.dossiers[0].id,'kept');
 });
 
-test('V111 inline editing can temporarily expand a window and restores its saved placement when finished',()=>{
+test('V112 content height stays readable after editing and shrinks with the next measurement',()=>{
  const data=initialData(),writes=[];const props={data,content:{},editingModule:'dossiers',onEdit(){},actions:{updateFreeLayout:layout=>writes.push(layout)}};
  const render=harness(FreePointCanvas,props),start=render().find(n=>n.props['data-point-module']==='dossiers').props.style;
  render().find(n=>n.type?.name==='PointBlockBody'&&n.props.title==='Dossiers').props.onGrow(1800);
  assert.equal(render().find(n=>n.props['data-point-module']==='dossiers').props.style.height,1800);
  props.editingModule=null;
- assert.deepEqual(render().find(n=>n.props['data-point-module']==='dossiers').props.style,start);assert.equal(writes.length,0);
+ assert.equal(render().find(n=>n.props['data-point-module']==='dossiers').props.style.height,1800);render().find(n=>n.type?.name==='PointBlockBody'&&n.props.title==='Dossiers').props.onGrow(300);assert.deepEqual(render().find(n=>n.props['data-point-module']==='dossiers').props.style,start);assert.equal(writes.length,0);
 });

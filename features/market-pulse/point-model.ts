@@ -1,3 +1,5 @@
+import {normalizePointSummary,type PointSummarySettings} from "@/lib/point-summary-settings";
+import { normalizePromotionWorkflow, type PromotionWorkflow } from "@/lib/promotion-workflow";
 import { normalizeResolutionMetrics, type JiraResolutionMetrics } from "@/lib/jira-market-kpis";
 import type { PURCHASESConfig } from "@/lib/purchaseData";
 import { normalizeFreeLayout, type FreeLayout } from "@/lib/free-point-layout";
@@ -29,12 +31,12 @@ export type FontScale = "compact" | "standard" | "large";
 export type Density = "compact" | "comfortable" | "airy";
 export type PointModule = "jira" | "dossiers" | "operations" | "promotions" | "alerts" | "comparison" | "simulationComparison" | "purchaseData";
 export type ModuleVisibility = Record<PointModule, boolean>;
-export type PointPreferences = { freeLayout?: FreeLayout; fontScale: FontScale; fontScalePercent: number; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
+export type PointPreferences = { summary?:PointSummarySettings; freeLayout?: FreeLayout; fontScale: FontScale; fontScalePercent: number; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
 export type CarryoverFields = { sourceId?: string; carriedFromYear?: number; carriedFromWeek?: number };
 export type Dossier = RichDossier & CarryoverFields;
 export type PlannerPointSource = { labels?: string[]; checklist?: PlannerTask["checklist"]; externalId: string; metrics: PlannerTask["metrics"]; supplierLabel?: string; variationHistory?: SupplierVariationPoint[] };
 export type CommercialOperation = { id: string; kind?: "simulation"; name: string; month: string; state: string; summary: string; steps: [string, string][]; plannerSource?: PlannerPointSource; plannerBase?: MarketSimulationFields; plannerOverride?: MarketSimulationOverride } & CarryoverFields;
-export type Promotion = { id: string; name: string; period: string; purchaseNote: string; salesState: string; action: string; comment: string } & CarryoverFields;
+export type Promotion = PromotionWorkflow & { id: string; name: string; period: string; purchaseNote: string; salesState: string; action: string; comment: string } & CarryoverFields;
 export type Tariff = { id: string; code: string; supplier: string; month: string; state: string; receptionDate: string; dueDate: string; owner: string; comment: string };
 export type JiraPointFields = { summary: string; status: string; priority: string; assignee: string; lastActivity: string; comment: string; count?: number };
 export type JiraPointOverride = Partial<JiraPointFields> & { updatedAt?: string };
@@ -136,6 +138,7 @@ export function normalizeCommercialOperation(item: CommercialOperation): Commerc
 
 export function normalizePromotion(item: Partial<Promotion> & Partial<CommercialOperation>): Promotion {
   return {
+    ...normalizePromotionWorkflow(item),
     id: typeof item.id === "string" && item.id ? item.id : uid(),
     name: typeof item.name === "string" ? item.name : "",
     period: typeof item.period === "string" ? item.period : typeof item.month === "string" ? item.month : "",
@@ -190,6 +193,7 @@ export function normalizePointData(value: unknown, marketId: string, marketOverr
     priority: typeof source.priority === "string" ? source.priority : fallback.priority,
     jiraMode: normalizeSourceMode(source.jiraMode), plannerMode: normalizeSourceMode(source.plannerMode), marketComparison: normalizeMarketComparison(source.marketComparison),
     preferences: {
+      summary: normalizePointSummary(sourcePreferences.summary),
       freeLayout: (() => { const layout = normalizeFreeLayout(sourcePreferences.freeLayout); return {...layout, copies: layout.copies.map(c => ({...c, html: sanitizePointHtml(c.html)}))}; })(),
       fontScale,
       fontScalePercent,

@@ -6,7 +6,7 @@ export const pointDetailExportCss = `
 .jira-summary-counts article span{font-size:12px;color:var(--muted)}
 .jira-summary-counts article strong{font-size:28px}
 
-.export-enhanced .export-module>.export-body{max-height:var(--preview-height,440px);overflow:hidden}
+.export-enhanced .export-module>.export-body{max-height:none;overflow:visible}
 .export-body :where(div,section,article,ul,ol,details){max-height:none!important;overflow:visible!important}
 .export-detail-open{display:flex;justify-content:space-between;width:100%;margin-top:6px;padding:10px;border:0;border-top:1px solid var(--line);background:transparent;color:var(--text);font:inherit;font-size:12px;text-align:left;cursor:pointer}
 .export-detail-dialog{width:min(1080px,calc(100% - 24px));max-height:calc(100dvh - 40px);padding:22px;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--text);overflow:auto}

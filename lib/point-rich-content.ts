@@ -20,7 +20,7 @@ export function sanitizePointHtml(value: unknown): string {
     const tag = match[2].toLowerCase();
     if (match[1]) return tag === "img" || tag === "br" ? "" : `</${tag}>`;
     const attrs: Record<string, string> = {};
-    for (const attr of token.matchAll(/\s([a-z][\w-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)) attrs[attr[1].toLowerCase()] = attr[2] ?? attr[3] ?? attr[4] ?? "";
+    for (const attr of token.matchAll(/\s([a-z][\w-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)) attrs[attr[1].toLowerCase()] = (attr[2] ?? attr[3] ?? attr[4] ?? "").replace(/&(?:amp|quot|apos|lt|gt|#39);/g, entity => ({"&amp;":"&","&quot;":'"',"&apos;":"'","&#39;":"'","&lt;":"<","&gt;":">"})[entity] ?? entity);
     let output = "";
     if (tag === "a" || tag === "img") {
       const url = safeAssetUrl(attrs[tag === "a" ? "href" : "src"] ?? "");

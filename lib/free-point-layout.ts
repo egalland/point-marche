@@ -100,3 +100,19 @@ export function splitBlockPair(blocks:Record<string,BlockRect>,first:string,seco
 
 /** Market points now share one window layout; old flow preferences remain readable as windows. */
 export function normalizePointWindowLayout(value:unknown):FreeLayout{return {...normalizeFreeLayout(value),mode:'windows',flow:false};}
+
+export type DockZone = { id:string; label:string; x:number; width:number };
+export const pointDockZones:DockZone[] = [
+ {id:'full',label:'Pleine largeur',x:0,width:1200},
+ {id:'half-left',label:'Moitié gauche',x:0,width:592},
+ {id:'half-right',label:'Moitié droite',x:608,width:592},
+ {id:'third-left',label:'Tiers gauche',x:0,width:389},
+ {id:'third-middle',label:'Tiers central',x:405,width:390},
+ {id:'third-right',label:'Tiers droit',x:811,width:389},
+];
+/** A slight crossing cannot displace a neighbour. Deliberate depth or a hold commits on release. */
+export function resistedDrop(initial:BlockRect,candidate:BlockRect,neighbours:BlockRect[],heldMs:number):BlockRect{
+ const hits=neighbours.filter(p=>candidate.x<p.x+p.width&&candidate.x+candidate.width>p.x&&candidate.y<p.y+p.height&&candidate.y+candidate.height>p.y);
+ const deliberate=hits.every(p=>Math.min(candidate.x+candidate.width-p.x,p.x+p.width-candidate.x,candidate.y+candidate.height-p.y,p.y+p.height-candidate.y)>=36);
+ return hits.length&&!deliberate&&heldMs<450?initial:candidate;
+}

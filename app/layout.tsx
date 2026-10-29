@@ -17,15 +17,15 @@ export const metadata: Metadata = {
   title: "Point marché Revêtements et Menuiserie",
   description: "Outil de point marché hebdomadaire : dossiers, simulations tarifaires Planner, Jira, statistiques et sauvegarde en ligne.",
   openGraph: {
-    title: "Market Pulse — Point marché",
+    title: "Market Plus — Point marché",
     description: "Dossiers, simulations tarifaires Planner, Jira, statistiques et points hebdomadaires.",
-    images: ["https://example.test/og.png"],
+    images: ["https://point-marche-revetements-menuiserie.emmanuel-galland117.chatgpt.site/og.png"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Market Pulse — Point marché",
+    title: "Market Plus — Point marché",
     description: "Dossiers, opérations commerciales, Jira et points hebdomadaires.",
-    images: ["https://example.test/og.png"],
+    images: ["https://point-marche-revetements-menuiserie.emmanuel-galland117.chatgpt.site/og.png"],
   },
   icons: {
     icon: "/favicon.svg",
