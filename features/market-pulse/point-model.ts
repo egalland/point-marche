@@ -1,3 +1,4 @@
+import {normalizeSimulationPresentation,type SimulationPresentation} from "@/lib/simulation-presentation";
 import {normalizePointSummary,type PointSummarySettings} from "@/lib/point-summary-settings";
 import { normalizePromotionWorkflow, type PromotionWorkflow } from "@/lib/promotion-workflow";
 import { normalizeResolutionMetrics, type JiraResolutionMetrics } from "@/lib/jira-market-kpis";
@@ -31,7 +32,7 @@ export type FontScale = "compact" | "standard" | "large";
 export type Density = "compact" | "comfortable" | "airy";
 export type PointModule = "jira" | "dossiers" | "operations" | "promotions" | "alerts" | "comparison" | "simulationComparison" | "purchaseData";
 export type ModuleVisibility = Record<PointModule, boolean>;
-export type PointPreferences = { simulationPeriods?:string[]; summary?:PointSummarySettings; freeLayout?: FreeLayout; fontScale: FontScale; fontScalePercent: number; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
+export type PointPreferences = { simulationPresentation?:SimulationPresentation; simulationPeriods?:string[]; summary?:PointSummarySettings; freeLayout?: FreeLayout; fontScale: FontScale; fontScalePercent: number; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
 export type CarryoverFields = { sourceId?: string; carriedFromYear?: number; carriedFromWeek?: number };
 export type Dossier = RichDossier & CarryoverFields;
 export type PlannerPointSource = { labels?: string[]; checklist?: PlannerTask["checklist"]; externalId: string; metrics: PlannerTask["metrics"]; supplierLabel?: string; variationHistory?: SupplierVariationPoint[] };
@@ -194,6 +195,7 @@ export function normalizePointData(value: unknown, marketId: string, marketOverr
     jiraMode: normalizeSourceMode(source.jiraMode), plannerMode: normalizeSourceMode(source.plannerMode), marketComparison: normalizeMarketComparison(source.marketComparison),
     preferences: {
       summary: normalizePointSummary(sourcePreferences.summary),
+      simulationPresentation:normalizeSimulationPresentation(sourcePreferences.simulationPresentation),
       simulationPeriods: Array.isArray(sourcePreferences.simulationPeriods)?[...new Set(sourcePreferences.simulationPeriods.filter((p:string)=>/^\d{4}-(0[1-9]|1[0-2])$/.test(p)))].slice(0,24):undefined,
       freeLayout: (() => { const layout = normalizeFreeLayout(sourcePreferences.freeLayout); return {...layout, copies: layout.copies.map(c => ({...c, html: sanitizePointHtml(c.html)}))}; })(),
       fontScale,

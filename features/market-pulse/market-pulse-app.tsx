@@ -1050,6 +1050,7 @@ function MarketPulseWorkspace() {
     resetOperation: resetOperationOverride,
     addOperation,
     removeOperation: (id) => setData((current) => ({ ...current, operations: current.operations.filter((item) => item.id !== id) })),
+    setSimulationPresentation: simulationPresentation=>setData(current=>({...current,preferences:{...current.preferences,simulationPresentation}})),
     setSimulationPeriods: periods=>setData(current=>({...current,preferences:{...current.preferences,simulationPeriods:[...new Set(periods)].slice(0,24)}})),
     refreshSimulations: ()=>{void refreshImports();},
     updatePromotion,
