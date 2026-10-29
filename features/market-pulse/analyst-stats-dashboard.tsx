@@ -1,4 +1,5 @@
 "use client";
+import {hasAnalystHistory} from "../../lib/directory-profiles";
 
 import { useMemo, useState } from "react";
 import { TablePagination, useTablePage } from "@/components/table-pagination";
@@ -87,7 +88,7 @@ function delayMovementLabel(summary: PlannerDelaySummary) {
 }
 
 export function AnalystStatsDashboard({ tasks, users, markets, registry, updatedAt, onImport }: Props) {
-  const analysts = useMemo(() => users.filter((user) => user.role === "analyste-tarif-referentiel").sort((left, right) => left.name.localeCompare(right.name, "fr")), [users]);
+  const analysts = useMemo(() => users.filter(hasAnalystHistory).sort((left, right) => left.name.localeCompare(right.name, "fr")), [users]);
   const initialFrom = useMemo(() => monthsAgo(5), []);
   const initialTo = useMemo(() => today(), []);
   const [from, setFrom] = useState(initialFrom);

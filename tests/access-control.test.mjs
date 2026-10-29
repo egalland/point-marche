@@ -99,3 +99,8 @@ test('sales job and assigned sales role enforce read-only permissions even with 
  assert.equal((await f.call('V1234567','/api/activity','POST',{action:'Lecture'})).status,200);
  assert.equal((await f.call(ROOT_ADMIN,'/api/admin/roles','PUT',{usercode:'V1234567',name:'Vente',role:'user',expectedRole:'sales'})).status,200);
 });
+
+test('an expired assignment cannot inherit editing from a saved administrator override',()=>{
+ const p=resolvePerson('A1234567',[{usercode:'A1234567',name:'Test',role:'autre',profileInactive:true}],[{usercode:'A1234567',name:'Test',role:'admin'}]);
+ assert.equal(p.readOnly,true);assert.equal(hasPermission(p,'point.read'),true);assert.equal(hasPermission(p,'point.edit'),false);assert.equal(hasPermission(p,'directory.create'),false);
+});

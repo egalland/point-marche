@@ -1,183 +1,38 @@
-import { and, asc, eq, or, sql } from "drizzle-orm";
-import { getDb } from "../../../db";
-import { globalUserMarkets, globalUsers, jiraMarketAssignments, marketDefinitions } from "../../../db/schema";
-import { isGlobalRole, roleMailMode, roleUsesAutomaticJira, type GlobalRole } from "../../../lib/global-directory";
-import { getEditorUser } from "../../simple-auth";
-
-type UserPayload = { id?: unknown; name?: unknown; email?: unknown; usercode?: unknown; plannerAlias?: unknown; role?: unknown; marketId?: unknown; marketIds?: unknown };
-
-async function requireEditor() {
-  const editor = await getEditorUser();
-  return editor ? null : Response.json({ error: "Connecte-toi pour gérer l’annuaire GLOBAL." }, { status: 401 });
+import {directoryDb,directoryRoles,directoryUsersAt} from '../../../lib/directory-store';
+import {directoryPersonAt,validateAssignments,legacyAssignment,type ProfiledUser} from '../../../lib/directory-profiles';
+import {isGlobalRole,roleUsesAutomaticJira,type GlobalRole} from '../../../lib/global-directory';
+import {isIsoDate} from '../../../lib/iso-week';
+const clean=(v:unknown,max=100)=>typeof v==='string'?v.trim().replace(/\s+/g,' ').slice(0,max):'';
+export async function GET(request:Request){try{const date=new URL(request.url).searchParams.get('date')||undefined;if(date&&!isIsoDate(date))return Response.json({error:'Date invalide.'},{status:400});return Response.json({users:await directoryUsersAt(date)},{headers:{'Cache-Control':'no-store'}});}catch(e){return Response.json({error:e instanceof Error?e.message:'Annuaire indisponible.'},{status:503});}}
+async function save(request:Request,creating:boolean){
+ try{
+  const body=await request.json(),db=await directoryDb(),users=await directoryUsersAt();
+  const name=clean(body.name),email=clean(body.email,180).toLowerCase(),usercode=clean(body.usercode).toUpperCase();
+  if(!name||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error('Nom et adresse e-mail valide requis.');
+  const old=creating?undefined:users.find(u=>u.id===body.id);if(!creating&&!old)return Response.json({error:'Personne introuvable.'},{status:404});
+  if(users.some(u=>u.id!==old?.id&&(u.email===email||(usercode&&u.usercode===usercode))))return Response.json({error:'Cette adresse e-mail ou ce USERCODE existe déjà dans l’annuaire.'},{status:409});
+  const role:GlobalRole=isGlobalRole(body.role)?body.role:'autre';
+  const activeMarkets=(await db.prepare('SELECT id FROM market_definitions WHERE is_active = 1').all<{id:string}>()).results.map(m=>m.id);
+  if(old?.assignments&&!body.assignments)throw Error('Recharge la fiche pour conserver son historique de rôles.');
+  const assignments=validateAssignments(body.assignments??[legacyAssignment({role,marketIds:Array.isArray(body.marketIds)?body.marketIds:body.marketId?[body.marketId]:[]})],await directoryRoles(),activeMarkets);
+  if(old?.assignments?.some(a=>!assignments.some(n=>n.id===a.id)))throw Error("Les anciennes périodes doivent être conservées.");
+  if((usercode||assignments.some(a=>roleUsesAutomaticJira(a.role)||a.role==='vente'))&&!/^[A-Z]\d{7}$/.test(usercode))throw Error('Un USERCODE valide (une lettre et 7 chiffres) est requis, notamment pour le profil Vente.');
+  const person=directoryPersonAt({role,marketIds:[] as string[],assignments});
+  if(person.role==='manager-tarif'&&users.some(u=>u.id!==old?.id&&u.role==='manager-tarif'))return Response.json({error:'Un manager Tarif est déjà actif.'},{status:409});
+  if(old?.profileRevision!==body.profileRevision)return Response.json({error:'Cette fiche a changé. Recharge-la avant de réessayer.'},{status:409});
+  const id=old?.id??crypto.randomUUID(),revision=crypto.randomUUID(),serialized=JSON.stringify(assignments);
+  const gate='EXISTS (SELECT 1 FROM app_directory_profiles WHERE person_id = ? AND revision = ?)';
+  const statements=[old?.profileRevision?db.prepare('UPDATE app_directory_profiles SET payload = ?, revision = ? WHERE person_id = ? AND revision = ?').bind(serialized,revision,id,old.profileRevision):db.prepare('INSERT OR IGNORE INTO app_directory_profiles (person_id,payload,revision) VALUES (?,?,?)').bind(id,serialized,revision)];
+  statements.push(db.prepare(`INSERT INTO global_users (id,name,email,jira_name,planner_alias,role,is_active) SELECT ?,?,?,?,?,?,1 WHERE ${gate} ON CONFLICT(id) DO UPDATE SET name=excluded.name,email=excluded.email,jira_name=excluded.jira_name,planner_alias=excluded.planner_alias,role=excluded.role,is_active=1,updated_at=CURRENT_TIMESTAMP`).bind(id,name,email,usercode,clean(body.plannerAlias,80),person.role,id,revision));
+  statements.push(db.prepare(`DELETE FROM global_user_markets WHERE user_id = ? AND ${gate}`).bind(id,id,revision));
+  for(const marketId of person.marketIds)statements.push(db.prepare(`INSERT INTO global_user_markets (id,user_id,market_id) SELECT ?,?,? WHERE ${gate}`).bind(crypto.randomUUID(),id,marketId,id,revision));
+  statements.push(db.prepare(`DELETE FROM jira_market_assignments WHERE (assignee = ? OR assignee = ?) AND ${gate}`).bind(old?.usercode??usercode,usercode,id,revision));
+  if(usercode)for(const marketId of person.marketIds)statements.push(db.prepare(`INSERT OR IGNORE INTO jira_market_assignments (id,market_id,assignee) SELECT ?,?,? WHERE ${gate}`).bind(crypto.randomUUID(),marketId,usercode,id,revision));
+  await db.batch(statements);
+  const stored=await db.prepare('SELECT revision FROM app_directory_profiles WHERE person_id = ?').bind(id).first<{revision:string}>();if(stored?.revision!==revision)return Response.json({error:'Cette fiche a changé. Recharge-la.'},{status:409});
+  const all=await directoryUsersAt();return Response.json({user:all.find(u=>u.id===id),users:all},{status:creating?201:200});
+ }catch(e){const msg=e instanceof Error?e.message:'Enregistrement impossible.';return Response.json({error:/unique/i.test(msg)?'Cette adresse e-mail existe déjà.':msg},{status:400});}
 }
-
-function cleanText(value: unknown, maxLength = 100) {
-  return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, maxLength) : "";
-}
-
-function cleanEmail(value: unknown) {
-  const email = typeof value === "string" ? value.trim().toLocaleLowerCase("fr-FR").slice(0, 180) : "";
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
-}
-
-function cleanRole(value: unknown): GlobalRole {
-  return typeof value === "string" && isGlobalRole(value) ? value : "autre";
-}
-
-function cleanUserCode(value: unknown) {
-  const usercode = typeof value === "string" ? value.trim().toUpperCase() : "";
-  return /^[A-Z]\d{7}$/.test(usercode) ? usercode : "";
-}
-
-function cleanMarketIds(marketId: unknown, legacyMarketIds: unknown) {
-  const requested = typeof marketId === "string" && marketId.trim()
-    ? [marketId.trim()]
-    : Array.isArray(legacyMarketIds) ? legacyMarketIds.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).slice(0, 1).map((item) => item.trim()) : [];
-  return Array.from(new Set(requested)).slice(0, 1);
-}
-
-async function validateMarkets(marketIds: string[]) {
-  if (!marketIds.length) return [];
-  const db = getDb();
-  const rows = await db.select({ id: marketDefinitions.id }).from(marketDefinitions).where(eq(marketDefinitions.isActive, true));
-  const active = new Set(rows.map((row) => row.id));
-  return marketIds.filter((id) => active.has(id));
-}
-
-async function ensureSingleTariffManager(role: GlobalRole, currentId = "") {
-  if (role !== "manager-tarif") return null;
-  const db = getDb();
-  const [manager] = await db.select({ id: globalUsers.id }).from(globalUsers)
-    .where(and(eq(globalUsers.role, "manager-tarif"), eq(globalUsers.isActive, true))).limit(1);
-  return manager && manager.id !== currentId ? Response.json({ error: "Un manager Tarif est déjà renseigné." }, { status: 409 }) : null;
-}
-
-async function syncLinks(userId: string, oldUserCode: string, usercode: string, role: GlobalRole, marketIds: string[]) {
-  const db = getDb();
-  await db.delete(globalUserMarkets).where(eq(globalUserMarkets.userId, userId));
-  if (marketIds.length) {
-    await db.insert(globalUserMarkets).values(marketIds.map((marketId) => ({ id: crypto.randomUUID(), userId, marketId }))).onConflictDoNothing();
-  }
-  await db.delete(jiraMarketAssignments).where(oldUserCode === usercode
-    ? eq(jiraMarketAssignments.assignee, usercode)
-    : or(eq(jiraMarketAssignments.assignee, oldUserCode), eq(jiraMarketAssignments.assignee, usercode)));
-  if (roleUsesAutomaticJira(role) && marketIds.length) {
-    await db.insert(jiraMarketAssignments).values(marketIds.map((marketId) => ({ id: crypto.randomUUID(), marketId, assignee: usercode }))).onConflictDoNothing();
-  }
-}
-
-async function serializeDirectory() {
-  const db = getDb();
-  const [users, links] = await Promise.all([
-    db.select().from(globalUsers).where(eq(globalUsers.isActive, true)).orderBy(asc(globalUsers.name)),
-    db.select().from(globalUserMarkets).orderBy(asc(globalUserMarkets.marketId)),
-  ]);
-  return users.map((user) => ({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    usercode: user.usercode,
-    plannerAlias: user.plannerAlias,
-    role: user.role,
-    marketIds: links.filter((link) => link.userId === user.id).map((link) => link.marketId),
-  }));
-}
-
-function routeError(error: unknown) {
-  const message = error instanceof Error ? error.message : "Erreur inattendue";
-  if (/unique|constraint/i.test(message)) return "Cette adresse e-mail existe déjà dans l’annuaire.";
-  if (/no such table|global_users|global_user_markets/i.test(message)) return "L’annuaire GLOBAL n’est pas encore disponible.";
-  return message;
-}
-
-export async function GET() {
-  try {
-    const denied = await requireEditor();
-    if (denied) return denied;
-    return Response.json({ users: await serializeDirectory() }, { headers: { "Cache-Control": "no-store" } });
-  } catch (error) {
-    return Response.json({ error: routeError(error) }, { status: 500 });
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const denied = await requireEditor();
-    if (denied) return denied;
-    const body = await request.json() as UserPayload;
-    const name = cleanText(body.name);
-    const email = cleanEmail(body.email);
-    const usercode = cleanUserCode(body.usercode);
-    const plannerAlias = cleanText(body.plannerAlias, 80);
-    const role = cleanRole(body.role);
-    const marketIds = role === "manager-tarif" ? [] : await validateMarkets(cleanMarketIds(body.marketId, body.marketIds));
-    if (!name || !email) return Response.json({ error: "Nom et adresse e-mail sont requis." }, { status: 400 });
-    if (roleUsesAutomaticJira(role) && !usercode) return Response.json({ error: "Un USERCODE valide est requis pour l’automatisation Jira." }, { status: 400 });
-    if (typeof body.usercode === "string" && body.usercode.trim() && !usercode) return Response.json({ error: "Le USERCODE doit contenir une lettre suivie de 7 chiffres." }, { status: 400 });
-    if (role !== "manager-tarif" && roleMailMode(role) === "to" && !marketIds.length) return Response.json({ error: "Sélectionne le marché de cette personne." }, { status: 400 });
-    const db = getDb();
-    const [knownUserCode] = usercode ? await db.select({ id: globalUsers.id }).from(globalUsers).where(and(eq(globalUsers.usercode, usercode), eq(globalUsers.isActive, true))).limit(1) : [];
-    if (knownUserCode) return Response.json({ error: "Ce USERCODE existe déjà dans l’annuaire." }, { status: 409 });
-    const [knownEmail] = await db.select().from(globalUsers).where(eq(globalUsers.email, email)).limit(1);
-    if (knownEmail?.isActive) return Response.json({ error: "Cette adresse e-mail existe déjà dans l’annuaire." }, { status: 409 });
-    const managerConflict = await ensureSingleTariffManager(role, knownEmail?.id ?? "");
-    if (managerConflict) return managerConflict;
-    const id = knownEmail?.id ?? crypto.randomUUID();
-    const [created] = knownEmail
-      ? await db.update(globalUsers).set({ name, usercode, plannerAlias, role, isActive: true, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(globalUsers.id, id)).returning()
-      : await db.insert(globalUsers).values({ id, name, email, usercode, plannerAlias, role }).returning();
-    await syncLinks(id, knownEmail?.usercode ?? usercode, usercode, role, marketIds);
-    return Response.json({ user: { ...created, marketIds }, users: await serializeDirectory() }, { status: 201 });
-  } catch (error) {
-    return Response.json({ error: routeError(error) }, { status: 500 });
-  }
-}
-
-export async function PATCH(request: Request) {
-  try {
-    const denied = await requireEditor();
-    if (denied) return denied;
-    const body = await request.json() as UserPayload;
-    const id = cleanText(body.id, 80);
-    const name = cleanText(body.name);
-    const email = cleanEmail(body.email);
-    const usercode = cleanUserCode(body.usercode);
-    const plannerAlias = cleanText(body.plannerAlias, 80);
-    const role = cleanRole(body.role);
-    const marketIds = role === "manager-tarif" ? [] : await validateMarkets(cleanMarketIds(body.marketId, body.marketIds));
-    if (!id || !name || !email) return Response.json({ error: "Utilisateur, nom et adresse e-mail sont requis." }, { status: 400 });
-    if (roleUsesAutomaticJira(role) && !usercode) return Response.json({ error: "Un USERCODE valide est requis pour l’automatisation Jira." }, { status: 400 });
-    if (typeof body.usercode === "string" && body.usercode.trim() && !usercode) return Response.json({ error: "Le USERCODE doit contenir une lettre suivie de 7 chiffres." }, { status: 400 });
-    if (role !== "manager-tarif" && roleMailMode(role) === "to" && !marketIds.length) return Response.json({ error: "Sélectionne le marché de cette personne." }, { status: 400 });
-    const managerConflict = await ensureSingleTariffManager(role, id);
-    if (managerConflict) return managerConflict;
-    const db = getDb();
-    const [existing] = await db.select().from(globalUsers).where(and(eq(globalUsers.id, id), eq(globalUsers.isActive, true))).limit(1);
-    if (!existing) return Response.json({ error: "Utilisateur introuvable." }, { status: 404 });
-    const [usercodeConflict] = usercode ? await db.select({ id: globalUsers.id }).from(globalUsers).where(and(eq(globalUsers.usercode, usercode), eq(globalUsers.isActive, true))).limit(1) : [];
-    if (usercodeConflict && usercodeConflict.id !== id) return Response.json({ error: "Ce USERCODE existe déjà dans l’annuaire." }, { status: 409 });
-    const [updated] = await db.update(globalUsers).set({ name, email, usercode, plannerAlias, role, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(globalUsers.id, id)).returning();
-    await syncLinks(id, existing.usercode, usercode, role, marketIds);
-    return Response.json({ user: { ...updated, marketIds }, users: await serializeDirectory() });
-  } catch (error) {
-    return Response.json({ error: routeError(error) }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const denied = await requireEditor();
-    if (denied) return denied;
-    const id = new URL(request.url).searchParams.get("id")?.trim() ?? "";
-    if (!id) return Response.json({ error: "Utilisateur requis." }, { status: 400 });
-    const db = getDb();
-    const [existing] = await db.select().from(globalUsers).where(and(eq(globalUsers.id, id), eq(globalUsers.isActive, true))).limit(1);
-    if (!existing) return Response.json({ error: "Utilisateur introuvable." }, { status: 404 });
-    await db.delete(globalUserMarkets).where(eq(globalUserMarkets.userId, id));
-    await db.delete(jiraMarketAssignments).where(eq(jiraMarketAssignments.assignee, existing.usercode));
-    await db.update(globalUsers).set({ isActive: false, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(globalUsers.id, id));
-    return Response.json({ removedId: id, users: await serializeDirectory() });
-  } catch (error) {
-    return Response.json({ error: routeError(error) }, { status: 500 });
-  }
-}
+export const POST=(r:Request)=>save(r,true);
+export const PATCH=(r:Request)=>save(r,false);
+export async function DELETE(request:Request){try{const id=new URL(request.url).searchParams.get('id');const db=await directoryDb();const person=(await directoryUsersAt()).find(u=>u.id===id);if(!person)return Response.json({error:'Personne introuvable.'},{status:404});await db.batch([db.prepare('UPDATE global_users SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(id),db.prepare('DELETE FROM global_user_markets WHERE user_id = ?').bind(id),db.prepare('DELETE FROM jira_market_assignments WHERE assignee = ?').bind(person.usercode)]);return Response.json({removedId:id,users:await directoryUsersAt()});}catch{return Response.json({error:'Suppression impossible.'},{status:500});}}

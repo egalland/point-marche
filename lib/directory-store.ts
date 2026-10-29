@@ -1,0 +1,8 @@
+import {getRuntimeEnv} from './runtime-env';
+import {builtinJobRoles,directoryPersonAt,type JobRole,type DirectoryAssignment,type ProfiledUser} from './directory-profiles';
+export async function directoryDb(){const db=getRuntimeEnv()?.DB;if(!db)throw Error('Annuaire indisponible.');await db.exec('CREATE TABLE IF NOT EXISTS app_job_roles (id TEXT PRIMARY KEY, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS app_directory_profiles (person_id TEXT PRIMARY KEY, payload TEXT NOT NULL, revision TEXT NOT NULL);');return db;}
+export async function directoryRoles(){const db=await directoryDb();const rows=(await db.prepare('SELECT payload FROM app_job_roles ORDER BY id').all<{payload:string}>()).results;return [...builtinJobRoles,...rows.map(r=>JSON.parse(r.payload) as JobRole)];}
+export async function directoryUsersAt(date?:string):Promise<ProfiledUser[]>{
+ const db=await directoryDb();const [users,links,profiles]=await Promise.all([db.prepare('SELECT id,name,email,jira_name AS usercode,planner_alias AS plannerAlias,role FROM global_users WHERE is_active = 1 ORDER BY name').all<ProfiledUser>(),db.prepare('SELECT user_id,market_id FROM global_user_markets').all<{user_id:string;market_id:string}>(),db.prepare('SELECT person_id,payload,revision FROM app_directory_profiles').all<{person_id:string;payload:string;revision:string}>()]);
+ return users.results.map(u=>{const profile=profiles.results.find(p=>p.person_id===u.id);return directoryPersonAt({...u,marketIds:links.results.filter(l=>l.user_id===u.id).map(l=>l.market_id),...(profile?{assignments:JSON.parse(profile.payload) as DirectoryAssignment[],profileRevision:profile.revision}:{})},date);});
+}

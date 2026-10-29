@@ -1,4 +1,5 @@
 "use client";
+import {hasAnalystHistory} from "../../lib/directory-profiles";
 import { useAccess } from "./access-panel";
 
 import { appFetch as fetch, readLocalDraft, writeLocalDraft, isLocalWorkspace, readLocalPreference, writeLocalPreference, saveLocalFile, markPointSaved, loadPointDraft, preparePointSave, finishPointSave } from "@/lib/app-transport";
@@ -78,7 +79,7 @@ function dossierCard(item: AnalystDossier, edit: boolean, update: (patch: Partia
 export function AnalystPointDashboard({ users, tasks, markets, plannerUpdatedAt, onPlannerImport, onReconnect }: Props) {
   const { can } = useAccess();
   const canEdit = can("analyst.edit");
-  const analysts = useMemo(() => users.filter((user) => user.role === "analyste-tarif-referentiel").sort((left, right) => left.name.localeCompare(right.name, "fr")), [users]);
+  const analysts = useMemo(() => users.filter(hasAnalystHistory).sort((left, right) => left.name.localeCompare(right.name, "fr")), [users]);
   const manager = users.find((user) => user.role === "manager-tarif");
   const [analystId, setAnalystId] = useState(() => {
     let stored = "";

@@ -1,5 +1,13 @@
 # Historique des versions
 
+## V124 · 2026-10-29
+
+- Annuaire : plusieurs marchés par période, création de rôles métier et historique daté des affectations.
+- Profil Vente : création avec USERCODE de connexion et droits de lecture seule.
+- Bugs et idées : USERCODE renseigné depuis le compte connecté.
+- Vigilances PURCHASES : ancienneté, récurrence article et seuil d’écart configurables ; alertes figées avec le point sauvegardé.
+- Une personne sans affectation active reste en lecture seule.
+
 ## V123 · 2026-10-29
 
 Dossier de projet téléchargeable

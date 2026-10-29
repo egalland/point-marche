@@ -50,9 +50,10 @@ export function normalizePolicy(raw: unknown): AccessPolicy {
 }
 export const validUserCode = (usercode: string) => /^[A-Z]\d{7}$/.test(usercode);
 export const normalizeUserCode = (value: unknown) => typeof value === "string" ? value.trim().toUpperCase() : "";
-export function resolvePerson(usercode: string, directory: { usercode: string; name: string; role: string }[], overrides: {usercode: string; name: string; role: string}[]): AccessPerson {
+export function resolvePerson(usercode: string, directory: { usercode: string; name: string; role: string; profileInactive?: boolean }[], overrides: {usercode: string; name: string; role: string}[]): AccessPerson {
   const person = directory.find(p => normalizeUserCode(p.usercode) === usercode), override = overrides.find(p => normalizeUserCode(p.usercode) === usercode);
   const legacyJob = override?.role === "analyst" ? "analyste-tarif-referentiel" : override?.role === "manager" ? "manager-tarif" : "";
+  if (person?.profileInactive && usercode !== ROOT_ADMIN) return {usercode,name:person.name,role:"user",jobRole:"",readOnly:true};
   const sales = person?.role === "vente" || override?.role === "sales";
   const role: AccessRole = usercode === ROOT_ADMIN ? "superadmin" : sales ? "sales" : override?.role === "superadmin" ? "superadmin" : override?.role === "user" ? "user" : override?.role === "admin" || ["analyst","manager"].includes(override?.role || "") || ["analyste-tarif-referentiel","manager-tarif"].includes(person?.role || "") ? "admin" : "user";
   return { usercode, name: override?.name || person?.name || usercode, role, jobRole: person?.role || legacyJob, ...(role === "sales" ? {readOnly:true} : {}) };
@@ -83,6 +84,7 @@ export function requestPermission(path: string, method: string, scope?: unknown)
   if (/^\/api\/analyst-/.test(path) || (path === "/api/point-drafts" && scope === "analyst")) return write ? "analyst.edit" : "analyst.read";
   if (path === "/api/point-drafts" || path === "/api/points") return write ? "point.edit" : "point.read";
   if (path === "/api/point-assets") return write ? "point.assets" : "point.read";
+  if (path === "/api/directory-roles" && write) return "directory.create";
   if (path === "/api/global-users" && write) return method === "POST" ? "directory.create" : method === "DELETE" ? "directory.delete" : "directory.edit";
   if (path === "/api/markets" && write) return "markets.manage";
   if (path === "/api/feedback-settings" && write) return "feedback.settings";

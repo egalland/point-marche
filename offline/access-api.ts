@@ -1,3 +1,4 @@
+import {directoryPersonAt} from "../lib/directory-profiles";
 import { accessRequest, normalizePolicy, type AccessPerson, type AuditEvent, type AccessStore } from "../lib/access-control";
 import type { AppTransport } from "../lib/app-transport";
 import type { WorkspaceStore } from "./workspace-store";
@@ -9,7 +10,7 @@ export function guardLocalApi(store: WorkspaceStore, next: AppTransport): AppTra
       if (JSON.stringify(before) !== JSON.stringify(expected)) return false;
       store.writePreference("access-policy",JSON.stringify(value)); return true;
     },
-    directory: async () => store.read().users,
+    directory: async () => store.read().users.map(u=>directoryPersonAt(u)),
     roles: async () => Object.entries(store.read().preferences).filter(([k]) => k.startsWith("access-role:")).map(([,v]) => JSON.parse(v) as AccessPerson),
     setRole: async p => store.writePreference(`access-role:${p.usercode}`, JSON.stringify(p)),
     append: async e => store.writePreference(`activity:${e.id}`, JSON.stringify(e)),

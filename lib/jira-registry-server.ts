@@ -1,3 +1,4 @@
+import {directoryUsersAt} from "./directory-store";
 import { jiraMarketKpis } from "./jira-market-kpis";
 import { selectMarketTickets } from "./jira-market-scope";
 import { and, desc, eq, or } from "drizzle-orm";
@@ -108,7 +109,7 @@ export async function loadJiraCompletionHistory(usercode: string, requestedRange
 export async function loadOpenMarketJiraSummary(marketId: string, reference = new Date().toISOString().slice(0,10)) {
   const db = getDb();
   const [directory, definitions] = await Promise.all([
-    db.select({ usercode: globalUsers.usercode, name: globalUsers.name }).from(globalUserMarkets).innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id)).where(and(eq(globalUserMarkets.marketId, marketId), eq(globalUsers.isActive, true))),
+    directoryUsersAt(reference).then(users=>users.filter(u=>u.marketIds.includes(marketId))),
     db.select().from(marketDefinitions).where(eq(marketDefinitions.isActive, true)),
   ]);
   const markets=definitions.map(m=>({id:m.id,shortLabel:m.shortCode,plannerTags:JSON.parse(m.plannerTags) as string[]}));

@@ -1,3 +1,4 @@
+import {directoryUsersAt} from "./directory-store";
 import { accessRequest, normalizePolicy, type AccessPerson, type AuditEvent, type AccessStore } from "./access-control";
 import type { RuntimeEnv } from "./runtime-env";
 export async function guardedServerRequest(request: Request, env: RuntimeEnv, next: () => Promise<Response>) {
@@ -13,7 +14,7 @@ export async function guardedServerRequest(request: Request, env: RuntimeEnv, ne
       const result = await db.prepare("UPDATE app_access_policy SET value = ? WHERE id = 1 AND value = ?").bind(JSON.stringify(value), stored.value).run<{meta?:{changes?:number};changes?:number}>();
       return (result.meta?.changes ?? result.changes) === 1;
     },
-    directory: async () => (await db.prepare("SELECT jira_name AS usercode, name, role FROM global_users WHERE is_active = 1").all<{ usercode: string; name: string; role: string }>()).results,
+    directory: async () => directoryUsersAt(),
     roles: async () => (await db.prepare("SELECT usercode, name, role FROM app_access_roles").all<AccessPerson>()).results,
     setRole: async p => { await db.prepare("INSERT INTO app_access_roles (usercode,name,role) VALUES (?,?,?) ON CONFLICT(usercode) DO UPDATE SET name=excluded.name,role=excluded.role").bind(p.usercode,p.name,p.role).run(); },
     append: async e => { await db.prepare("INSERT INTO app_activity (id,at,usercode,device,action,target,status,detail) VALUES (?,?,?,?,?,?,?,?)").bind(e.id,e.at,e.usercode,e.device,e.action,e.target,e.status,e.detail).run(); },

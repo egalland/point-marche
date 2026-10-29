@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const raw = await request.text();
     if (raw.length > 8500000) return Response.json({ error: "Demande trop volumineuse." }, { status: 413 });
     let item;
-    try { item = parseFeedbackRequest(JSON.parse(raw)); }
+    try { item = parseFeedbackRequest({ ...JSON.parse(raw), reporterUserCode: request.headers.get("X-Market-USERCODE") || JSON.parse(raw).reporterUserCode }); }
     catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Demande invalide." }, { status: 400 }); }
     const bucket = getRuntimeEnv()?.FILES;
     if (!bucket) throw new Error();
@@ -62,7 +62,7 @@ export async function PATCH(request: Request) {
     if (!file) return Response.json({ error: "Demande introuvable." }, { status: 404 });
     const previous = await new Response(file.body).json() as FeedbackRequest;
     let item;
-    try { item = updateFeedbackStatus(previous, body.status, body.by, body.expectedUpdatedAt); }
+    try { item = updateFeedbackStatus(previous, body.status, request.headers.get("X-Market-USERCODE") || body.by, body.expectedUpdatedAt); }
     catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Modification impossible." }, { status: body.expectedUpdatedAt !== previous.updatedAt ? 409 : 400 }); }
     const stored = await bucket.put(`feedback/items/${item.id}.json`, new TextEncoder().encode(JSON.stringify(item)), { ...metadata, ...(file.etag ? { onlyIf: { etagMatches: file.etag } } : {}) });
     if (stored === null) return Response.json({ error: "Cette demande a été modifiée. Recharge le ticket." }, { status: 409 });

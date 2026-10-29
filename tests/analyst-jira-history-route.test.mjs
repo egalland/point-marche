@@ -23,6 +23,7 @@ const registryUrl = sourceUrl(`
   }
 `);
 const routeUrl = moduleUrl("../../app/api/analyst-jira/route.ts", {
+  "../../../lib/directory-store":sourceUrl(`export async function directoryUsersAt(){const p=globalThis.__analystHistoryRouteTest.analyst;return p?[{...p,role:"analyste-tarif-referentiel",marketIds:[]}]:[]}`),
   "drizzle-orm": ormUrl, "../../../db": dbUrl, "../../../db/schema": schemaUrl,
   "../../../lib/analyst-point": pointUrl, "../../../lib/jira-import": jiraUrl,
   "../../../lib/jira-registry-server": registryUrl, "../../../lib/analyst-jira-history": historyUrl,

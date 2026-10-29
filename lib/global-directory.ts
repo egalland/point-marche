@@ -17,6 +17,10 @@ export type GlobalDirectoryUser = {
   plannerAlias: string;
   role: GlobalRole;
   marketIds: string[];
+  assignments?: import("./directory-profiles").DirectoryAssignment[];
+  profileRevision?: string;
+  jobLabel?: string;
+  profileInactive?: boolean;
 };
 
 const jiraRoles = new Set<GlobalRole>(["chef-produit", "chef-marche"]);

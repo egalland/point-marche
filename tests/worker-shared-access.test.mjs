@@ -73,3 +73,16 @@ test('built Worker persists sales access and denies direct writes or view escala
  for(const [path,method] of [['/api/points','POST'],['/api/point-drafts','PUT'],['/api/point-assets','POST'],['/api/feedback','POST'],['/api/global-users','POST']])assert.equal((await request(path,method,{},'','V1234567')).status,403,path);
  assert.equal((await request('/api/points','POST',{},'','V1234567','superadmin')).status,403);
 });
+
+test('built Worker creates Vente profiles, custom roles and dated multi-market history atomically',async t=>{
+ const request=fixture(t);const m=await request('/api/markets','POST',{name:'Deuxième marché',shortCode:'SECOND'});assert.equal(m.status,201);const second=m.body.market.id;
+ const custom=await request('/api/directory-roles','POST',{label:'Commercial régional',baseRole:'vente'});assert.equal(custom.status,201);
+ const assignment={id:'first',roleId:custom.body.role.id,role:'vente',label:'Commercial régional',marketIds:['shared-test',second],from:'2026-01-01',to:''};
+ const body={name:'Vente test',email:'vente@example.test',usercode:'V1234567',role:'vente',marketIds:assignment.marketIds,assignments:[assignment]};
+ const created=await request('/api/global-users','POST',body);assert.equal(created.status,201,JSON.stringify(created.body));assert.equal(created.body.user.marketIds.length,2);
+ assert.equal((await request('/api/access/session','GET',undefined,'','V1234567')).body.person.role,'sales');assert.equal((await request('/api/points','POST',{},'','V1234567')).status,403);
+ const p=created.body.user;const changes={...body,id:p.id,profileRevision:p.profileRevision,assignments:[{...assignment,to:'2026-10-31'},{id:'second',roleId:'chef-produit',role:'chef-produit',label:'Chef',marketIds:[second],from:'2026-11-01',to:''}]};
+ assert.equal((await request('/api/global-users','PATCH',changes)).status,200);assert.equal((await request('/api/global-users','PATCH',changes)).status,409);
+ const future=(await request('/api/global-users?date=2026-11-01')).body.users.find(u=>u.id===p.id);assert.equal(future.role,'chef-produit');assert.equal(future.assignments.length,2);assert.deepEqual(future.marketIds,[second]);
+ const unchanged=await request('/api/global-users?date=2026-10-01');assert.deepEqual(unchanged.body.users.find(u=>u.id===p.id).marketIds,['shared-test',second]);
+});

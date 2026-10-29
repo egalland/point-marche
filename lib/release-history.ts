@@ -1,6 +1,7 @@
 /** User-facing notes curated from the saved version history, not raw requests or commit logs. */
 export type ReleaseNote = { version: number; date: string; title: string; changes: string[] };
 export const releaseHistory: ReleaseNote[] = [
+  {version:124,date:"2026-10-29",title:"Profils datés et vigilances PURCHASES",changes:["Plusieurs marchés par personne, rôles métier personnalisables et historique des affectations avec dates de validité.","Création du profil Vente corrigée et USERCODE des signalements lié au compte connecté.","Vigilances PURCHASES configurables et conservées avec les données du point enregistré."]},
   {version:123,date:"2026-10-29",title:"Dossier de projet téléchargeable",changes:["Ajout du dossier de référence V122 au format PDF dans Affichage et compte sur le site."]},
   {
     "version": 122,

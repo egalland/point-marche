@@ -382,7 +382,7 @@ test('feedback tickets, screenshots and status history survive workbook reopenin
   const reopened = new WorkspaceStore(await decodeWorkspace(await encodeWorkspace(store.snapshot())));
   const detail = await (await createLocalApi(reopened)(`/api/feedback?id=${item.id}`)).json();
   assert.equal(detail.item.status, 'Résolu');
-  assert.equal(detail.item.reporterUserCode, 'A1234567');
+  assert.equal(detail.item.reporterUserCode, 'A0000001');
   assert.equal(detail.item.captures[0].dataUrl, draft.captures[0].dataUrl);
   assert.equal(detail.item.history.length, 2);
 });
@@ -395,4 +395,17 @@ test('local sales profile survives workbook reload and denies direct mutations',
  assert.equal((await request('/api/points?marketId=market-local')).status,200);
  for(const [path,method] of [['/api/points','POST'],['/api/point-drafts','PUT'],['/api/global-users','POST'],['/api/feedback','POST']])assert.equal((await request(path,method,{name:'Interdit'})).status,403);
  assert.equal(store.read().points.length,0);assert.equal(store.read().users.length,3);
+});
+
+test('local custom roles and multi-market career periods persist, reject stale writes and preserve history',async()=>{
+ const data=fixture();data.markets.push({...data.markets[0],id:'second',name:'Deuxième'});const store=new WorkspaceStore(data),api=createLocalApi(store);
+ const role=await call(api,'/api/directory-roles',{label:'Commercial régional',baseRole:'vente'});assert.equal(role.status,201);
+ const initial={id:'p1',roleId:role.role.id,role:'vente',label:role.role.label,marketIds:['market-local','second'],from:'2026-01-01',to:''};
+ const draft={name:'Vente multi',email:'ventemulti@example.test',usercode:'V1234567',role:'vente',marketIds:['market-local','second'],assignments:[initial]};
+ const saved=await call(api,'/api/global-users',draft);assert.equal(saved.status,201);assert.equal(saved.user.marketIds.length,2);
+ const updated=await call(api,'/api/global-users',{...draft,id:saved.user.id,profileRevision:saved.user.profileRevision,assignments:[{...initial,to:'2026-10-31'},{id:'p2',roleId:'chef-produit',role:'chef-produit',label:'Chef',marketIds:['second'],from:'2026-11-01',to:''}]},'PATCH');assert.equal(updated.status,200);
+ const stale=await call(api,'/api/global-users',{...draft,id:saved.user.id,profileRevision:saved.user.profileRevision},'PATCH');assert.equal(stale.status,409);
+ const reopened=createLocalApi(new WorkspaceStore(await decodeWorkspace(await encodeWorkspace(store.snapshot()))));
+ assert.ok((await call(reopened,'/api/directory-roles',undefined)).roles.some(r=>r.id===role.role.id));
+ const future=(await call(reopened,'/api/global-users?date=2026-11-01',undefined)).users.find(u=>u.id===saved.user.id);assert.equal(future.role,'chef-produit');assert.deepEqual(future.marketIds,['second']);assert.equal(future.assignments.length,2);
 });

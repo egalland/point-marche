@@ -1,3 +1,4 @@
+import {directoryUsersAt} from "../../../lib/directory-store";
 import { selectMarketTickets } from "../../../lib/jira-market-scope";
 import { jiraMarketKpis } from "../../../lib/jira-market-kpis";
 import { isIsoDate, isoWeekRange } from "../../../lib/iso-week";
@@ -50,11 +51,7 @@ export async function GET(request: Request) {
     const [[marketSnapshot], assignments, batch] = await Promise.all([
       db.select().from(jiraMarketWeeklySnapshots)
         .where(and(eq(jiraMarketWeeklySnapshots.marketId, marketId), eq(jiraMarketWeeklySnapshots.year, year), eq(jiraMarketWeeklySnapshots.week, week))).limit(1),
-      db.select({ marketId: globalUserMarkets.marketId, assignee: globalUsers.usercode })
-        .from(globalUserMarkets)
-        .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
-        .where(and(eq(globalUsers.isActive, true), sql`1=1`))
-        .orderBy(asc(globalUserMarkets.marketId), asc(globalUsers.usercode)),
+      directoryUsersAt(isIsoDate(url.searchParams.get("date")??"")?url.searchParams.get("date")!:isoWeekRange(year,week).to).then(users=>users.flatMap(u=>u.marketIds.map(marketId=>({marketId,assignee:u.usercode})))),
       latestCompletedJiraBatch(),
     ]);
     const centralUpdatedAt = batch?.completedAt ?? batch?.createdAt;
@@ -116,14 +113,7 @@ export async function POST(request: Request) {
       .where(and(eq(marketDefinitions.id, marketId), eq(marketDefinitions.isActive, true))).limit(1);
     if (!market) return Response.json({ error: "Marché introuvable." }, { status: 404 });
 
-    const directory = await db.select({ usercode: globalUsers.usercode, name: globalUsers.name })
-      .from(globalUserMarkets)
-      .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
-      .where(and(
-        eq(globalUserMarkets.marketId, marketId),
-        eq(globalUsers.isActive, true),
-        sql`1=1`,
-      ));
+    const directory=(await directoryUsersAt(isoWeekRange(year,week).to)).filter(u=>u.marketIds.includes(marketId));
     const directoryByUserCode = new Map(directory.map((person) => [person.usercode.toUpperCase(), person]));
     const definitions=await db.select().from(marketDefinitions).where(eq(marketDefinitions.isActive,true));
     const markets=definitions.map(m=>({id:m.id,shortCode:m.shortCode,plannerTags:JSON.parse(m.plannerTags) as string[]}));

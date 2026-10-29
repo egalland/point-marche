@@ -1,3 +1,4 @@
+import {directoryPersonAt,type DirectoryAssignment} from "../../lib/directory-profiles";
 import {normalizeSimulationPresentation,type SimulationPresentation} from "@/lib/simulation-presentation";
 import {normalizePointSummary,type PointSummarySettings} from "@/lib/point-summary-settings";
 import { normalizePromotionWorkflow, type PromotionWorkflow } from "@/lib/promotion-workflow";
@@ -43,7 +44,7 @@ export type JiraPointFields = { summary: string; status: string; priority: strin
 export type JiraPointOverride = Partial<JiraPointFields> & { updatedAt?: string };
 export type JiraTicket = { category?: string; subcategory?: string; id: string; key: string; internalId?: string; summary: string; status: string; priority: string; assignee: string; assigneeUserCode?: string; createdAt?: string; resolutionAt?: string; lastActivity: string; link: string; comment: string; count?: number; importedBase?: JiraPointFields; pointOverride?: JiraPointOverride };
 export type PointData = { jiraResolution?: JiraResolutionMetrics; purchaseDataConfigs?: PURCHASESConfig[]; jiraAlertRules?: JiraAlertRule[]; simulationComparisonConfig?: ComparisonConfig; simulationComparisonSnapshot?: ComparisonSnapshot; sourceFreshness?: PointSourceFreshness; pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; promotions: Promotion[]; tariffs: Tariff[]; jira: JiraTicket[]; jiraMode: PointSourceMode; plannerMode: PointSourceMode; marketComparison: MarketComparison | null; preferences: PointPreferences; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
-export type AlertItem = { title: string; detail: string; severity: "warning" | "danger"; targetId?: string; link?: string; category: "Jira" | "Dossier" };
+export type AlertItem = { title: string; detail: string; severity: "warning" | "danger"; targetId?: string; link?: string; category: "Jira" | "Dossier" | "PURCHASES" };
 export type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
 export type Market = { id: string; name: string; short: string; tone: ThemeKey; colorHex: string; plannerTags: string[]; position: number; jiraWarningDays: number; jiraCriticalDays: number };
 export type PointRecord = { revision: string; id: string; marketId: string; year: number; week: number; meetingDate: string; pointName: string; themeColor: ThemeKey; data: PointData; createdAt: string };
@@ -52,7 +53,7 @@ export type JiraAttentionLevel = "fresh" | "warning" | "critical" | "undated";
 export type JiraDashboardScope = "all" | "attention" | "critical";
 export type JiraWeekPayload = { snapshot: { year: number; week: number; rawText: string; summary: JiraSummaryImport; updatedAt: string; source?: "weekly" | "central" } | null; assignments: Record<string, string[]>; error?: string };
 export type SessionPayload = { user: { displayName: string; username: string } | null };
-export type DirectoryDraft = { name: string; email: string; usercode: string; plannerAlias: string; role: GlobalRole; marketIds: string[] };
+export type DirectoryDraft = { name: string; email: string; usercode: string; plannerAlias: string; role: GlobalRole; marketIds: string[]; assignments?:DirectoryAssignment[];profileRevision?:string };
 export type DirectoryEditor = { id: string; draft: DirectoryDraft };
 export type ConfirmRequest = { title: string; detail: string; confirmLabel: string; destructive?: boolean };
 
@@ -77,7 +78,7 @@ export const pointModules: { id: PointModule; label: string; detail: string }[] 
   { id: "dossiers", label: "Dossiers", detail: "Dossiers et avancement visible" },
   { id: "operations", label: "Simulations", detail: "État métier final, importé ou corrigé pendant le point" },
   { id: "promotions", label: "Promotions", detail: "Promotions achat et actions commerciales" },
-  { id: "alerts", label: "Vigilances", detail: "Alertes dossiers et Jira" },
+  { id: "alerts", label: "Vigilances", detail: "Alertes dossiers, Jira et PURCHASES" },
   { id: "purchaseData", label: "Suivi PURCHASES", detail: "Période et nombre de PURCHASES par spécialité" },
   { id: "simulationComparison", label: "Comparatif des simulations", detail: "Deux périodes, marché ou fournisseur, volume et variations" },
   { id: "comparison", label: "Comparaison des marchés", detail: "Camembert des tickets Jira ouverts par marché" },
@@ -264,6 +265,7 @@ export function uniqueEmails(values: string[]) {
 }
 
 export function applyDirectoryMail(data: PointData, marketId: string, users: GlobalDirectoryUser[]): PointData {
+  users=users.map(u=>directoryPersonAt(u,data.meetingDate));
   const previousAutoTo = new Set((data.mail.autoTo ?? []).map((email) => email.toLocaleLowerCase("fr-FR")));
   const previousAutoCc = new Set((data.mail.autoCc ?? []).map((email) => email.toLocaleLowerCase("fr-FR")));
   const manualTo = emailList(data.mail.to).filter((email) => !previousAutoTo.has(email.toLocaleLowerCase("fr-FR")));
@@ -505,6 +507,7 @@ export function buildAlerts(data: PointData, market: Market): AlertItem[] {
       severity: level === "critical" ? "danger" : "warning",
       targetId: `jira-${item.id}`, link: item.link || undefined, category: "Jira",
     }));
-  return [...jiraAlerts, ...alerts].sort((a, b) => Number(b.severity === "danger") - Number(a.severity === "danger")).slice(0, 12);
+  const purchaseDataAlerts=(data.purchaseDataConfigs??[]).flatMap(c=>(c.report?.vigilances??[]).map(a=>({...a,targetId:"purchaseData-point"})));
+  return [...jiraAlerts, ...alerts,...purchaseDataAlerts].sort((a, b) => Number(b.severity === "danger") - Number(a.severity === "danger")).slice(0, 12);
 }
 

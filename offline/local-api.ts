@@ -1,3 +1,4 @@
+import {builtinJobRoles,directoryPersonAt,validateAssignments,legacyAssignment,parseJobRole,type JobRole} from "../lib/directory-profiles";
 import { jiraMarketKpis } from "../lib/jira-market-kpis";
 import { selectMarketTickets } from "../lib/jira-market-scope";
 import { localPURCHASES } from "./purchaseData-api";
@@ -61,14 +62,20 @@ function personInput(body: Record<string, unknown>, data: WorkspaceData, current
   const role = isGlobalRole(String(body.role)) ? String(body.role) as GlobalDirectoryUser["role"] : "autre";
   const requested = body.marketId ? [body.marketId] : Array.isArray(body.marketIds) ? body.marketIds : [];
   const knownMarkets = new Set(activeMarkets(data).map((market) => market.id));
-  const marketIds = role === "manager-tarif" ? [] : requested.map((value) => clean(value)).filter((value) => knownMarkets.has(value)).slice(0, 1);
+  const marketIds = [...new Set(requested.map((value) => clean(value)).filter((value) => knownMarkets.has(value)))];
+  const old=data.users.find(p=>p.id===currentId);
+  if(old?.assignments&&!body.assignments)throw new LocalApiError("Recharge la fiche pour conserver son historique.");
+  if(old?.profileRevision!==body.profileRevision)throw new LocalApiError("Cette fiche a changé. Recharge-la.",409);
+  const roles=[...builtinJobRoles,...Object.entries(data.preferences).filter(([k])=>k.startsWith("job-role:")).map(([,v])=>JSON.parse(v) as JobRole)];
+  const assignments=validateAssignments(body.assignments??[legacyAssignment({role,marketIds})],roles,[...knownMarkets]);
+  if(old?.assignments?.some(a=>!assignments.some(n=>n.id===a.id)))throw new LocalApiError("Les anciennes périodes doivent être conservées.");
   if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new LocalApiError("Nom et adresse e-mail valide requis.");
-  if ((usercode || roleUsesAutomaticJira(role)) && !/^[A-Z]\d{7}$/.test(usercode)) throw new LocalApiError("Le USERCODE doit contenir une lettre suivie de 7 chiffres.");
+  if ((usercode || assignments.some(a=>roleUsesAutomaticJira(a.role)||a.role==="vente")) && !/^[A-Z]\d{7}$/.test(usercode)) throw new LocalApiError("Le USERCODE doit contenir une lettre suivie de 7 chiffres.");
   if (role !== "manager-tarif" && roleMailMode(role) === "to" && !marketIds.length) throw new LocalApiError("Sélectionne le marché de cette personne.");
   if (data.users.some((person) => person.id !== currentId && person.email.toLowerCase() === email)) throw new LocalApiError("Cette adresse e-mail existe déjà dans l’annuaire.", 409);
   if (usercode && data.users.some((person) => person.id !== currentId && person.usercode.toUpperCase() === usercode)) throw new LocalApiError("Ce USERCODE existe déjà dans l’annuaire.", 409);
   if (role === "manager-tarif" && data.users.some((person) => person.id !== currentId && person.role === role)) throw new LocalApiError("Un manager Tarif est déjà renseigné.", 409);
-  return { id: currentId || id(), name, email, usercode, plannerAlias: clean(body.plannerAlias, 80), role, marketIds };
+  return directoryPersonAt({ id: currentId || id(), name, email, usercode, plannerAlias: clean(body.plannerAlias, 80), role, marketIds,assignments,profileRevision:id() });
 }
 
 function cleanTicket(value: unknown): JiraCsvTicket {
@@ -123,7 +130,7 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
           const previous = inbox.find(item => item.id === body.id);
           if (!previous) return json({ error: "Demande introuvable." }, 404);
           if (body.expectedUpdatedAt !== previous.updatedAt) return json({ error: "Cette demande a été modifiée. Actualise avant de réessayer." }, 409);
-          const item = updateFeedbackStatus(previous, body.status, body.by, body.expectedUpdatedAt);
+          const item = updateFeedbackStatus(previous, body.status, new Headers(init?.headers??(input instanceof Request?input.headers:undefined)).get("X-Market-USERCODE")||body.by, body.expectedUpdatedAt);
           store.update(current => {
             const currentInbox = JSON.parse(current.preferences.feedbackInbox || "[]") as FeedbackRequest[];
             return { ...current, preferences: { ...current.preferences, feedbackInbox: JSON.stringify(currentInbox.map(entry => entry.id === item.id ? item : entry)) } };
@@ -131,7 +138,7 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
           return json({ item });
         }
         if (method === "POST") {
-          const item = parseFeedbackRequest(body);
+          const item = parseFeedbackRequest({...body,reporterUserCode:new Headers(init?.headers??(input instanceof Request?input.headers:undefined)).get("X-Market-USERCODE")||body.reporterUserCode});
           const existing = inbox.find(entry => entry.id === item.id);
           if (existing) return json({ item: feedbackSummary(existing) });
           store.update(current => {
@@ -170,8 +177,13 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
         }
       }
 
+      if(path==="/api/directory-roles"){
+        const roles=[...builtinJobRoles,...Object.entries(data.preferences).filter(([k])=>k.startsWith("job-role:")).map(([,v])=>JSON.parse(v) as JobRole)];
+        if(method==="GET")return json({roles});
+        if(method==="POST"){const role=parseJobRole(body);if(roles.some(r=>r.label.toLowerCase()===role.label.toLowerCase()))throw new LocalApiError("Ce rôle existe déjà.",409);store.writePreference(`job-role:${role.id}`,JSON.stringify(role));return json({role,roles:[...roles,role]},201);}
+      }
       if (path === "/api/global-users") {
-        if (method === "GET") return json({ users: orderedUsers(data) });
+        if (method === "GET") { const date=url.searchParams.get("date")||undefined; if(date&&!isIsoDate(date))throw new LocalApiError("Date invalide."); return json({ users: orderedUsers(data).map(u=>directoryPersonAt(u,date)) }); }
         if (method === "POST" || method === "PATCH") {
           const currentId = method === "PATCH" ? clean(body.id, 80) : "";
           if (method === "PATCH" && !data.users.some((person) => person.id === currentId)) throw new LocalApiError("Utilisateur introuvable.", 404);
@@ -208,7 +220,7 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
 
       if (path === "/api/analyst-points") {
         const analystId = method === "GET" ? url.searchParams.get("analystId") ?? "" : clean(body.analystId, 100);
-        if (!data.users.some((person) => person.id === analystId && person.role === "analyste-tarif-referentiel")) throw new LocalApiError("Analyste introuvable.", 404);
+        if (!data.users.some((person) => person.id === analystId && (person.role === "analyste-tarif-referentiel"||Boolean(person.assignments?.some(a=>a.role==="analyste-tarif-referentiel"))))) throw new LocalApiError("Analyste introuvable.", 404);
         if (method === "GET") return json({ points: data.analystPoints.filter((point) => point.analystId === analystId).sort(pointOrder) });
         if (method === "POST") {
           const payload = body.data as AnalystPointData;
@@ -279,7 +291,7 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
         const marketId = url.searchParams.get("marketId") ?? "";
         const year = Number(url.searchParams.get("year")); const week = Number(url.searchParams.get("week"));
         requirePeriod(year, week);
-        const people = data.users;
+        const people = data.users.map(u=>directoryPersonAt(u,isIsoDate(url.searchParams.get("date")??"")?url.searchParams.get("date")!:isoWeekRange(year,week).to));
         const assignments: Record<string, string[]> = {};
         people.forEach((person) => person.marketIds.forEach((market) => { (assignments[market] ??= []).push(person.usercode); }));
         if (!data.jiraUpdatedAt && !data.jiraTickets.length) return json({ snapshot: null, assignments });
@@ -291,7 +303,7 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
 
       if (path === "/api/analyst-jira" && method === "GET") {
         const analystId = url.searchParams.get("analystId") ?? "";
-        const person = data.users.find((user) => user.id === analystId && user.role === "analyste-tarif-referentiel");
+        const person = data.users.find((user) => user.id === analystId && (user.role === "analyste-tarif-referentiel"||Boolean(user.assignments?.some(a=>a.role==="analyste-tarif-referentiel"))));
         if (!person) throw new LocalApiError("Analyste introuvable.", 404);
         const tickets = store.jiraForPerson(person.usercode);
         if (url.searchParams.get("view") === "history") {

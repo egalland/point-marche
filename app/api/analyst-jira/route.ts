@@ -1,3 +1,5 @@
+import {directoryUsersAt} from "../../../lib/directory-store";
+import {hasAnalystHistory} from "../../../lib/directory-profiles";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { globalUsers, jiraAnalystWeeklySnapshots } from "../../../db/schema";
@@ -43,22 +45,7 @@ function serializeCentralTicket(ticket: Awaited<ReturnType<typeof loadJiraActivi
   };
 }
 
-async function activeAnalyst(analystId: string) {
-  const db = getDb();
-  const [row] = await db.select({
-    id: globalUsers.id,
-    name: globalUsers.name,
-    email: globalUsers.email,
-    usercode: globalUsers.usercode,
-    plannerAlias: globalUsers.plannerAlias,
-  }).from(globalUsers).where(and(
-    eq(globalUsers.id, analystId),
-    eq(globalUsers.role, "analyste-tarif-referentiel"),
-    eq(globalUsers.isActive, true),
-  )).limit(1);
-  if (!row) return null;
-  return { ...row, role: "analyste-tarif-referentiel", marketIds: [] } satisfies GlobalDirectoryUser;
-}
+async function activeAnalyst(analystId:string){const row=(await directoryUsersAt()).find(u=>u.id===analystId&&hasAnalystHistory(u));return row?{...row,role:"analyste-tarif-referentiel" as const}:null;}
 
 export async function GET(request: Request) {
   try {

@@ -1,3 +1,4 @@
+import {moduleUrl as sharedModuleUrl} from "./helpers/module-url.mjs";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -21,6 +22,7 @@ const activityUrl = moduleUrl("../lib/jira-analyst-activity.ts", { "./iso-week":
 const schemaUrl = moduleUrl("../db/schema.ts", { "drizzle-orm": ormUrl, "drizzle-orm/sqlite-core": import.meta.resolve("drizzle-orm/sqlite-core") });
 const dbUrl = moduleUrl("../db/index.ts", { "drizzle-orm/d1": import.meta.resolve("drizzle-orm/d1"), "./schema": schemaUrl, "../lib/runtime-env": runtimeUrl });
 const registryUrl = moduleUrl("../lib/jira-registry-server.ts", {
+  "./directory-store":sharedModuleUrl("../../lib/directory-store.ts"),
   "./jira-market-scope": moduleUrl("../lib/jira-market-scope.ts"), "./jira-market-kpis": moduleUrl("../lib/jira-market-kpis.ts", {"./iso-week":isoUrl,"./jira-import":jiraUrl}),
   "drizzle-orm": ormUrl, "../db": dbUrl, "../db/schema": schemaUrl,
   "./iso-week": isoUrl, "./jira-analyst-activity": activityUrl, "./jira-import": jiraUrl, "./analyst-jira-history": historyUrl,
@@ -35,6 +37,7 @@ function fixture(t) {
   for (const name of readdirSync(migrations).filter((name) => name.endsWith(".sql")).sort()) sqlite.exec(readFileSync(new URL(name, migrations), "utf8"));
   const queries = [];
   const binding = {
+    async exec(query){sqlite.exec(query);},
     prepare(query) {
       const statement = sqlite.prepare(query);
       let values = [];

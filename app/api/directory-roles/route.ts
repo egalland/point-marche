@@ -1,0 +1,4 @@
+import {directoryDb,directoryRoles} from '../../../lib/directory-store';
+import {parseJobRole} from '../../../lib/directory-profiles';
+export async function GET(){try{return Response.json({roles:await directoryRoles()});}catch{return Response.json({error:'Rôles indisponibles.'},{status:503});}}
+export async function POST(request:Request){try{const role=parseJobRole(await request.json()),db=await directoryDb();const roles=await directoryRoles();if(roles.some(r=>r.label.toLocaleLowerCase('fr')===role.label.toLocaleLowerCase('fr')))return Response.json({error:'Ce nom de rôle existe déjà.'},{status:409});await db.prepare('INSERT INTO app_job_roles (id,payload) VALUES (?,?)').bind(role.id,JSON.stringify(role)).run();return Response.json({role,roles:await directoryRoles()},{status:201});}catch(e){return Response.json({error:e instanceof Error?e.message:'Création du rôle impossible.'},{status:400});}}

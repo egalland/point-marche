@@ -56,10 +56,11 @@ export function FeedbackSettings({ contact }: { contact: ReturnType<typeof useFe
   </section>;
 }
 export function FeedbackDialog({ open, email, ready, context, onClose, onSettings }: { open: boolean; email: string; ready: boolean; context: string; onClose: () => void; onSettings: () => void }) {
+  const {person}=useAccess();
   const [kind, setKind] = useState<"bug" | "idea">("bug");
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
-  const [usercode, setUserCode] = useState("");
+  const [usercode, setUserCode] = useState(person.usercode);
   const [notify, setNotify] = useState(false);
   const [captures, setCaptures] = useState<FeedbackCapture[]>([]);
   const [message, setMessage] = useState("");
@@ -67,7 +68,7 @@ export function FeedbackDialog({ open, email, ready, context, onClose, onSetting
   const [reading, setReading] = useState(false);
   const [saved, setSaved] = useState<FeedbackSummary | null>(null);
   const id = useRef("");
-  useEffect(() => { try { setUserCode(localStorage.getItem("market-pulse:feedback-usercode") ?? ""); } catch {} }, []);
+  useEffect(() => { setUserCode(person.usercode); }, [person.usercode,open]);
   useEffect(() => { if (open && saved) { setSaved(null); setTitle(""); setDetail(""); setCaptures([]); setMessage(""); id.current = ""; } }, [open]);
   async function addCaptures(files: File[]) {
     if (!files.length) return;
@@ -114,8 +115,8 @@ export function FeedbackDialog({ open, email, ready, context, onClose, onSetting
     {saved ? <div><p>Demande enregistrée · {saved.id.slice(0, 8)}</p><FeedbackStatusBadge status={saved.status}/><p role="status">{message}</p><div className="feedback-actions">{validFeedbackRecipients(email) && <><button className="secondary-button" type="button" onClick={() => openMail(saved)}>Ouvrir le mail</button><button className="secondary-button" type="button" onClick={async () => { try { const mail = mailFor(saved); await navigator.clipboard.writeText(`À : ${email}\nObjet : ${mail.subject}\n\n${mail.body}`); setMessage("Mail copié. Colle-le dans Outlook."); } catch { setMessage("Copie indisponible dans ce navigateur. Utilise les informations du ticket."); } }}>Copier le mail</button></>}<button className="primary-button" type="button" onClick={() => { setSaved(null); setTitle(""); setDetail(""); setCaptures([]); setMessage(""); id.current = ""; }}>Nouvelle demande</button></div></div> : <form onSubmit={event => { event.preventDefault(); void submit(); }} onPaste={event => { const files = Array.from(event.clipboardData.files); if (files.length && !busy && !reading) { event.preventDefault(); void addCaptures(files); } }}>
       <fieldset disabled={busy || reading} className="feedback-fields">
         <fieldset className="feedback-kind-picker"><legend>Type de demande</legend><div>{(["bug", "idea"] as const).map(value => <label key={value} className={kind === value ? "selected" : ""}><input type="radio" name="feedback-request-kind" value={value} checked={kind === value} onChange={() => setKind(value)}/><AppIcon name={value === "bug" ? "bug" : "idea"}/><span>{value === "bug" ? "Signaler un bug" : "Proposer une idée"}</span></label>)}</div></fieldset>
-        <label className="field"><span>Ton USERCODE</span><input required pattern="[A-Za-z][0-9]{7}" maxLength={8} placeholder="A1234567" value={usercode} onChange={event => setUserCode(event.target.value.toUpperCase())}/></label>
-        <small>USERCODE déclaré pour le suivi ; il ne remplace pas une authentification.</small>
+        <label className="field"><span>Ton USERCODE</span><input required pattern="[A-Za-z][0-9]{7}" maxLength={8} placeholder="A1234567" value={usercode} readOnly/></label>
+        <small>USERCODE du profil connecté, renseigné automatiquement.</small>
         <label className="field"><span>Objet</span><input required maxLength={100} value={title} onChange={event => setTitle(event.target.value)}/></label>
         <label className="field"><span>{kind === "bug" ? "Étapes, résultat obtenu et résultat attendu" : "Ton idée et son intérêt"}</span><textarea required maxLength={1200} rows={6} value={detail} onChange={event => setDetail(event.target.value)}/></label>
         <label className="field"><span>Captures d’écran · 3 maximum, 2 Mo chacune</span><input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={event => { void addCaptures(Array.from(event.target.files ?? [])); event.target.value = ""; }}/></label>
@@ -133,7 +134,7 @@ export function FeedbackDialog({ open, email, ready, context, onClose, onSetting
 
 const dateLabel = (value: string) => value ? new Date(value).toLocaleString("fr-FR") : "—";
 export function FeedbackInbox({ onCreate }: { onCreate?: () => void } = {}) {
-  const { can } = useAccess();
+  const { can,person } = useAccess();
   const [items, setItems] = useState<FeedbackSummary[]>([]);
   const [selected, setSelected] = useState<FeedbackRequest | null>(null);
   const [query, setQuery] = useState("");
@@ -151,7 +152,7 @@ export function FeedbackInbox({ onCreate }: { onCreate?: () => void } = {}) {
     catch (error) { setMessage(error instanceof Error ? error.message : "Chargement impossible."); }
     finally { setLoading(false); }
   }
-  useEffect(() => { void load(); const refresh = () => { void load(); }; window.addEventListener("feedback-updated", refresh); try { setBy(localStorage.getItem("market-pulse:feedback-usercode") ?? ""); } catch {} return () => window.removeEventListener("feedback-updated", refresh); }, []);
+  useEffect(() => { void load(); const refresh = () => { void load(); }; window.addEventListener("feedback-updated", refresh); setBy(person.usercode); return () => window.removeEventListener("feedback-updated", refresh); }, [person.usercode]);
   async function select(id: string) {
     const request = ++selection.current;
     setMessage(""); setSelected(null);
