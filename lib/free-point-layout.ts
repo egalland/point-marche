@@ -20,7 +20,7 @@ export function changeRect(rect: BlockRect, dx: number, dy: number, resize: bool
 }
 export function initialRects(ids: string[], widths: Record<string,string>): Record<string,BlockRect> {
  const result:Record<string,BlockRect>={};let x=0,y=0,rowHeight=0;
- for(const id of ids){const span=widths[id]==='quarter'?1:widths[id]==='half'?2:widths[id]==='three-quarters'||widths[id]==='two-thirds'?3:4;const width=span*300;if(x+width>1200){x=0;y+=rowHeight+24;rowHeight=0;}const height=id==='jira'?840:id==='dossiers'?600:480;result[id]=normalizeRect({x,y,width:width-(span===4?0:12),height});x+=width;rowHeight=Math.max(rowHeight,height);}
+ for(const id of ids){const span=widths[id]==='quarter'?1:widths[id]==='half'?2:widths[id]==='three-quarters'||widths[id]==='two-thirds'?3:4;const width=span*300;if(x+width>1200){x=0;y+=rowHeight+24;rowHeight=0;}const height=id==='jira'?520:id==='dossiers'?600:480;result[id]=normalizeRect({x,y,width:width-(span===4?0:12),height});x+=width;rowHeight=Math.max(rowHeight,height);}
  return result;
 }
 
@@ -81,3 +81,22 @@ export function compactPresentationBlocks(ids:string[],blocks:Record<string,Bloc
  const order=ids.filter(id=>blocks[id]).sort((a,b)=>blocks[a].y-blocks[b].y||blocks[a].x-blocks[b].x||ids.indexOf(a)-ids.indexOf(b));
  for(const id of order){const original=blocks[id];const above=placed.filter(p=>original.x<p.x+p.width&&original.x+original.width>p.x);const rect={...original,y:Math.max(0,...above.map(p=>p.y+p.height))};result[id]=rect;placed.push(rect);}return result;
 }
+
+export type BlockSplit = 'columns' | 'rows' | 'wide-left';
+/** Dock a chosen pair without discarding other block coordinates or content. */
+export function splitBlockPair(blocks:Record<string,BlockRect>,first:string,second:string,kind:BlockSplit='columns',reverse=false):Record<string,BlockRect>{
+ if(first===second||!blocks[first]||!blocks[second])return {...blocks};
+ const a=blocks[first],b=blocks[second],gap=16,y=Math.min(a.y,b.y),height=Math.max(a.height,b.height);
+ let left:BlockRect,right:BlockRect;
+ if(kind==='rows'){
+  const h=Math.max(144,Math.round((Math.max(a.y+a.height,b.y+b.height)-y-gap)/2));
+  left=normalizeRect({x:0,y,width:CANVAS_WIDTH,height:h});right=normalizeRect({x:0,y:y+h+gap,width:CANVAS_WIDTH,height:h});
+ }else{
+  const width=kind==='wide-left'?Math.round((CANVAS_WIDTH-gap)*2/3):(CANVAS_WIDTH-gap)/2;
+  left=normalizeRect({x:0,y,width,height});right=normalizeRect({x:width+gap,y,width:CANVAS_WIDTH-gap-width,height});
+ }
+ return {...blocks,[first]:reverse?right:left,[second]:reverse?left:right};
+}
+
+/** Market points now share one window layout; old flow preferences remain readable as windows. */
+export function normalizePointWindowLayout(value:unknown):FreeLayout{return {...normalizeFreeLayout(value),mode:'windows',flow:false};}

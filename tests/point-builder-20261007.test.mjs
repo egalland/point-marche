@@ -95,7 +95,7 @@ test('V51 édition sur place et menu sans modifier la disposition',()=>{
  const props={data,content:{},actions:{updateFreeLayout:l=>writes.push(l)},editingModule:null,onEdit:id=>edits.push(id)};
  const render=()=>{canvasHooks.cursor=0;return treeNodes(freeCanvas.FreePointCanvas(props));};
  let nodes=render();const before=nodes.find(n=>n.props?.['data-point-module']==='operations').props.style;
- nodes.find(n=>n.props?.['data-point-module']==='operations').props.onClick({target:{closest:()=>null}});
+ nodes.find(n=>n.props?.['data-point-module']==='operations').props.onClick({target:{closest:selector=>selector==='.point-block-inner'?{}:null}});
  assert.deepEqual(edits,['operations']);assert.equal(writes.length,0);nodes=render();assert.deepEqual(nodes.find(n=>n.props?.['data-point-module']==='operations').props.style,before);
  canvasHooks={cursor:0,slots:[]};assert.ok(!treeNodes(freeCanvas.FreePointCanvas({...props,actions:undefined})).some(n=>n.props?.className==='v51-block-tools'));
 });

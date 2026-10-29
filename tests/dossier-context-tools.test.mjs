@@ -15,3 +15,22 @@ test('dossier wheel targets the clicked publication, supports ordering and creat
 test('module wheel actions match their content and layout actions remain available separately',()=>{const data=initialData();data.meetingDate='2026-10-27';for(const id of data.preferences.moduleOrder)data.preferences.readModules[id]=true;const edits=[],months=[];let promotions=0,jira=0;const render=harness(FreePointCanvas,{data,content:{},editingModule:null,onEdit:id=>edits.push(id),actions:{updateFreeLayout(){},addOperation:m=>months.push(m),addPromotion:()=>promotions++,addJira:()=>jira++}});let w=context(render,'operations');run(w,'Ajouter une simulation');assert.deepEqual(months,['Octobre 2026']);assert.equal(edits.at(-1),'operations');assert.ok(!w.tools.some(t=>t.label==='Ajouter un dossier'));w=context(render,'promotions');run(w,'Ajouter une promotion');assert.equal(promotions,1);assert.equal(edits.at(-1),'promotions');w=context(render,'jira');assert.equal(w.tools.find(t=>t.label==='Ajouter un ticket').disabled,true);data.jiraMode='manual';run(context(render,'jira'),'Ajouter un ticket');assert.equal(jira,1);w=context(render,'purchaseData');run(w,'Période et spécialités');assert.equal(edits.at(-1),'purchaseData');w=context(render,'comparison');assert.ok(!w.tools.some(t=>t.icon==='edit'));run(w,'Disposition du bloc');w=wheel(render());assert.equal(w.title,'Disposition');assert.ok(w.tools.some(t=>t.label==='Titre et taille'));run(w,'Actions du bloc');assert.notEqual(wheel(render()).title,'Disposition');});
 
 test('wheel ignores layout scroll events and dismisses on user scroll, outside click and Escape',()=>{const originalDocument=globalThis.document,originalWindow=globalThis.window;delete globalThis.document;const render=harness(PointToolWheel,{x:200,y:200,title:'Dossier',tools:[],onClose(){closed++;}});let closed=0;render();const events=new Map();const target={addEventListener:(name,fn)=>events.set(name,fn),removeEventListener:name=>events.delete(name)};globalThis.document={...target,activeElement:null};globalThis.window=target;try{const cleanup=state.effects[0]();assert.ok(!events.has('scroll'));events.get('wheel')();events.get('touchmove')();events.get('pointerdown')({target:{}});events.get('keydown')({key:'Escape',preventDefault(){},stopPropagation(){}});assert.equal(closed,4);cleanup();assert.equal(events.size,0);}finally{if(originalDocument===undefined)delete globalThis.document;else globalThis.document=originalDocument;if(originalWindow===undefined)delete globalThis.window;else globalThis.window=originalWindow;}});
+
+test('V111 splitting two windows persists equal rectangles without changing dossier content',()=>{
+ const data=initialData();data.dossiers=[row('kept')];const writes=[];
+ const props={data,content:{},editingModule:null,onEdit(){},actions:{updateFreeLayout:layout=>writes.push(layout)}};
+ const render=harness(FreePointCanvas,props);
+ render().find(n=>n.type==='button'&&n.props['aria-label']==='Répartir Dossiers').props.onClick();
+ const panel=render().find(n=>n.type?.name==='BlockSnapLayouts');assert.ok(panel);
+ panel.props.onSplit('jira','columns',false);
+ const saved=writes.at(-1);assert.equal(saved.blocks.dossiers.width,saved.blocks.jira.width);assert.equal(saved.blocks.dossiers.height,saved.blocks.jira.height);assert.equal(saved.blocks.dossiers.y,saved.blocks.jira.y);assert.equal(saved.mode,'windows');assert.equal(saved.flow,false);assert.equal(data.dossiers[0].id,'kept');
+});
+
+test('V111 inline editing can temporarily expand a window and restores its saved placement when finished',()=>{
+ const data=initialData(),writes=[];const props={data,content:{},editingModule:'dossiers',onEdit(){},actions:{updateFreeLayout:layout=>writes.push(layout)}};
+ const render=harness(FreePointCanvas,props),start=render().find(n=>n.props['data-point-module']==='dossiers').props.style;
+ render().find(n=>n.type?.name==='PointBlockBody'&&n.props.title==='Dossiers').props.onGrow(1800);
+ assert.equal(render().find(n=>n.props['data-point-module']==='dossiers').props.style.height,1800);
+ props.editingModule=null;
+ assert.deepEqual(render().find(n=>n.props['data-point-module']==='dossiers').props.style,start);assert.equal(writes.length,0);
+});

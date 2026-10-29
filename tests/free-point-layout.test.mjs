@@ -73,3 +73,13 @@ test('V110 compaction removes only vertical gaps, preserving columns, widths, he
  assert.deepEqual(compactPresentationBlocks(Object.keys(result),result),result);
  assert.deepEqual(compactPresentationBlocks([],{}),{});
 });
+
+test('V111 Windows pair layouts split equally, can reverse, and leave unrelated rectangles intact',async()=>{
+ const {splitBlockPair}=await load('lib/free-point-layout.ts');
+ const source={a:{x:24,y:150,width:576,height:300},b:{x:0,y:800,width:1200,height:500},c:{x:900,y:1500,width:240,height:144}},before=structuredClone(source);
+ const columns=splitBlockPair(source,'a','b');assert.equal(columns.a.width,columns.b.width);assert.equal(columns.a.y,columns.b.y);assert.equal(columns.a.height,columns.b.height);assert.equal(columns.b.x+columns.b.width,1200);assert.ok(columns.a.x+columns.a.width<columns.b.x);assert.deepEqual(columns.c,source.c);
+ const reversed=splitBlockPair(source,'a','b','columns',true);assert.deepEqual(reversed.a,columns.b);assert.deepEqual(reversed.b,columns.a);
+ const rows=splitBlockPair(source,'a','b','rows');assert.equal(rows.a.width,1200);assert.equal(rows.a.height,rows.b.height);assert.equal(rows.b.y,rows.a.y+rows.a.height+16);
+ const wide=splitBlockPair(source,'a','b','wide-left');assert.ok(Math.abs(wide.a.width-wide.b.width*2)<=1);
+ assert.deepEqual(splitBlockPair(source,'a','missing'),source);assert.deepEqual(splitBlockPair(source,'a','a'),source);assert.deepEqual(source,before);
+});
