@@ -18,6 +18,11 @@ if [[ ! -x "${vinext}" ]]; then
   exit 69
 fi
 
+# Vinext may retain deleted public files between builds. Start with clean output.
+# This is generated output only; source data and local workspaces live elsewhere.
+[[ -n "${SITES_PROJECT_ROOT:-}" && "${SITES_PROJECT_ROOT}" != "/" ]] || exit 69
+rm -rf -- "${SITES_PROJECT_ROOT}/dist"
+
 echo "Running bounded vinext build..."
 timeout \
   --signal=TERM \

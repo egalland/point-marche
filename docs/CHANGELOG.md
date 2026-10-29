@@ -1,3 +1,7 @@
+## V131 — 29 octobre 2026
+
+- Compilation depuis un dossier de sortie propre : les anciens fichiers supprimés du projet ne restent plus dans la distribution.
+
 ## V130 — 29 octobre 2026
 
 - Page Jira dédiée dans le menu latéral : tout le registre, personnes, catégories, comparaisons, stock historique et frise.
