@@ -21,10 +21,11 @@ function fixture(t, legacyPolicy) {
   const env = {DB,MARKET_PULSE_USERNAME:'existing-account',ASSETS:{fetch:async()=>new Response('Not found',{status:404})}};
   const ctx = {waitUntil(){},passThroughOnException(){}};
   t.after(()=>sqlite.close());
-  return async (path, method='GET', body, cookie='', usercode='A0000001', view='') => {
+  const request=async (path, method='GET', body, cookie='', usercode='A0000001', view='') => {
     const response=await worker.fetch(new Request('https://test.invalid'+path,{method,headers:{'content-type':'application/json','X-Market-USERCODE':usercode,'X-Market-View':view,...(cookie?{cookie}:{})},...(body?{body:JSON.stringify(body)}:{})}),env,ctx);
     return {status:response.status,body:await response.json()};
   };
+  request.sqlite=sqlite;return request;
 }
 
 test('built Worker permits shared directory, Planner and validation with a declared USERCODE and without a login cookie',async t=>{
@@ -86,3 +87,16 @@ test('built Worker creates Vente profiles, custom roles and dated multi-market h
  const future=(await request('/api/global-users?date=2026-11-01')).body.users.find(u=>u.id===p.id);assert.equal(future.role,'chef-produit');assert.equal(future.assignments.length,2);assert.deepEqual(future.marketIds,[second]);
  const unchanged=await request('/api/global-users?date=2026-10-01');assert.deepEqual(unchanged.body.users.find(u=>u.id===p.id).marketIds,['shared-test',second]);
 });
+
+ test('built Worker serves Jira analyst comparisons and market weekly completed tickets with read permissions',async t=>{
+ const request=fixture(t),db=request.sqlite;
+ db.exec("INSERT INTO global_users(id,name,email,jira_name,role) VALUES ('analyst-test','Alex test','alex@example.test','A1234567','analyste-tarif-referentiel'); INSERT INTO global_user_markets(id,user_id,market_id) VALUES ('link-test','analyst-test','shared-test'); INSERT INTO jira_import_batches(id,status,completed_at) VALUES ('batch-test','completed','2026-10-29T10:00:00Z')");
+ const insert=db.prepare('INSERT INTO jira_tickets(ticket_key,status,summary,category,subcategory,jira_created_at,assignee_usercode,jira_updated_at,resolution_at) VALUES (?,?,?,?,?,?,?,?,?)');
+ insert.run('TEST-1','Fini','TEST - Terminé','Tarifs','Contrôle','2026-10-23T10:00:00','A1234567','2026-10-28T10:00:00','2026-10-27T10:00:00');
+ insert.run('TEST-2','En cours','TEST - Ouvert','Référentiel','Création article','2026-10-23T10:00:00','B1234567','2026-10-28T10:00:00','');
+ db.exec("INSERT INTO jira_ticket_participants(id,ticket_key,usercode) VALUES ('p-test','TEST-2','A1234567')");
+ const url='/api/analyst-activity?from=2026-10-26&to=2026-10-29&compareFrom=2026-10-19&compareTo=2026-10-22';
+ const result=await request(url);assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(result.body.report.a.total,2);assert.equal(result.body.report.a.completed,1);assert.equal(result.body.report.a.mean,2);assert.equal(result.body.report.b.total,0);
+ assert.equal((await request(url,'GET',undefined,'','U1234567')).status,403);assert.equal((await request('/api/analyst-activity?from=invalid')).status,400);
+ const week=await request('/api/jira-week?marketId=shared-test&year=2026&week=44&date=2026-10-29&preferCentral=1');assert.equal(week.status,200);assert.equal(week.body.snapshot.summary.tickets,1);assert.ok(week.body.snapshot.summary.detailedTickets.some(t=>t.key==='TEST-1'));assert.equal(week.body.snapshot.summary.weeklyCoverage.from,'2026-10-26');
+ });

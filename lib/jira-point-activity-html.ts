@@ -1,0 +1,11 @@
+import {jiraWeeklyActivity,jiraCompletionDate,jiraCategoryGroups,jiraImpactLabels,type JiraWeekCoverage} from './jira-point-activity';
+import type {JiraAlertRule} from './jira-alert-rules';
+import {safeExternalUrl} from './safe-link';
+const esc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+type Ticket={key:string;summary:string;status:string;assignee:string;resolutionAt?:string;lastActivity:string;createdAt?:string;category?:string;subcategory?:string;link:string;count?:number};
+export function jiraPointActivityHtml(tickets:Ticket[],date:string,coverage:JiraWeekCoverage|undefined,known:boolean,rules:JiraAlertRule[]=[]){
+ const a=jiraWeeklyActivity(tickets,coverage?.asOf??date),c=coverage??a.coverage;
+ const weekly=known?`<p><strong>${a.count} ticket(s) terminé(s)</strong> du ${esc(c.from)} au ${esc(c.asOf)} (semaine finissant le ${esc(c.to)}).</p>${c.fallbackCount?`<p>${c.fallbackCount} ticket(s) daté(s) par dernière modification faute de résolution ; exclus des délais moyens.</p>`:''}${c.undatedClosed?`<p>${c.undatedClosed} fermeture(s) sans date, exclue(s) du total hebdomadaire.</p>`:''}<ul>${a.completed.map(t=>`<li>${safeExternalUrl(t.link)?`<a href="${esc(safeExternalUrl(t.link))}">${esc(t.key||'Ticket')}</a>`:esc(t.key||'Synthèse')} - ${esc(t.summary)} · ${esc(t.assignee)} · ${esc(jiraCompletionDate(t)?.date)} (${jiraCompletionDate(t)?.fallback?'modification, résolution absente':'résolution'})</li>`).join('')}</ul>`:'<p>Tickets terminés non enregistrés dans cet instantané. Actualiser explicitement les données Jira du point.</p>';
+ const groups=jiraCategoryGroups(tickets,rules);
+ return `<section><h3>Terminés cette semaine</h3>${weekly}</section><section><h3>Catégories et impact des demandes ouvertes</h3><table style="width:100%;border-collapse:collapse"><thead><tr><th>Catégorie / sous-catégorie</th><th>Tickets</th><th>Impact métier</th><th>Implication / travail attendu</th></tr></thead><tbody>${groups.map(g=>`<tr><td>${esc([g.category,g.subcategory].filter(Boolean).join(' / '))}</td><td>${g.count}</td><td>${esc(jiraImpactLabels[g.impact])}</td><td>${esc(g.implication)||'Non renseignée'}</td></tr>`).join('')}</tbody></table></section>`;
+}

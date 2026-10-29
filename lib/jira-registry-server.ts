@@ -1,3 +1,4 @@
+import {marketJiraSummary} from "./jira-point-activity";
 import {directoryUsersAt} from "./directory-store";
 import { jiraMarketKpis } from "./jira-market-kpis";
 import { selectMarketTickets } from "./jira-market-scope";
@@ -52,7 +53,7 @@ function ticketFromRow(row: JiraTicketRow, participants: JiraParticipant[] = [])
     updatedAt: row.jiraUpdatedAt,
     resolutionAt: row.resolutionAt,
     participants,
-    link: row.link || `https://jira.example.example.net/browse/${row.key}`,
+    link: row.link || `https://jira.example.test/browse/${row.key}`,
   };
 }
 
@@ -118,5 +119,16 @@ export async function loadOpenMarketJiraSummary(marketId: string, reference = ne
   const tickets:JiraDetailedTicket[]=[];
   for await(const rows of ticketPages<JiraTicketRow>(`SELECT ${ticketColumns} FROM jira_tickets t WHERE 1=1`,[]))tickets.push(...rows.map(row=>ticketFromRow(row)));
   const relevant=selectMarketTickets(tickets,market,markets,people).filter(t=>!isAbandonedJiraStatus(t.status));
-  return {...jiraSummaryFromDetailedTickets(relevant.filter(t=>!isClosedJiraStatus(t.status)),"unknown"),resolutionMetrics:jiraMarketKpis(relevant,reference)};
+  return marketJiraSummary(relevant,reference);
+}
+
+/** Page the registry and participants without truncating large imports or N+1 reads. */
+export async function loadJiraAnalyticsTickets(){
+ const result:JiraDetailedTicket[]=[];
+ for await(const rows of ticketPages<JiraTicketRow>(`SELECT ${ticketColumns} FROM jira_tickets t WHERE 1=1`,[]))result.push(...rows.map(r=>ticketFromRow(r)));
+ const byKey=new Map(result.map(t=>[t.key,t]));const db=getRawDb();let after='';
+ for(;;){const page=(await db.prepare('SELECT id,ticket_key,usercode,jira_user_id FROM jira_ticket_participants WHERE id > ? ORDER BY id LIMIT 1000').bind(after).all<{id:string;ticket_key:string;usercode:string;jira_user_id:string}>()).results;
+  for(const p of page)byKey.get(p.ticket_key)?.participants?.push({usercode:p.usercode,jiraUserId:p.jira_user_id});if(page.length<1000)break;after=page[page.length-1].id;
+ }
+ return result;
 }

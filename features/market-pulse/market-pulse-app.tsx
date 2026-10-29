@@ -506,7 +506,7 @@ function MarketPulseWorkspace() {
       const payload = await fetchJiraWeek(currentWeekYear, currentWeek, marketId, true, data.meetingDate);
       if (savedPointRef.current || selection !== archiveRequest.current || context !== comparisonContext.current) return;
       if (!payload.snapshot) throw new Error("Aucun import Jira disponible pour cette semaine. Les données du point sont conservées.");
-      setData((current) => current.jiraMode === "manual" ? current : ({ ...current, jiraResolution: payload.snapshot!.summary.resolutionMetrics, sourceFreshness: { ...current.sourceFreshness, jira: payload.snapshot!.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
+      setData((current) => current.jiraMode === "manual" ? current : ({ ...current, jiraWeekly: payload.snapshot!.summary.weeklyCoverage, jiraResolution: payload.snapshot!.summary.resolutionMetrics, sourceFreshness: { ...current.sourceFreshness, jira: payload.snapshot!.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
       setToast("Registre Jira actualisé. Les corrections du point sont conservées.");
     } catch (error) {
       if (selection === archiveRequest.current && context === comparisonContext.current) setToast(error instanceof Error ? error.message : "Actualisation Jira impossible. Les données sont conservées.");
@@ -532,7 +532,7 @@ function MarketPulseWorkspace() {
       } else if (planner.status === "rejected") errors.push(planner.reason instanceof Error ? planner.reason.message : "Planner indisponible.");
       if (jira.status === "fulfilled" && jira.value) {
         const source = jira.value;
-        if (source.snapshot) setData((current) => current.jiraMode === "manual" ? current : { ...current, jiraResolution: source.snapshot!.summary.resolutionMetrics, sourceFreshness: { ...current.sourceFreshness, jira: source.snapshot!.updatedAt }, jira: jiraTicketsFromSummary(source.snapshot!.summary, source.assignments[marketId] ?? [], marketId, current.jira) });
+        if (source.snapshot) setData((current) => current.jiraMode === "manual" ? current : { ...current, jiraWeekly: source.snapshot!.summary.weeklyCoverage, jiraResolution: source.snapshot!.summary.resolutionMetrics, sourceFreshness: { ...current.sourceFreshness, jira: source.snapshot!.updatedAt }, jira: jiraTicketsFromSummary(source.snapshot!.summary, source.assignments[marketId] ?? [], marketId, current.jira) });
         else errors.push("Aucun import Jira disponible.");
       } else if (jira.status === "rejected") errors.push(jira.reason instanceof Error ? jira.reason.message : "Jira indisponible.");
       setToast(errors.length ? `${errors.join(" ")} Les données concernées sont conservées.` : "Imports actualisés. Les saisies manuelles et corrections du point sont conservées.");
@@ -550,7 +550,7 @@ function MarketPulseWorkspace() {
       if (source === "jira") {
         const payload = await fetchJiraWeek(currentWeekYear, currentWeek, marketId, true, data.meetingDate);
         if (!payload.snapshot) throw new Error("Aucun import Jira disponible. La saisie manuelle est conservée.");
-        if (selection === archiveRequest.current && comparisonContext.current === context) setData((current) => ({ ...current, jiraMode: "automatic", jiraResolution: payload.snapshot!.summary.resolutionMetrics, sourceFreshness: { ...current.sourceFreshness, jira: payload.snapshot!.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
+        if (selection === archiveRequest.current && comparisonContext.current === context) setData((current) => ({ ...current, jiraMode: "automatic", jiraWeekly: payload.snapshot!.summary.weeklyCoverage, jiraResolution: payload.snapshot!.summary.resolutionMetrics, sourceFreshness: { ...current.sourceFreshness, jira: payload.snapshot!.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot!.summary, payload.assignments[marketId] ?? [], marketId, current.jira) }));
       } else {
         if (!plannerReady || (!plannerUpdatedAt && !plannerTasks.length)) throw new Error("Aucun import Planner disponible. La saisie manuelle est conservée.");
         setData((current) => ({ ...current, plannerMode: "automatic", sourceFreshness: { ...current.sourceFreshness, planner: plannerUpdatedAt }, operations: mergePlannerOperations(current.operations, plannerTasksForPoint(plannerTasks, market, current.meetingDate,current.preferences.simulationPeriods), plannerTasks) }));

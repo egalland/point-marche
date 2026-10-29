@@ -28,6 +28,7 @@ export type JiraDetailedTicket = {
   participants?: JiraParticipant[];
 };
 export type JiraSummaryImport = {
+  weeklyCoverage?: import("./jira-point-activity").JiraWeekCoverage;
   resolutionMetrics?: import("./jira-market-kpis").JiraResolutionMetrics;
   personCount: number;
   tickets: number;
@@ -144,24 +145,29 @@ function jiraDate(value: string) {
   return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${hour.padStart(2, "0")}:${minute}:00`;
 }
 
-function detailedTicket(cells: string[]): JiraDetailedTicket | null {
+function detailedTicket(cells: string[], headers:string[] = []): JiraDetailedTicket | null {
   const clean = cells.map((cell) => plainCell(cell));
   const keyIndex = clean.findIndex((cell) => /^[A-Z][A-Z0-9]+-\d+$/i.test(cell));
   if (keyIndex < 0) return null;
   const usercodeIndex = clean.findIndex((cell, index) => index > keyIndex && /^[A-Z]\d{7}$/i.test(cell));
   const dateIndexes = clean.map((cell, index) => jiraDate(cell) ? index : -1).filter((index) => index > keyIndex);
   if (usercodeIndex < 0 || dateIndexes.length < 2) return null;
-  const createdIndex = dateIndexes[0];
-  const updatedIndex = dateIndexes[dateIndexes.length - 1];
+  const headerIndex=(pattern:RegExp)=>headers.findIndex(h=>pattern.test(h));
+  const hc=headerIndex(/^(creation|date de creation|created)$/),hu=headerIndex(/^(mise a jour|date de mise a jour|updated)$/);
+  const createdIndex = hc>=0?hc:dateIndexes[0];
+  const updatedIndex = hu>=0?hu:dateIndexes[dateIndexes.length - 1];
   const internalIdIndex = clean.findIndex((cell, index) => index > keyIndex && index < createdIndex && /^\d{5,}$/.test(cell));
-  const statusIndex = clean.findIndex((cell, index) => index > (internalIdIndex >= 0 ? internalIdIndex : keyIndex) && index < createdIndex && Boolean(canonicalHeaderStatus(cell)));
+  const statusIndex = clean.findIndex((cell, index) => index > (internalIdIndex >= 0 ? internalIdIndex : keyIndex) && index < createdIndex && Boolean(canonicalHeaderStatus(cell)) || (index > (internalIdIndex >= 0 ? internalIdIndex : keyIndex) && index < createdIndex && isClosedJiraStatus(cell)));
   if (statusIndex < 0) return null;
   const key = clean[keyIndex].toUpperCase();
   return {
     key,
     internalId: internalIdIndex >= 0 ? clean[internalIdIndex] : "",
     status: canonicalJiraStatus(clean[statusIndex]),
-    summary: clean.slice(statusIndex + 1, createdIndex).filter(Boolean).join(" "),
+    summary: headerIndex(/^(resume|summary)$/)>=0?clean[headerIndex(/^(resume|summary)$/)]:clean.slice(statusIndex + 1, createdIndex).filter(Boolean).join(" "),
+    category: clean[headerIndex(/^(?:(?:champs? personnalises?|custom field) )?(categorie|category)$/)]??"",
+    subcategory: clean[headerIndex(/^(?:(?:champs? personnalises?|custom field) )?(sous categorie|subcategory|sub category)$/)]??"",
+    resolutionAt: jiraDate(clean[headerIndex(/^(resolution|date de resolution|resolved)$/)]??""),
     createdAt: jiraDate(clean[createdIndex]),
     assigneeUserCode: clean[usercodeIndex].toUpperCase(),
     updatedAt: jiraDate(clean[updatedIndex]),
@@ -243,7 +249,8 @@ export function jiraSummaryFromDetailedTickets(detailedTickets: JiraDetailedTick
 export function parseJiraAssigneeSummary(text: string): JiraSummaryImport {
   const repairedText = repairJiraText(text).replace(/\u00a0/g, " ");
   const rows = repairedText.split(/\r?\n/).map((line) => splitRow(line)).filter((cells) => cells.length > 1);
-  const detailedTickets = rows.map((cells) => detailedTicket(cells)).filter((ticket): ticket is JiraDetailedTicket => Boolean(ticket));
+  const headers=rows.find(cells=>cells.some(c=>/^(cle de ticket|ticket key|issue key|key)$/.test(normalized(c))))?.map(normalized)??[];
+  const detailedTickets = rows.map((cells) => detailedTicket(cells,headers)).filter((ticket): ticket is JiraDetailedTicket => Boolean(ticket));
   if (detailedTickets.length) return jiraSummaryFromDetailedTickets(detailedTickets, detectedFormat(repairedText));
   const people = legacySummary(rows);
   return {

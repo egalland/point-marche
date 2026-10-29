@@ -1,5 +1,11 @@
 # Historique des versions
 
+## V126 · 2026-10-29
+
+- Jira du point marché : terminés de la semaine et détails, sans augmenter le stock ouvert ; résolution prioritaire, modification identifiée si la résolution manque.
+- Catégories et sous-catégories : filtres, volumes, impact métier et implication qualifiés dans les règles du point ; exports HTML et mail enrichis.
+- Activité analystes : onglet Jira, comparaison A/B, KPI et délais ouvrés, camemberts catégorie/sous-catégorie/statut/analyste, filtres et tableau triable paginé.
+
 ## V125 · 2026-10-29
 
 - Fiche technique V124 téléchargeable depuis Affichage et compte sur le site.

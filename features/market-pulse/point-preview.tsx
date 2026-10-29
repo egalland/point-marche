@@ -1,4 +1,6 @@
 "use client";
+import {JiraWeeklyCompleted,JiraCategorySummary} from "./jira-point-activity";
+
 import {SimulationCompactCard} from "./simulation-compact-card";
 import {normalizeSimulationPresentation,simulationMetricLabels,type SimulationPresentation,type SimulationMetric} from "@/lib/simulation-presentation";
 import {SimulationAverageCards,SimulationHistoryMini} from "./simulation-point-metrics";
@@ -42,7 +44,7 @@ export function JiraVolumePulse({ data, archive, market }: { data: PointData; ar
 
 function JiraReadTicket({ item, data, market, editing = false, onUpdate, onReset }: { item: JiraTicket; data: PointData; market: Market; editing?: boolean; onUpdate?: (id: string, patch: Partial<JiraPointFields>) => void; onReset?: (id: string) => void }) {
   const signal = jiraAttention(item, data.meetingDate, market, data.jiraAlertRules);
-  const content = <><span>{item.key || "Synthèse"}</span><div><strong>{item.summary || "Synthèse de la file Jira"}</strong><small>{[item.category, item.subcategory].filter(Boolean).join(" / ")}{item.category || item.subcategory ? " · " : ""}{jiraRuleFor(item, data.jiraAlertRules ?? [])?.priority === "high" ? "Prioritaire · " : ""}{item.status} · {signal.inactivity === null ? "activité non datée" : signal.inactivity === 0 ? "mise à jour aujourd’hui" : `dernière modification il y a ${signal.inactivity} j`}</small></div><b>{jiraItemCount(item) > 1 ? jiraItemCount(item) : signal.level === "critical" ? `Critique · ${signal.inactivity} j` : signal.level === "warning" ? `À surveiller · ${signal.inactivity} j` : "À jour"}</b></>;
+  const content = <><span>{item.key || "Synthèse"}</span><div><strong>{item.summary || "Synthèse de la file Jira"}</strong><small>{[item.category, item.subcategory].filter(Boolean).join(" / ")}{item.category || item.subcategory ? " · " : ""}{jiraRuleFor(item, data.jiraAlertRules ?? [])?.priority === "high" ? "Prioritaire · " : ""}{jiraRuleFor(item,data.jiraAlertRules??[])?.implication ? `${jiraRuleFor(item,data.jiraAlertRules??[])?.implication} · ` : ""}{item.status} · {signal.inactivity === null ? "activité non datée" : signal.inactivity === 0 ? "mise à jour aujourd’hui" : `dernière modification il y a ${signal.inactivity} j`}</small></div><b>{jiraItemCount(item) > 1 ? jiraItemCount(item) : signal.level === "critical" ? `Critique · ${signal.inactivity} j` : signal.level === "warning" ? `À surveiller · ${signal.inactivity} j` : "À jour"}</b></>;
   const className = `jira-read-ticket ${signal.level}`;
   if (editing && onUpdate) return <div className={`${className} canvas-jira-edit`}>
     <span>{item.key || "Synthèse"}</span>
@@ -60,12 +62,13 @@ function JiraCommandCenter({ data, archive, market, editing = false, onUpdate, o
   const stats = useMemo(() => jiraDashboardStats(data, market, archive), [archive, data, market]);
   const [scope, setScope] = useState<JiraDashboardScope>("all");
   const [status, setStatus] = useState("all");
+  const [category,setCategory]=useState("all");
   const [subcategory, setSubcategory] = useState("all");
   const [expandedPerson, setExpandedPerson] = useState("");
   const attentionRank: Record<JiraAttentionLevel, number> = { critical: 0, warning: 1, undated: 2, fresh: 3 };
   const filteredRows = stats.rows.filter((row) => {
     const scopeMatches = scope === "all" || (scope === "attention" ? row.level === "warning" || row.level === "critical" : row.level === "critical");
-    return scopeMatches && (status === "all" || row.item.status === status) && (subcategory === "all" || row.item.subcategory === subcategory);
+    return scopeMatches && (category === "all" || (row.item.category||"Non renseignée") === category) && (status === "all" || row.item.status === status) && (subcategory === "all" || row.item.subcategory === subcategory);
   }).sort((left, right) => Number(jiraRuleFor(right.item, data.jiraAlertRules ?? [])?.priority === "high") - Number(jiraRuleFor(left.item, data.jiraAlertRules ?? [])?.priority === "high") || attentionRank[left.level] - attentionRank[right.level] || (right.inactivity ?? -1) - (left.inactivity ?? -1) || left.item.key.localeCompare(right.item.key, "fr", { numeric: true }));
   const people = groupJiraPeople(filteredRows.map((row) => row.item)).sort((left, right) => {
     const strongest = (person: JiraPersonGroup) => Math.min(...person.items.map((item) => attentionRank[jiraAttention(item, data.meetingDate, market, data.jiraAlertRules).level]));
@@ -73,23 +76,23 @@ function JiraCommandCenter({ data, archive, market, editing = false, onUpdate, o
   });
   const filteredVolume = filteredRows.reduce((sum, row) => sum + jiraItemCount(row.item), 0);
   const maxVolume = Math.max(1, ...stats.points.map((point) => point.value));
-  const activeFilter = scope !== "all" || status !== "all" || subcategory !== "all";
+  const activeFilter = scope !== "all" || status !== "all" || category !== "all" || subcategory !== "all";
   const scopeLabel = scope === "attention" ? "sans activité" : scope === "critical" ? "critiques" : "tous les tickets";
   return <section className="jira-command-center" aria-labelledby="jira-command-title">
     <header className="jira-command-header"><div><span>Radar Jira</span><h2 id="jira-command-title">Tickets · {market.name}</h2><p>Spécialités {marketSpecialties(market).join(" / ") || market.name} · tous les rôles. Les tickets sans spécialité reconnue sont rattachés par l’annuaire du marché. Le marché se choisit dans la barre supérieure.</p></div><div className="jira-command-delta"><small>Depuis le dernier point</small><strong>{stats.delta === null ? "—" : `${stats.delta > 0 ? "+" : ""}${stats.delta}`}</strong><span>{stats.delta === null ? "Première mesure" : stats.delta === 0 ? "Volume stable" : "Évolution du stock"}</span></div></header>
     {editing && onRules && <JiraRulesEditor rules={data.jiraAlertRules ?? []} tickets={data.jira} onChange={onRules}/>}
-    <label className="jira-subcategory-filter">Sous-catégorie<select value={subcategory} onChange={(e) => setSubcategory(e.target.value)}><option value="all">Toutes les sous-catégories</option>{[...new Set(data.jira.map((t) => t.subcategory).filter(Boolean))].map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
+    <label className="jira-subcategory-filter">Catégorie<select value={category} onChange={e=>{setCategory(e.target.value);setSubcategory("all");}}><option value="all">Toutes les catégories</option>{[...new Set(data.jira.map(t=>t.category||"Non renseignée"))].sort().map(c=><option key={c}>{c}</option>)}</select></label><label className="jira-subcategory-filter">Sous-catégorie<select value={subcategory} onChange={(e) => setSubcategory(e.target.value)}><option value="all">Toutes les sous-catégories</option>{[...new Set(data.jira.map((t) => t.subcategory).filter(Boolean))].map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
     <div className="jira-command-kpis" role="group" aria-label="Filtres d’attention Jira">
       <button type="button" className={scope === "all" ? "active" : ""} aria-pressed={scope === "all"} onClick={() => setScope("all")}><span>Tickets ouverts</span><strong>{stats.currentVolume}</strong><small>Stock actuel du marché</small><i className="tone-aqua"/></button>
       <button type="button" className={scope === "attention" ? "active warning" : "warning"} aria-pressed={scope === "attention"} onClick={() => setScope("attention")}><span>Sans activité</span><strong>{stats.attentionCount}</strong><small>Seuils du marché ou de la catégorie</small><i className="tone-peach"/></button>
       <button type="button" className={scope === "critical" ? "active critical" : "critical"} aria-pressed={scope === "critical"} onClick={() => setScope("critical")}><span>Attention forte</span><strong>{stats.criticalCount}</strong><small>Seuils du marché ou de la catégorie</small><i className="tone-red"/></button>
     </div>
-    <JiraResolutionKpis tickets={data.jira} date={data.meetingDate} snapshot={data.jiraMode === "automatic" ? data.jiraResolution : undefined}/>
+    <JiraWeeklyCompleted data={data}/><JiraCategorySummary data={data}/><JiraResolutionKpis tickets={data.jira} date={data.meetingDate} snapshot={data.jiraMode === "automatic" ? data.jiraResolution : undefined}/>
     <div className="jira-command-visuals">
       <article className="jira-trend-panel"><div><span>Évolution du volume</span><strong>Quatre derniers points</strong></div><div className="jira-trend-columns" aria-label="Historique du volume Jira">{stats.points.map((point, index) => <div key={`${point.label}-${index}`} className={index === stats.points.length - 1 ? "current" : ""}><b>{point.value}</b><span><i style={{ height: `${Math.max(7, (point.value / maxVolume) * 100)}%` }}/></span><small>{point.label}</small></div>)}</div></article>
       <article className="jira-status-panel"><div><span>Répartition</span><strong>Filtrer par statut</strong></div><div className="jira-interactive-bar">{stats.statusTotals.length ? stats.statusTotals.map((item, index) => <button key={item.status} type="button" className={`segment-${index % 6} ${status === item.status ? "active" : ""}`} style={{ width: `${(item.value / Math.max(1, stats.currentVolume)) * 100}%` }} aria-label={`${item.status} : ${item.value}`} aria-pressed={status === item.status} onClick={() => setStatus((current) => current === item.status ? "all" : item.status)}/>) : <i/>}</div><div className="jira-status-buttons"><button type="button" className={status === "all" ? "active" : ""} onClick={() => setStatus("all")}>Tous</button>{stats.statusTotals.map((item, index) => <button key={item.status} type="button" className={status === item.status ? "active" : ""} onClick={() => setStatus((current) => current === item.status ? "all" : item.status)}><i className={`segment-${index % 6}`}/>{item.status}<b>{item.value}</b></button>)}</div></article>
     </div>
-    <div className="jira-command-filter"><div><Icon name="filter" size={15}/><span><strong>{filteredVolume}</strong> ticket{filteredVolume > 1 ? "s" : ""} · {scopeLabel}{status !== "all" ? ` · ${status}` : ""}</span></div>{activeFilter && <button type="button" onClick={() => { setScope("all"); setStatus("all"); setSubcategory("all"); }}>Réinitialiser</button>}</div>
+    <div className="jira-command-filter"><div><Icon name="filter" size={15}/><span><strong>{filteredVolume}</strong> ticket{filteredVolume > 1 ? "s" : ""} · {scopeLabel}{status !== "all" ? ` · ${status}` : ""}</span></div>{activeFilter && <button type="button" onClick={() => { setScope("all"); setStatus("all"); setCategory("all"); setSubcategory("all"); }}>Réinitialiser</button>}</div>
     {people.length ? <div className="jira-command-people">{people.map((person) => {
       const open = expandedPerson === person.assignee;
       const attention = stats.rows.filter((row) => (row.item.assignee.trim() || "Non assigné") === person.assignee && (row.level === "warning" || row.level === "critical")).reduce((sum, row) => sum + jiraItemCount(row.item), 0);

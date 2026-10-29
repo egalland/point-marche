@@ -1,3 +1,5 @@
+import {parseJiraStatsQuery,buildAnalystJiraStats} from "../lib/analyst-jira-stats";
+import {marketJiraSummary} from "../lib/jira-point-activity";
 import {builtinJobRoles,directoryPersonAt,validateAssignments,legacyAssignment,parseJobRole,type JobRole} from "../lib/directory-profiles";
 import { jiraMarketKpis } from "../lib/jira-market-kpis";
 import { selectMarketTickets } from "../lib/jira-market-scope";
@@ -298,9 +300,10 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
         const names = new Map(people.filter((person) => person.marketIds.includes(marketId)).map((person) => [person.usercode.toUpperCase(), person.name]));
         const market = data.markets.find(m=>m.id===marketId);
         const tickets = market ? selectMarketTickets(data.jiraTickets,market,data.markets,names).filter(t=>!isAbandonedJiraStatus(t.status)) : [];
-        return json({ snapshot: { year, week, rawText: "", summary: {...jiraSummaryFromDetailedTickets(tickets.filter(t=>!isClosedJiraStatus(t.status)), "unknown"), resolutionMetrics:jiraMarketKpis(tickets, isIsoDate(url.searchParams.get("date")??"") ? url.searchParams.get("date")! : isoWeekRange(year,week).to)}, updatedAt: data.jiraUpdatedAt, source: "central" }, assignments });
+        return json({ snapshot: { year, week, rawText: "", summary: marketJiraSummary(tickets,isIsoDate(url.searchParams.get("date")??"")?url.searchParams.get("date")!:isoWeekRange(year,week).to), updatedAt: data.jiraUpdatedAt, source: "central" }, assignments });
       }
 
+      if(path === "/api/analyst-activity" && method === "GET"){ const q=parseJiraStatsQuery(url); return json({report:buildAnalystJiraStats(data.jiraTickets,data.users,data.markets,q),updatedAt:data.jiraUpdatedAt,hasSource:!!data.jiraUpdatedAt||data.jiraTickets.length>0}); }
       if (path === "/api/analyst-jira" && method === "GET") {
         const analystId = url.searchParams.get("analystId") ?? "";
         const person = data.users.find((user) => user.id === analystId && (user.role === "analyste-tarif-referentiel"||Boolean(user.assignments?.some(a=>a.role==="analyste-tarif-referentiel"))));

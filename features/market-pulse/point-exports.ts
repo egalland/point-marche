@@ -1,3 +1,4 @@
+import {jiraPointActivityHtml} from "../../lib/jira-point-activity-html";
 import {latestSupplierVariations} from "@/lib/supplier-variations";
 import {supplierMiniTrend} from "@/lib/supplier-mini-trend";
 import {normalizeSimulationPresentation,simulationAveragesHtml} from "@/lib/simulation-presentation";
@@ -44,7 +45,7 @@ export function buildMailHtml(data: PointData, market: Market, archive: PointRec
     purchaseData: section("Suivi PURCHASES", purchaseDataPointExport(data.purchaseDataConfigs, data.meetingDate)),
     simulationComparison: section("Comparatif des simulations", comparisonHtml(data.simulationComparisonSnapshot)),
     comparison: section("Comparaison des marchés", marketComparisonHtml(data.marketComparison, data.marketComparison ? comparisonPng(data.marketComparison.rows) : undefined)),
-    jira: section(data.jiraMode === "manual" ? "Tickets Jira · saisie manuelle" : "Tickets Jira · alertes prioritaires", `${jiraKpis}${resolutionKpiHtml(data.jira,data.meetingDate,data.jiraMode === "automatic" ? data.jiraResolution : undefined)}<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${jiraRows || '<tr><td style="padding:13px 10px;color:#71817D;font-size:13px">Aucun ticket actif.</td></tr>'}</table>`),
+    jira: section(data.jiraMode === "manual" ? "Tickets Jira · saisie manuelle" : "Tickets Jira · alertes prioritaires", `${jiraKpis}${jiraPointActivityHtml(data.jira,data.meetingDate,data.jiraWeekly,!!data.jiraWeekly||data.jiraMode=== "manual",data.jiraAlertRules)}${resolutionKpiHtml(data.jira,data.meetingDate,data.jiraMode === "automatic" ? data.jiraResolution : undefined)}<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${jiraRows || '<tr><td style="padding:13px 10px;color:#71817D;font-size:13px">Aucun ticket actif.</td></tr>'}</table>`),
     dossiers: section("Dossiers en cours", dossierRows ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${dossierRows}</table>` : emptyRow),
     operations: section(data.plannerMode === "manual" ? "Simulations · saisie manuelle" : "Simulations", operationRows ? simulationGroupsExport(data,true) : emptyRow),
     promotions: section("Promotions", promotionRows ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${promotionRows}</table>` : emptyRow),
@@ -132,7 +133,7 @@ function buildFreeExport(data:PointData,modules:Record<PointModule,boolean>,sect
 
 function jiraSummaryExport(data:PointData,market:Market,archive:PointRecord[]){
  const stats=jiraDashboardStats(data,market,archive),known=data.jiraMode==='manual'||!!data.sourceFreshness?.jira||data.jira.length>0;
- return `<section class="jira-point-summary"><p>${escapeHtml(market.name)} · ${stats.delta===null?'Premier point':`${stats.delta>0?'+':''}${stats.delta} ticket(s) depuis le point précédent`}</p><div class="jira-summary-counts">${[[stats.currentVolume,'Tickets ouverts'],[stats.attentionCount,'À surveiller'],[stats.criticalCount,'Critiques']].map(([value,label])=>`<article><span>${label}</span><strong>${known?value:'—'}</strong></article>`).join('')}</div>${resolutionKpiHtml(data.jira,data.meetingDate,data.jiraMode==='automatic'?data.jiraResolution:undefined)}</section>`;
+ return `<section class="jira-point-summary"><p>${escapeHtml(market.name)} · ${stats.delta===null?'Premier point':`${stats.delta>0?'+':''}${stats.delta} ticket(s) depuis le point précédent`}</p><div class="jira-summary-counts">${[[stats.currentVolume,'Tickets ouverts'],[stats.attentionCount,'À surveiller'],[stats.criticalCount,'Critiques']].map(([value,label])=>`<article><span>${label}</span><strong>${known?value:'—'}</strong></article>`).join('')}</div>${jiraPointActivityHtml(data.jira,data.meetingDate,data.jiraWeekly,!!data.jiraWeekly||data.jiraMode==='manual',data.jiraAlertRules)}${resolutionKpiHtml(data.jira,data.meetingDate,data.jiraMode==='automatic'?data.jiraResolution:undefined)}</section>`;
 }
 
 function simulationPeriodData(data:PointData){const periods=data.preferences.simulationPeriods;if(!periods)return data;const labels=periods.map(p=>new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(p+'-01T12:00:00Z')));return {...data,operations:data.operations.filter(op=>periods.includes(op.month)||labels.some(l=>l.toLowerCase()===op.month.toLowerCase()))};}

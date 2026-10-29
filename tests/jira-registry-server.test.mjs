@@ -22,6 +22,7 @@ const activityUrl = moduleUrl("../lib/jira-analyst-activity.ts", { "./iso-week":
 const schemaUrl = moduleUrl("../db/schema.ts", { "drizzle-orm": ormUrl, "drizzle-orm/sqlite-core": import.meta.resolve("drizzle-orm/sqlite-core") });
 const dbUrl = moduleUrl("../db/index.ts", { "drizzle-orm/d1": import.meta.resolve("drizzle-orm/d1"), "./schema": schemaUrl, "../lib/runtime-env": runtimeUrl });
 const registryUrl = moduleUrl("../lib/jira-registry-server.ts", {
+  "./jira-point-activity":sharedModuleUrl("../../lib/jira-point-activity.ts"),
   "./directory-store":sharedModuleUrl("../../lib/directory-store.ts"),
   "./jira-market-scope": moduleUrl("../lib/jira-market-scope.ts"), "./jira-market-kpis": moduleUrl("../lib/jira-market-kpis.ts", {"./iso-week":isoUrl,"./jira-import":jiraUrl}),
   "drizzle-orm": ormUrl, "../db": dbUrl, "../db/schema": schemaUrl,

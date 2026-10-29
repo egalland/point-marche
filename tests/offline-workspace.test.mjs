@@ -140,7 +140,8 @@ test("market Jira includes all market roles and excludes completed rows, retaini
   assert.equal(changed.market.id, "market-local");
   assert.equal(changed.market.jiraCriticalDays, 11);
   const result = await call(api, "/api/jira-week?marketId=market-local&year=2026&week=35");
-  assert.deepEqual(result.snapshot.summary.detailedTickets.map((item) => item.key), ["GLOBAL-1", "GLOBAL-2"]);
+  assert.deepEqual(result.snapshot.summary.detailedTickets.map((item) => item.key), ["GLOBAL-1", "GLOBAL-2", "GLOBAL-3"]);
+  assert.equal(result.snapshot.summary.weeklyCoverage.fallbackCount,1);
   assert.deepEqual(result.assignments["market-local"], ["A1234567", "B1234567"]);
 });
 
@@ -409,3 +410,10 @@ test('local custom roles and multi-market career periods persist, reject stale w
  assert.ok((await call(reopened,'/api/directory-roles',undefined)).roles.some(r=>r.id===role.role.id));
  const future=(await call(reopened,'/api/global-users?date=2026-11-01',undefined)).users.find(u=>u.id===saved.user.id);assert.equal(future.role,'chef-produit');assert.deepEqual(future.marketIds,['second']);assert.equal(future.assignments.length,2);
 });
+
+ test('offline analyst Jira activity applies categories, comparison and role protection',async()=>{
+ const data=fixture();data.jiraTickets=[ticket('TEST-1',{status:'En cours',category:'Tarifs',updatedAt:'2026-10-28T10:00:00'})];const store=new WorkspaceStore(data);const api=createLocalApi(store);
+ const path='/api/analyst-activity?from=2026-10-26&to=2026-10-29&compareFrom=2026-10-19&compareTo=2026-10-22&category=Tarifs';
+ const r=await api(path);assert.equal(r.status,200);const body=await r.json();assert.equal(body.report.a.total,1);assert.equal(body.report.b.total,0);assert.equal(body.report.a.charts.category[0].label,'Tarifs');
+ const denied=await guardedApi(store)(path,{headers:{'X-Market-USERCODE':'U1234567'}});assert.equal(denied.status,403);
+ });

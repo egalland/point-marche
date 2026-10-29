@@ -1,3 +1,4 @@
+import {marketJiraSummary} from "../../../lib/jira-point-activity";
 import {directoryUsersAt} from "../../../lib/directory-store";
 import { selectMarketTickets } from "../../../lib/jira-market-scope";
 import { jiraMarketKpis } from "../../../lib/jira-market-kpis";
@@ -121,7 +122,7 @@ export async function POST(request: Request) {
     const recognizedTickets=selectMarketTickets(parsed.detailedTickets,selectedMarket,markets,new Map(directory.map(p=>[p.usercode.toUpperCase(),p.name])));
     if (!recognizedTickets.length) return Response.json({ error: "Aucun ticket de cet export ne correspond aux spécialités ou à l’annuaire du marché." }, { status: 409 });
     const reference=isoWeekRange(year,week).to;
-    const summary:JiraSummaryImport={...jiraSummaryFromDetailedTickets(recognizedTickets.filter(t=>!isClosedJiraStatus(t.status)),parsed.format),resolutionMetrics:jiraMarketKpis(recognizedTickets,reference)};
+    const summary=marketJiraSummary(recognizedTickets,reference,parsed.format);
 
     const now = sql`CURRENT_TIMESTAMP`;
     await db.insert(jiraMarketWeeklySnapshots).values({

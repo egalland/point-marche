@@ -1,6 +1,7 @@
 /** User-facing notes curated from the saved version history, not raw requests or commit logs. */
 export type ReleaseNote = { version: number; date: string; title: string; changes: string[] };
 export const releaseHistory: ReleaseNote[] = [
+  {version:126,date:"2026-10-29",title:"Activité Jira et catégories",changes:["Tickets terminés dans la semaine rétablis dans le point marché, avec détail des dates utilisées.","Catégories et sous-catégories Jira filtrables ; qualification de l’impact métier et du travail attendu.","Nouvel onglet Jira dans Activité analystes : KPI, comparaison de périodes, quatre camemberts filtrables et tableau triable."]},
   {version:125,date:"2026-10-29",title:"Fiche technique téléchargeable",changes:["Fiche technique V124 disponible en PDF depuis Affichage et compte sur le site."]},
   {version:124,date:"2026-10-29",title:"Profils datés et vigilances PURCHASES",changes:["Plusieurs marchés par personne, rôles métier personnalisables et historique des affectations avec dates de validité.","Création du profil Vente corrigée et USERCODE des signalements lié au compte connecté.","Vigilances PURCHASES configurables et conservées avec les données du point enregistré."]},
   {version:123,date:"2026-10-29",title:"Dossier de projet téléchargeable",changes:["Ajout du dossier de référence V122 au format PDF dans Affichage et compte sur le site."]},

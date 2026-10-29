@@ -1,3 +1,4 @@
+import {normalizeJiraWeekCoverage,type JiraWeekCoverage} from "../../lib/jira-point-activity";
 import {directoryPersonAt,type DirectoryAssignment} from "../../lib/directory-profiles";
 import {normalizeSimulationPresentation,type SimulationPresentation} from "@/lib/simulation-presentation";
 import {normalizePointSummary,type PointSummarySettings} from "@/lib/point-summary-settings";
@@ -43,7 +44,7 @@ export type Tariff = { id: string; code: string; supplier: string; month: string
 export type JiraPointFields = { summary: string; status: string; priority: string; assignee: string; lastActivity: string; comment: string; count?: number };
 export type JiraPointOverride = Partial<JiraPointFields> & { updatedAt?: string };
 export type JiraTicket = { category?: string; subcategory?: string; id: string; key: string; internalId?: string; summary: string; status: string; priority: string; assignee: string; assigneeUserCode?: string; createdAt?: string; resolutionAt?: string; lastActivity: string; link: string; comment: string; count?: number; importedBase?: JiraPointFields; pointOverride?: JiraPointOverride };
-export type PointData = { jiraResolution?: JiraResolutionMetrics; purchaseDataConfigs?: PURCHASESConfig[]; jiraAlertRules?: JiraAlertRule[]; simulationComparisonConfig?: ComparisonConfig; simulationComparisonSnapshot?: ComparisonSnapshot; sourceFreshness?: PointSourceFreshness; pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; promotions: Promotion[]; tariffs: Tariff[]; jira: JiraTicket[]; jiraMode: PointSourceMode; plannerMode: PointSourceMode; marketComparison: MarketComparison | null; preferences: PointPreferences; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
+export type PointData = { jiraWeekly?: JiraWeekCoverage; jiraResolution?: JiraResolutionMetrics; purchaseDataConfigs?: PURCHASESConfig[]; jiraAlertRules?: JiraAlertRule[]; simulationComparisonConfig?: ComparisonConfig; simulationComparisonSnapshot?: ComparisonSnapshot; sourceFreshness?: PointSourceFreshness; pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; promotions: Promotion[]; tariffs: Tariff[]; jira: JiraTicket[]; jiraMode: PointSourceMode; plannerMode: PointSourceMode; marketComparison: MarketComparison | null; preferences: PointPreferences; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
 export type AlertItem = { title: string; detail: string; severity: "warning" | "danger"; targetId?: string; link?: string; category: "Jira" | "Dossier" | "PURCHASES" };
 export type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
 export type Market = { id: string; name: string; short: string; tone: ThemeKey; colorHex: string; plannerTags: string[]; position: number; jiraWarningDays: number; jiraCriticalDays: number };
@@ -185,6 +186,7 @@ export function normalizePointData(value: unknown, marketId: string, marketOverr
     purchaseDataConfigs: Array.isArray(source.purchaseDataConfigs) ? source.purchaseDataConfigs : [],
     pointName: "Point marché",
     jiraResolution: normalizeResolutionMetrics(source.jiraResolution),
+    jiraWeekly: normalizeJiraWeekCoverage(source.jiraWeekly),
     jiraAlertRules: normalizeJiraRules(source.jiraAlertRules),
     simulationComparisonConfig: normalizeComparison(source.simulationComparisonConfig, marketId),
     simulationComparisonSnapshot: normalizeComparisonSnapshot(source.simulationComparisonSnapshot),
@@ -486,7 +488,7 @@ export async function applyJiraWeek(data: PointData, marketId: string, replaceCe
   try {
     const payload = await fetchJiraWeek(isoWeekYear(data.meetingDate), isoWeek(data.meetingDate), marketId, replaceCentral, data.meetingDate);
     if (!payload.snapshot) return data;
-    return { ...data, jiraResolution: payload.snapshot.summary.resolutionMetrics, sourceFreshness: { ...data.sourceFreshness, jira: payload.snapshot.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot.summary, payload.assignments[marketId] ?? [], marketId, data.jira) };
+    return { ...data, jiraWeekly: payload.snapshot.summary.weeklyCoverage, jiraResolution: payload.snapshot.summary.resolutionMetrics, sourceFreshness: { ...data.sourceFreshness, jira: payload.snapshot.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot.summary, payload.assignments[marketId] ?? [], marketId, data.jira) };
   } catch {
     return data;
   }

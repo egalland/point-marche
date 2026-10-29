@@ -80,6 +80,7 @@ test("analyst table pagination does not truncate KPI totals", async () => {
     "@/components/table-pagination": paginationUrl,
     "./planner-import-dialog": sourceUrl("export function PlannerImportDialog(){ return null; }"),
     "./supplier-variation-dashboard": supplierChartUrl,
+    "./analyst-jira-stats": sourceUrl("export function AnalystJiraStatsPanel(){return null;}"),
     "./activity-period-comparison": moduleUrl("../../features/market-pulse/activity-period-comparison.tsx", reactImports),
     "./simulation-comparison": sourceUrl("export function SimulationComparison(){return null;}"),
     "@/lib/simulation-comparison": sourceUrl("export function defaultComparison(){return {metric:\"count\"};}"),

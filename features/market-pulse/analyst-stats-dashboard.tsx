@@ -9,6 +9,7 @@ import type { PlannerSpecialty, PlannerTask } from "@/lib/planner-import";
 import type { PlannerRegistrySummary } from "@/lib/planner-registry";
 import { compareSupplierTurnover, formatSupplierTurnover, supplierTurnoverLabel, supplierTurnoverSource } from "@/lib/supplier-turnover";
 import { PlannerImportDialog } from "./planner-import-dialog";
+import {AnalystJiraStatsPanel} from "./analyst-jira-stats";
 import { ActivityPeriodComparison } from "./activity-period-comparison";
 
 type Props = {
@@ -88,6 +89,7 @@ function delayMovementLabel(summary: PlannerDelaySummary) {
 }
 
 export function AnalystStatsDashboard({ tasks, users, markets, registry, updatedAt, onImport }: Props) {
+  const [activityView,setActivityView]=useState<"planner"|"jira">("planner");
   const analysts = useMemo(() => users.filter(hasAnalystHistory).sort((left, right) => left.name.localeCompare(right.name, "fr")), [users]);
   const initialFrom = useMemo(() => monthsAgo(5), []);
   const initialTo = useMemo(() => today(), []);
@@ -152,25 +154,27 @@ export function AnalystStatsDashboard({ tasks, users, markets, registry, updated
 
   return <main className="analyst-stats-page">
     <header className="stats-hero">
-      <div><span>Activité tarif et référentiel</span><h1>Activité analystes</h1><p>Lecture descriptive des simulations et contrôles identifiés dans l’export Planner, sans objectif individuel.</p></div>
-      <div className="stats-hero-actions"><PlannerImportDialog markets={markets} onImport={onImport}/><div className="stats-freshness"><span>Source actualisée</span><strong>{updatedAt ? new Date(updatedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "Aucun import"}</strong><small>{tasks.length} tâche{tasks.length > 1 ? "s" : ""} Planner disponible{tasks.length > 1 ? "s" : ""}</small></div><small>L’import actualise aussi les simulations du point actif.</small></div>
+      <div><span>Activité tarif et référentiel</span><h1>Activité analystes</h1><p>Lecture des simulations, contrôles et tickets Jira importés, avec filtres et comparatifs.</p></div>
+      {activityView==="planner"&&<div className="stats-hero-actions"><PlannerImportDialog markets={markets} onImport={onImport}/><div className="stats-freshness"><span>Source actualisée</span><strong>{updatedAt ? new Date(updatedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "Aucun import"}</strong><small>{tasks.length} tâche{tasks.length > 1 ? "s" : ""} Planner disponible{tasks.length > 1 ? "s" : ""}</small></div><small>L’import actualise aussi les simulations du point actif.</small></div>}
     </header>
 
+    <div className="activity-view-tabs"><button type="button" aria-pressed={activityView==="planner"} onClick={()=>setActivityView("planner")}>Simulations et contrôles</button><button type="button" aria-pressed={activityView==="jira"} onClick={()=>setActivityView("jira")}>Tickets Jira</button></div>
     <section className="surface stats-filters" aria-label="Filtres des statistiques">
       <div className="stats-period-presets"><span>Période rapide</span><div><button type="button" onClick={() => applyPeriod("previousWeek")}>Semaine dernière</button><button type="button" onClick={() => applyPeriod("cycle20")}>Mois dernier · 20 au 20</button><button type="button" onClick={() => applyPeriod("30d")}>30 jours</button><button type="button" onClick={() => applyPeriod("3m")}>3 mois</button><button type="button" onClick={() => applyPeriod("6m")}>6 mois</button><button type="button" onClick={() => applyPeriod("year")}>Cette année</button></div></div>
       <label><span>Période A · du</span><input type="date" value={from} max={isIsoDate(to) ? to : undefined} onChange={(event) => updateFrom(event.target.value)} onBlur={() => { if (!isIsoDate(from)) setFrom(appliedRange.from); }}/></label>
       <label><span>Au</span><input type="date" value={to} min={isIsoDate(from) ? from : undefined} onChange={(event) => updateTo(event.target.value)} onBlur={() => { if (!isIsoDate(to)) setTo(appliedRange.to); }}/></label>
       <label><span>Marché</span><select value={marketId} onChange={(event) => setMarketId(event.target.value)}><option value="all">Tous les marchés</option>{markets.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}</select></label>
-      <div className="stats-specialty"><span>Spécialité</span><div>{(["all", "simulation", "control"] as const).map((value) => <button type="button" key={value} className={specialty === value ? "active" : ""} onClick={() => setSpecialty(value)}>{value === "all" ? "Tout" : value === "simulation" ? "Simulation" : "Contrôle"}</button>)}</div></div>
-      <div className="stats-analysts"><div><span>Analystes</span><button type="button" onClick={() => setAnalystIds([])}>{analystIds.length ? "Revenir à tous" : "Tous actifs"}</button></div><div>{analysts.map((analyst) => <button type="button" key={analyst.id} className={!analystIds.length || analystIds.includes(analyst.id) ? "active" : ""} onClick={() => selectAnalyst(analyst.id)}>{analyst.name}</button>)}</div></div>
+      {activityView==="planner"&&<div className="stats-specialty"><span>Spécialité</span><div>{(["all", "simulation", "control"] as const).map((value) => <button type="button" key={value} className={specialty === value ? "active" : ""} onClick={() => setSpecialty(value)}>{value === "all" ? "Tout" : value === "simulation" ? "Simulation" : "Contrôle"}</button>)}</div></div>
+      }<div className="stats-analysts"><div><span>Analystes</span><button type="button" onClick={() => setAnalystIds([])}>{analystIds.length ? "Revenir à tous" : "Tous les analystes"}</button></div><div>{analysts.map((analyst) => <button type="button" key={analyst.id} className={!analystIds.length || analystIds.includes(analyst.id) ? "active" : ""} onClick={() => selectAnalyst(analyst.id)}>{analyst.name}</button>)}</div></div>
     </section>
 
     <section className="surface stats-period-comparison" aria-label="Comparaison des périodes">
       <header><strong>Comparer la période A à…</strong><div className="period-comparison-modes">{(["previous", "year", "custom"] as const).map((mode) => <button type="button" key={mode} aria-pressed={comparisonMode === mode} className={comparisonMode === mode ? "active" : ""} onClick={() => setComparisonMode(mode)}>{mode === "previous" ? "La période précédente" : mode === "year" ? "L’année précédente" : "Des dates libres"}</button>)}</div></header>
       {comparisonMode === "custom" && <div className="period-b-fields"><label>Période B · du<input type="date" value={customRange.from} onChange={(e) => setCustomRange({ ...customRange, from: e.target.value })}/></label><label>Au<input type="date" value={customRange.to} onChange={(e) => setCustomRange({ ...customRange, to: e.target.value })}/></label></div>}
-      {comparisonValid ? <ActivityPeriodComparison stats={stats} rangeA={appliedRange} rangeB={comparisonRange}/> : <p role="alert">Choisis une période B complète, avec une fin égale ou postérieure au début.</p>}
+      {comparisonValid && activityView === "planner" ? <ActivityPeriodComparison stats={stats} rangeA={appliedRange} rangeB={comparisonRange}/> : !comparisonValid && <p role="alert">Choisis une période B complète, avec une fin égale ou postérieure au début.</p>}
     </section>
 
+    {activityView==="jira" ? <AnalystJiraStatsPanel rangeA={appliedRange} rangeB={comparisonRange} marketId={marketId} analystIds={analystIds} analysts={analysts}/> : <>
     <section className="stats-kpis" aria-label="Indicateurs principaux">
       <article><span>Activités identifiées</span><strong>{stats.totalActivities}</strong><small>{comparisonValid ? movementLabel(stats.movement) : "Comparaison B indisponible"}</small></article>
       <article><span>Tâches distinctes</span><strong>{stats.distinctTasks}</strong><small>Une tâche n’est comptée qu’une fois</small></article>
@@ -200,5 +204,6 @@ export function AnalystStatsDashboard({ tasks, users, markets, registry, updated
 
     <section className="surface stats-detail"><header><div><span>Détail vérifiable</span><strong>{stats.contributions.length} activité{stats.contributions.length > 1 ? "s" : ""} dans la sélection</strong></div><small>Clique sur un en-tête pour trier.</small></header><div className="data-table-wrap"><table><thead><tr><th aria-sort={detailSort.key === "date" ? detailSort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleDetailSort("date")}>Date{sortMark("date")}</button></th><th aria-sort={detailSort.key === "analyst" ? detailSort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleDetailSort("analyst")}>Analyste{sortMark("analyst")}</button></th><th aria-sort={detailSort.key === "specialty" ? detailSort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleDetailSort("specialty")}>Spécialité{sortMark("specialty")}</button></th><th aria-sort={detailSort.key === "task" ? detailSort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleDetailSort("task")}>Simulation{sortMark("task")}</button></th><th className="supplier-turnover-cell" title={supplierTurnoverSource} aria-sort={detailSort.key === "ca" ? detailSort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleDetailSort("ca")}>{supplierTurnoverLabel}{sortMark("ca")}</button></th><th aria-sort={detailSort.key === "market" ? detailSort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleDetailSort("market")}>Marché{sortMark("market")}</button></th><th aria-sort={detailSort.key === "step" ? detailSort.direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => toggleDetailSort("step")}>Étape{sortMark("step")}</button></th></tr></thead><tbody>{detailPage.rows.map((item, index) => <tr key={`${item.taskId}:${item.specialty}:${item.date}:${index}`}><td>{new Date(`${item.date}T12:00:00`).toLocaleDateString("fr-FR")}</td><td>{item.analystName}</td><td><span className={`stats-kind ${item.specialty}`}>{item.specialty === "simulation" ? "Simulation" : "Contrôle"}</span></td><td><strong>{item.taskName}</strong></td><td className="supplier-turnover-cell" title={supplierTurnoverSource}>{formatSupplierTurnover(item.purchases12m)}</td><td>{item.marketIds.map((id) => markets.find((market) => market.id === id)?.name).filter(Boolean).join(" · ") || item.marketTags.join(" · ") || "Non rattaché"}</td><td>{item.stepLabel || "Étape non renseignée"}</td></tr>)}</tbody></table>{!stats.contributions.length && <div className="table-empty">Aucune activité ne correspond à ces filtres.</div>}</div><TablePagination {...detailPage} label="Pagination des activités analystes"/></section>
 
+    </>}
   </main>;
 }
