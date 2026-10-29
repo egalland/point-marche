@@ -17,3 +17,9 @@ Ouvrir **Paramètres → Bugs et idées**, puis choisir **Bugs** ou **Idées**. 
 Les états affichent un libellé et une pastille : **Nouveau**, **En cours**, **En attente**, **Résolu** ou **Refusé**. Ouvrir une ligne pour lire les détails, télécharger les captures et mettre à jour le statut. L’historique des modifications reste disponible dans la fiche.
 
 Les destinataires sont regroupés sous **Notifications par mail**, dans cet onglet des paramètres.
+
+## Export pour une conversation
+
+Dans la boîte Bugs et idées, **Exporter bugs et idées (.zip)** télécharge toutes les demandes, indépendamment des filtres. Dans une demande ouverte, **Exporter ce ticket pour ChatGPT** exporte uniquement ce ticket.
+
+Le ZIP contient `PROMPT.md` (texte prêt à transmettre), `tickets.json` (champs et historique complets) et `images/` (captures d’origine). Joindre le ZIP à la conversation permet de consulter les textes et les images ensemble. Vérifier son contenu avant partage. L’export ne modifie aucun ticket et n’envoie rien automatiquement. Si un ticket ou une capture ne peut pas être lu, l’export signale l’erreur au lieu de livrer une archive incomplète.

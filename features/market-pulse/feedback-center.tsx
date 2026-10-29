@@ -3,6 +3,7 @@ import { useAccess } from "./access-panel";
 import { useEffect, useRef, useState } from "react";
 import { appFetch } from "@/lib/app-transport";
 import { feedbackMail, validFeedbackRecipients, feedbackStatuses, type FeedbackRequest, type FeedbackSummary, type FeedbackCapture } from "@/lib/feedback";
+import { feedbackExportBytes } from "@/lib/feedback-export";
 import { AppIcon } from "@/components/app-icon";
 import { AppDialog } from "@/components/app-dialog";
 
@@ -49,7 +50,7 @@ export function FeedbackSettings({ contact }: { contact: ReturnType<typeof useFe
   return <section className="surface feedback-settings" aria-labelledby="feedback-settings-title">
     <h2 id="feedback-settings-title">Bugs et idées</h2>
     <p>Destinataires de notification communs aux bugs et aux idées. Sépare les adresses par des points-virgules (10 maximum). Enregistrée automatiquement en quittant le champ, pour toute l’application et tous les marchés.</p>
-    <label className="field"><span>Adresses mail de notification</span><input type="text" inputMode="email" maxLength={2540} placeholder="contact@example.test; suivi@example.test" value={contact.draft} disabled={!contact.ready || contact.saving} onChange={event => contact.setDraft(event.target.value)} onBlur={() => void contact.save()} aria-describedby="feedback-save-status" /></label>
+    <label className="field"><span>Adresses mail de notification</span><input type="text" inputMode="email" maxLength={2540} placeholder="contact@entreprise.fr; suivi@entreprise.fr" value={contact.draft} disabled={!contact.ready || contact.saving} onChange={event => contact.setDraft(event.target.value)} onBlur={() => void contact.save()} aria-describedby="feedback-save-status" /></label>
     <p id="feedback-save-status" role="status">{contact.saving ? "Enregistrement…" : contact.message || (contact.ready ? "La case « Signaler par mail » prépare un mail dans la messagerie par défaut (Outlook si configuré)." : "Chargement…")}</p>
     {!contact.ready && contact.message && <button type="button" className="secondary-button" onClick={() => void contact.load()}>Réessayer</button>}
   </section>;
@@ -142,6 +143,7 @@ export function FeedbackInbox({ onCreate }: { onCreate?: () => void } = {}) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const selection = useRef(0);
   async function load() {
     setLoading(true); setMessage("");
@@ -166,9 +168,36 @@ export function FeedbackInbox({ onCreate }: { onCreate?: () => void } = {}) {
     } catch (error) { setMessage(error instanceof Error ? error.message : "Modification impossible."); }
     finally { setSaving(false); }
   }
+  async function exportTickets(id?: string) {
+    if (exporting) return;
+    setExporting(true); setMessage("Préparation des textes et captures…");
+    try {
+      let ids = id ? [id] : [];
+      if (!id) {
+        const response = await appFetch("/api/feedback", {cache:"no-store"});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Liste des demandes indisponible.");
+        ids = (result.items as FeedbackSummary[]).map(item=>item.id);
+      }
+      if (!ids.length) throw new Error("Aucune demande à exporter.");
+      const tickets: FeedbackRequest[] = [];
+      for (const ticketId of ids) {
+        const response = await appFetch(`/api/feedback?id=${encodeURIComponent(ticketId)}`, {cache:"no-store"});
+        const result = await response.json();
+        if (!response.ok || !result.item) throw new Error(result.error || "Un ticket est indisponible. Réessaie l’export.");
+        tickets.push(result.item);
+      }
+      const bytes = feedbackExportBytes(tickets);
+      const url = URL.createObjectURL(new Blob([bytes], {type:"application/zip"}));
+      const link = document.createElement("a"); link.href=url; link.download=`Market_Plus_${id?"ticket-"+id.slice(0,8):"bugs-idees"}_${new Date().toISOString().slice(0,10)}.zip`;
+      document.body.append(link); link.click(); link.remove(); window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+      setMessage(`${tickets.length} demande(s) exportée(s), avec textes, historique et captures. Joins le ZIP à ta conversation.`);
+    } catch(error) {setMessage(error instanceof Error?error.message:"Export impossible. Les demandes sont conservées.");}
+    finally {setExporting(false);}
+  }
   const filtered = items.filter(item => (!status || item.status === status) && (!kind || item.kind === kind) && `${item.title} ${item.reporterUserCode} ${item.context} ${item.id}`.toLocaleLowerCase("fr").includes(query.toLocaleLowerCase("fr")));
   return <section className="surface feedback-inbox" aria-labelledby="feedback-inbox-title">
-    <header><div><h2 id="feedback-inbox-title">Bugs et idées</h2><p>{items.filter(item => !["Résolu", "Refusé"].includes(item.status)).length} demande(s) à suivre</p></div><div className="feedback-actions">{onCreate && <button type="button" className="primary-button" onClick={onCreate}>Nouvelle demande</button>}<button type="button" className="secondary-button" onClick={() => void load()} disabled={loading}>Actualiser</button></div></header>
+    <header><div><h2 id="feedback-inbox-title">Bugs et idées</h2><p>{items.filter(item => !["Résolu", "Refusé"].includes(item.status)).length} demande(s) à suivre</p></div><div className="feedback-actions"><button type="button" className="secondary-button" onClick={()=>void exportTickets()} disabled={loading || exporting}><AppIcon name="download"/>{exporting?"Export en cours…":"Exporter bugs et idées (.zip)"}</button>{onCreate && <button type="button" className="primary-button" onClick={onCreate}>Nouvelle demande</button>}<button type="button" className="secondary-button" onClick={() => void load()} disabled={loading}>Actualiser</button></div></header>
     <div className="feedback-kind-tabs" role="group" aria-label="Type de demandes">{(["bug", "idea"] as const).map(value => <button type="button" key={value} aria-pressed={kind === value} onClick={() => setKind(value)}><AppIcon name={value === "bug" ? "bug" : "idea"}/>{value === "bug" ? "Bugs" : "Idées"}<span>{items.filter(item => item.kind === value).length}</span></button>)}</div>
     <div className="feedback-filters"><label className="field"><span>Rechercher une demande / USERCODE</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Objet, demandeur, référence…"/></label><label className="field"><span>Filtrer par statut</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="">Tous les statuts</option>{feedbackStatuses.map(value => <option key={value}>{value}</option>)}</select></label></div>
     <p className="feedback-result-count">{filtered.length} {kind === "bug" ? "bug(s)" : "idée(s)"} affiché(s)</p>
@@ -182,7 +211,7 @@ export function FeedbackInbox({ onCreate }: { onCreate?: () => void } = {}) {
         <label className="field"><span>USERCODE de la personne qui suit la demande</span><input maxLength={8} pattern="[A-Za-z][0-9]{7}" value={by} disabled={saving || !can("feedback.manage")} onChange={event => setBy(event.target.value.toUpperCase())}/></label>
         <label className="field"><span>Statut du ticket</span><select value={selected.status} disabled={saving || !can("feedback.manage")} onChange={event => void updateStatus(event.target.value)}>{feedbackStatuses.map(value => <option key={value}>{value}</option>)}</select></label>
         <p role="status">{saving ? "Enregistrement du statut…" : message}</p><button type="button" className="secondary-button" onClick={() => void select(selected.id)} disabled={saving || !can("feedback.manage")}>Recharger le ticket</button>
-        <h3>Historique</h3><ul>{selected.history?.map((event, index) => <li key={index}>{dateLabel(event.date)} · {event.status} · {event.by}</li>)}</ul>
+        <button type="button" className="primary-button" onClick={()=>void exportTickets(selected.id)} disabled={saving || exporting}><AppIcon name="download"/>{exporting?"Export en cours…":"Exporter ce ticket pour ChatGPT"}</button><h3>Historique</h3><ul>{selected.history?.map((event, index) => <li key={index}>{dateLabel(event.date)} · {event.status} · {event.by}</li>)}</ul>
       </>}
     </AppDialog>
   </section>;
