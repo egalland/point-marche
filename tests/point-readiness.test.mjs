@@ -23,7 +23,7 @@ test('new point distinguishes missing sources from actual zero and flags unsaved
  let r=pointReadiness(data,defaultMarkets[0],'pending');
  assert.equal(r.metrics.find(x=>x.label==='Tickets ouverts').value,null);
  assert.equal(r.metrics.find(x=>x.label==='Simulations à suivre').value,null);
- assert.equal(r.checks.find(x=>x.id==='priority').state,'review');
+ assert.equal(r.checks.some(x=>x.id==='priority'),false);
  data.jiraMode='manual';data.plannerMode='manual';data.priority='Confirmer la décision';data.mail.to='reader@example.test';
  r=pointReadiness(data,defaultMarkets[0],'saved');
  assert.equal(r.metrics.find(x=>x.label==='Tickets ouverts').value,0);assert.equal(r.review,0);
@@ -31,7 +31,7 @@ test('new point distinguishes missing sources from actual zero and flags unsaved
  assert.equal(pointReadiness(data,defaultMarkets[0]).checks.some(x=>x.id==='jira'),false);
  assert.equal(pointReadiness(data,defaultMarkets[0],'error').blocked,true);
 });
-test('active dossiers need an owner and next action, completed dossiers do not; attachments require review',()=>{
+test('active dossiers need a title and content, completed dossiers do not; attachments require review',()=>{
  const data=initialData();data.dossiers=[{id:'1',title:'Décision',owner:'',action:'',status:'En cours',attachments:[]}];
  let r=pointReadiness(data,defaultMarkets[0]);assert.equal(r.checks.find(x=>x.id==='dossiers').state,'review');
  data.dossiers[0].status='Terminé';data.dossiers[0].attachments=[{id:'file'}];

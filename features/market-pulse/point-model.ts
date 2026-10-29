@@ -1,3 +1,4 @@
+import { normalizeResolutionMetrics, type JiraResolutionMetrics } from "@/lib/jira-market-kpis";
 import type { PURCHASESConfig } from "@/lib/purchaseData";
 import { normalizeFreeLayout, type FreeLayout } from "@/lib/free-point-layout";
 
@@ -37,8 +38,8 @@ export type Promotion = { id: string; name: string; period: string; purchaseNote
 export type Tariff = { id: string; code: string; supplier: string; month: string; state: string; receptionDate: string; dueDate: string; owner: string; comment: string };
 export type JiraPointFields = { summary: string; status: string; priority: string; assignee: string; lastActivity: string; comment: string; count?: number };
 export type JiraPointOverride = Partial<JiraPointFields> & { updatedAt?: string };
-export type JiraTicket = { category?: string; subcategory?: string; id: string; key: string; internalId?: string; summary: string; status: string; priority: string; assignee: string; assigneeUserCode?: string; createdAt?: string; lastActivity: string; link: string; comment: string; count?: number; importedBase?: JiraPointFields; pointOverride?: JiraPointOverride };
-export type PointData = { purchaseDataConfigs?: PURCHASESConfig[]; jiraAlertRules?: JiraAlertRule[]; simulationComparisonConfig?: ComparisonConfig; simulationComparisonSnapshot?: ComparisonSnapshot; sourceFreshness?: PointSourceFreshness; pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; promotions: Promotion[]; tariffs: Tariff[]; jira: JiraTicket[]; jiraMode: PointSourceMode; plannerMode: PointSourceMode; marketComparison: MarketComparison | null; preferences: PointPreferences; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
+export type JiraTicket = { category?: string; subcategory?: string; id: string; key: string; internalId?: string; summary: string; status: string; priority: string; assignee: string; assigneeUserCode?: string; createdAt?: string; resolutionAt?: string; lastActivity: string; link: string; comment: string; count?: number; importedBase?: JiraPointFields; pointOverride?: JiraPointOverride };
+export type PointData = { jiraResolution?: JiraResolutionMetrics; purchaseDataConfigs?: PURCHASESConfig[]; jiraAlertRules?: JiraAlertRule[]; simulationComparisonConfig?: ComparisonConfig; simulationComparisonSnapshot?: ComparisonSnapshot; sourceFreshness?: PointSourceFreshness; pointName: string; themeColor: ThemeKey; customColor: string; meetingDate: string; priority: string; dossiers: Dossier[]; operations: CommercialOperation[]; promotions: Promotion[]; tariffs: Tariff[]; jira: JiraTicket[]; jiraMode: PointSourceMode; plannerMode: PointSourceMode; marketComparison: MarketComparison | null; preferences: PointPreferences; mail: { to: string; cc: string; subject: string; intro: string; autoTo?: string[]; autoCc?: string[] } };
 export type AlertItem = { title: string; detail: string; severity: "warning" | "danger"; targetId?: string; link?: string; category: "Jira" | "Dossier" };
 export type ThemeKey = "mint" | "violet" | "aqua" | "peach" | "red";
 export type Market = { id: string; name: string; short: string; tone: ThemeKey; colorHex: string; plannerTags: string[]; position: number; jiraWarningDays: number; jiraCriticalDays: number };
@@ -108,7 +109,7 @@ export function initialData(marketId = "revetements-menuiserie", marketOverride?
     themeColor: market.tone,
     customColor: market.colorHex,
     meetingDate: isoToday(),
-    priority: "Sécuriser les dossiers à surveiller et confirmer les prochaines échéances.",
+    priority: "",
     jiraMode: "automatic" as PointSourceMode, plannerMode: "automatic" as PointSourceMode, marketComparison: null,
     preferences: defaultPreferences(),
     mail: { to: "", cc: "", subject: `Point marché — ${market.name}`, intro: "Bonjour à tous, voici le point d’avancement de la semaine.", autoTo: [], autoCc: [] },
@@ -178,6 +179,7 @@ export function normalizePointData(value: unknown, marketId: string, marketOverr
   return {
     purchaseDataConfigs: Array.isArray(source.purchaseDataConfigs) ? source.purchaseDataConfigs : [],
     pointName: "Point marché",
+    jiraResolution: normalizeResolutionMetrics(source.jiraResolution),
     jiraAlertRules: normalizeJiraRules(source.jiraAlertRules),
     simulationComparisonConfig: normalizeComparison(source.simulationComparisonConfig, marketId),
     simulationComparisonSnapshot: normalizeComparisonSnapshot(source.simulationComparisonSnapshot),
@@ -201,7 +203,7 @@ export function normalizePointData(value: unknown, marketId: string, marketOverr
         return [module.id, normalizeModuleWidth(candidate, defaultModuleWidths[module.id])];
       })) as Record<PointModule, ModuleWidth>,
     },
-    dossiers: objectRows<Dossier>(source.dossiers).map((item) => ({ ...item, ...stringFields(item, ["title", "universe", "reference", "status", "owner", "action", "deadline", "comment"]), id: textValue(item.id) || uid(), progress: Math.max(0, Math.min(100, Number(item.progress) || 0)), showProgress: Boolean(item.showProgress), richHtml: sanitizePointHtml(item.richHtml), titleHtml: sanitizePointHtml(item.titleHtml), attachments: normalizeAttachments(item.attachments) })),
+    dossiers: objectRows<Dossier>(source.dossiers).map((item) => ({ ...item, ...stringFields(item, ["title", "universe", "reference", "status", "owner", "action", "deadline", "comment"]), id: textValue(item.id) || uid(), progress: Math.max(0, Math.min(100, Number(item.progress) || 0)), width: item.width === "half" || item.width === "third" ? item.width : "full", showProgress: Boolean(item.showProgress), richHtml: sanitizePointHtml(item.richHtml), titleHtml: sanitizePointHtml(item.titleHtml), attachments: normalizeAttachments(item.attachments) })),
     operations: simulations.map(normalizeCommercialOperation),
     promotions: objectRows<Promotion>(promotions).map((item) => normalizePromotion(item)),
     tariffs: objectRows<Tariff>(source.tariffs).map((item) => ({ ...item, ...stringFields(item, ["code", "supplier", "month", "state", "receptionDate", "dueDate", "owner", "comment"]), id: textValue(item.id) || uid() })),
@@ -447,9 +449,9 @@ export function jiraTicketsFromSummary(summaryInput: JiraSummaryImport, selected
   const summary = normalizeJiraSummary(summaryInput);
   const selectedUserCodes = new Set(selectedPeople.map((person) => person.toUpperCase()));
   const selected = new Set(selectedPeople);
-  const imported: JiraTicket[] = summary.detailedTickets.length ? summary.detailedTickets.filter((ticket) => !isAbandonedJiraStatus(ticket.status) && ticket.marketId === marketId && (!selectedUserCodes.size || selectedUserCodes.has(ticket.assigneeUserCode.toUpperCase()))).map((ticket) => ({
+  const imported: JiraTicket[] = summary.detailedTickets.length ? summary.detailedTickets.filter((ticket) => !isAbandonedJiraStatus(ticket.status) && ticket.marketId === marketId ).map((ticket) => ({
       id: uid(), category: ticket.category ?? "", subcategory: ticket.subcategory ?? "", key: ticket.key, internalId: ticket.internalId, summary: ticket.summary, status: ticket.status, priority: "",
-      assignee: ticket.assigneeName || ticket.assigneeUserCode, assigneeUserCode: ticket.assigneeUserCode, createdAt: ticket.createdAt,
+      assignee: ticket.assigneeName || ticket.assigneeUserCode, assigneeUserCode: ticket.assigneeUserCode, createdAt: ticket.createdAt, resolutionAt: ticket.resolutionAt,
       lastActivity: ticket.updatedAt, link: ticket.link, comment: "Import Jira détaillé", count: 1,
     })) : summary.items.filter((item) => !isAbandonedJiraStatus(item.status) && selected.has(item.assignee)).map((item) => ({
     id: uid(), key: "", summary: "Synthèse de la file Jira", status: item.status, priority: "", assignee: item.assignee,
@@ -464,8 +466,8 @@ export function jiraTicketsFromSummary(summaryInput: JiraSummaryImport, selected
     return { ...ticket, id: previous?.id ?? ticket.id, ...resolveJiraFields(importedBase, pointOverride), importedBase, ...(hasJiraOverride(pointOverride) ? { pointOverride } : {}) };
   })];
 }
-export async function fetchJiraWeek(year: number, week: number, marketId: string, preferCentral = false): Promise<JiraWeekPayload> {
-  const response = await fetch(`/api/jira-week?marketId=${encodeURIComponent(marketId)}&year=${year}&week=${week}${preferCentral ? "&preferCentral=1" : ""}`, { cache: "no-store" });
+export async function fetchJiraWeek(year: number, week: number, marketId: string, preferCentral = false, date?: string): Promise<JiraWeekPayload> {
+  const response = await fetch(`/api/jira-week?marketId=${encodeURIComponent(marketId)}&year=${year}&week=${week}${preferCentral ? "&preferCentral=1" : ""}${date ? `&date=${encodeURIComponent(date)}` : ""}`, { cache: "no-store" });
   const payload = await response.json() as JiraWeekPayload;
   if (!response.ok) throw new Error(payload.error || "Impossible de charger le tableau Jira hebdomadaire.");
   return payload;
@@ -473,9 +475,9 @@ export async function fetchJiraWeek(year: number, week: number, marketId: string
 export async function applyJiraWeek(data: PointData, marketId: string, replaceCentral = false) {
   if (data.jiraMode === "manual") return data;
   try {
-    const payload = await fetchJiraWeek(isoWeekYear(data.meetingDate), isoWeek(data.meetingDate), marketId, replaceCentral);
+    const payload = await fetchJiraWeek(isoWeekYear(data.meetingDate), isoWeek(data.meetingDate), marketId, replaceCentral, data.meetingDate);
     if (!payload.snapshot) return data;
-    return { ...data, sourceFreshness: { ...data.sourceFreshness, jira: payload.snapshot.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot.summary, payload.assignments[marketId] ?? [], marketId, data.jira) };
+    return { ...data, jiraResolution: payload.snapshot.summary.resolutionMetrics, sourceFreshness: { ...data.sourceFreshness, jira: payload.snapshot.updatedAt }, jira: jiraTicketsFromSummary(payload.snapshot.summary, payload.assignments[marketId] ?? [], marketId, data.jira) };
   } catch {
     return data;
   }

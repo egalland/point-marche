@@ -3,13 +3,14 @@ export function escapeRichText(value: string) {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 export function safeAssetUrl(value: string) {
+  if (/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(value) && value.length <= 210_000) return value;
   if (/^\/api\/point-assets\?id=[0-9a-f-]{36}$/.test(value)) return value;
   try { const url = new URL(value); return url.protocol === "https:" ? url.href : ""; } catch { return ""; }
 }
 const tags = new Set("p div span strong b em i u s br ul ol li table thead tbody tfoot tr th td h2 h3 h4 blockquote a img".split(" "));
 export function sanitizePointHtml(value: unknown): string {
   if (typeof value !== "string") return "";
-  return value.slice(0, 150_000).replace(/<font\b([^>]*)>/gi, (_, attrs) => {
+  return value.slice(0, 1_500_000).replace(/<font\b([^>]*)>/gi, (_, attrs) => {
     const get = (name: string) => new RegExp(`${name}=[\x22\x27]?([^\x22\x27\x20>]+)`, "i").exec(attrs)?.[1] ?? "";
     const size = ({ 1: 12, 2: 14, 3: 16, 4: 18, 5: 24, 6: 32, 7: 36 } as Record<string, number>)[get("size")] ?? 16;
     return `<span style="font-size:${size}px;font-family:${get("face")};color:${get("color")}">`;
@@ -23,7 +24,7 @@ export function sanitizePointHtml(value: unknown): string {
     let output = "";
     if (tag === "a" || tag === "img") {
       const url = safeAssetUrl(attrs[tag === "a" ? "href" : "src"] ?? "");
-      if (!url) return tag === "img" ? "" : "<span>";
+      if (!url || (tag === "a" && url.startsWith("data:"))) return tag === "img" ? "" : "<span>";
       output += ` ${tag === "a" ? "href" : "src"}="${escapeRichText(url)}"`;
       output += tag === "a" ? ' target="_blank" rel="noopener noreferrer"' : ` alt="${escapeRichText(attrs.alt ?? "Image du dossier")}" style="max-width:100%;height:auto"`;
     }

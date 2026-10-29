@@ -21,6 +21,7 @@ const activityUrl = moduleUrl("../lib/jira-analyst-activity.ts", { "./iso-week":
 const schemaUrl = moduleUrl("../db/schema.ts", { "drizzle-orm": ormUrl, "drizzle-orm/sqlite-core": import.meta.resolve("drizzle-orm/sqlite-core") });
 const dbUrl = moduleUrl("../db/index.ts", { "drizzle-orm/d1": import.meta.resolve("drizzle-orm/d1"), "./schema": schemaUrl, "../lib/runtime-env": runtimeUrl });
 const registryUrl = moduleUrl("../lib/jira-registry-server.ts", {
+  "./jira-market-scope": moduleUrl("../lib/jira-market-scope.ts"), "./jira-market-kpis": moduleUrl("../lib/jira-market-kpis.ts", {"./iso-week":isoUrl,"./jira-import":jiraUrl}),
   "drizzle-orm": ormUrl, "../db": dbUrl, "../db/schema": schemaUrl,
   "./iso-week": isoUrl, "./jira-analyst-activity": activityUrl, "./jira-import": jiraUrl, "./analyst-jira-history": historyUrl,
 });
@@ -135,11 +136,11 @@ test("reads a market with 150 people and 13,000 tickets without participant hydr
   db.sqlite.exec("COMMIT");
 
   const summary = await db.run(() => loadOpenMarketJiraSummary("scale-market"));
-  assert.equal(summary.tickets, 9_750);
-  assert.equal(summary.detailedTickets.length, 9_750);
-  assert.equal(summary.people.length, 150);
+  assert.equal(summary.tickets, 9_751);
+  assert.equal(summary.detailedTickets.length, 9_751);
+  assert.equal(summary.people.length, 151);
   assert.ok(summary.detailedTickets.every((ticket) => ticket.status === "En cours" && ticket.marketId === "scale-market"));
-  assert.ok(summary.detailedTickets.every((ticket) => ticket.key !== "GLOBAL-99998" && ticket.key !== "GLOBAL-99999"));
+  assert.ok(summary.detailedTickets.every((ticket) => ticket.key !== "GLOBAL-99999"));
   assert.ok(db.queries.every((query) => query.bindings <= 4));
   assert.ok(db.queries.every((query) => !query.query.includes("jira_ticket_participants")));
 });

@@ -132,7 +132,7 @@ test("history uses last modification rather than resolution date and includes un
   assert.equal((await call(api, "/api/analyst-jira?analystId=analyst&view=history&from=2026-0&to=2026-08-30")).status, 400);
 });
 
-test("market Jira excludes analysts and completed tickets, retaining stable market IDs after rename", async () => {
+test("market Jira includes all market roles and excludes completed rows, retaining stable market IDs after rename", async () => {
   const data = fixture();
   data.jiraTickets = [ticket("GLOBAL-1", { status: "En cours" }), ticket("GLOBAL-2", { status: "En cours", assigneeUserCode: "B1234567" }), ticket("GLOBAL-3", { assigneeUserCode: "B1234567" })];
   const api = createLocalApi(new WorkspaceStore(data));
@@ -140,8 +140,8 @@ test("market Jira excludes analysts and completed tickets, retaining stable mark
   assert.equal(changed.market.id, "market-local");
   assert.equal(changed.market.jiraCriticalDays, 11);
   const result = await call(api, "/api/jira-week?marketId=market-local&year=2026&week=35");
-  assert.deepEqual(result.snapshot.summary.detailedTickets.map((item) => item.key), ["GLOBAL-2"]);
-  assert.deepEqual(result.assignments["market-local"], ["B1234567"]);
+  assert.deepEqual(result.snapshot.summary.detailedTickets.map((item) => item.key), ["GLOBAL-1", "GLOBAL-2"]);
+  assert.deepEqual(result.assignments["market-local"], ["A1234567", "B1234567"]);
 });
 
 test("directory enforces unique USERCODEs and emails and a single tariff manager", async () => {

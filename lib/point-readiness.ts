@@ -22,18 +22,17 @@ export function sourceReadiness(value: string | undefined, mode: string, date: s
 export function pointReadiness(data: PointData, market: Market, save: PreparationSave = "new") {
   const visible = data.preferences.readModules;
   const dossiers = data.dossiers.filter(item => !isClosed(item.status));
-  const incomplete = dossiers.filter(item => !item.title.trim() || !item.owner.trim() || !item.action.trim());
+  const incomplete = dossiers.filter(item => !item.title.trim() || !(item.action.trim() || item.richHtml?.trim() || item.comment?.trim()));
   const tickets = data.jira.filter(item => !isClosedJiraStatus(item.status));
   const jiraKnown = data.jiraMode === "manual" || isIsoDate(data.sourceFreshness?.jira?.slice(0, 10) ?? "") || data.jira.length > 0;
   const plannerKnown = data.plannerMode === "manual" || isIsoDate(data.sourceFreshness?.planner?.slice(0, 10) ?? "") || data.operations.length > 0;
   const to = inspectMailRecipients(data.mail.to), cc = inspectMailRecipients(data.mail.cc);
   const checks: PreparationCheck[] = [
     { id: "date", label: "Semaine du point", state: isIsoDate(data.meetingDate) ? "ok" : "blocked", detail: isIsoDate(data.meetingDate) ? "La date du point est valide. Vérifie que c’est la semaine attendue." : "Une date valide est nécessaire.", target: "point" },
-    { id: "priority", label: "Priorité de la semaine", state: data.priority.trim() && data.priority.trim() !== "Sécuriser les dossiers à surveiller et confirmer les prochaines échéances." ? "ok" : "review", detail: data.priority.trim() ? "Relis la priorité : elle doit exprimer la décision ou l’action attendue cette semaine." : "Ajoute la priorité à retenir dès la première lecture.", target: "point" },
   ];
   if (visible.jira) checks.push({ id: "jira", label: "Source Jira", ...sourceReadiness(data.sourceFreshness?.jira, data.jiraMode, data.meetingDate), target: "imports" });
   if (visible.operations || visible.simulationComparison) checks.push({ id: "planner", label: "Source Planner", ...sourceReadiness(data.sourceFreshness?.planner, data.plannerMode, data.meetingDate), target: "imports" });
-  if (visible.dossiers) checks.push({ id: "dossiers", label: "Prochaines actions", state: incomplete.length ? "review" : "ok", detail: incomplete.length ? `${incomplete.length} dossier(s) actif(s) sans titre, responsable ou prochaine action.` : `${dossiers.length} dossier(s) actif(s) : titre, responsable et prochaine action renseignés.`, target: "point" });
+  if (visible.dossiers) checks.push({ id: "dossiers", label: "Prochaines actions", state: incomplete.length ? "review" : "ok", detail: incomplete.length ? `${incomplete.length} dossier(s) actif(s) sans titre ou contenu.` : `${dossiers.length} dossier(s) actif(s) : titre et contenu renseignés.`, target: "point" });
   if (visible.purchaseData) {
     const configured = data.purchaseDataConfigs?.length && data.purchaseDataConfigs.every(config => !!config.report || Array.isArray(config.snapshot));
     checks.push({ id: "purchaseData", label: "Suivi PURCHASES", state: configured ? "ok" : "review", detail: configured ? "Un instantané PURCHASES est disponible. Vérifie la période et les spécialités du bloc." : "Aucun instantané PURCHASES disponible pour ce bloc.", target: "point" });

@@ -28,6 +28,7 @@ export type JiraDetailedTicket = {
   participants?: JiraParticipant[];
 };
 export type JiraSummaryImport = {
+  resolutionMetrics?: import("./jira-market-kpis").JiraResolutionMetrics;
   personCount: number;
   tickets: number;
   people: JiraSummaryPerson[];
@@ -164,7 +165,7 @@ function detailedTicket(cells: string[]): JiraDetailedTicket | null {
     createdAt: jiraDate(clean[createdIndex]),
     assigneeUserCode: clean[usercodeIndex].toUpperCase(),
     updatedAt: jiraDate(clean[updatedIndex]),
-    link: countAndLink(cells[keyIndex]).link || `https://jira.example.test/browse/${key}`,
+    link: countAndLink(cells[keyIndex]).link || `https://jira.example.example.net/browse/${key}`,
   };
 }
 

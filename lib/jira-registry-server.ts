@@ -1,6 +1,8 @@
+import { jiraMarketKpis } from "./jira-market-kpis";
+import { selectMarketTickets } from "./jira-market-scope";
 import { and, desc, eq, or } from "drizzle-orm";
 import { getDb, getRawDb } from "../db";
-import { globalUserMarkets, globalUsers, jiraImportBatches, jiraTickets } from "../db/schema";
+import { globalUserMarkets, globalUsers, jiraImportBatches, jiraTickets, marketDefinitions } from "../db/schema";
 import { addIsoDays, isIsoDate, isoWeekForDate, isoWeekRange } from "./iso-week";
 import { jiraCompletionWeeks, validateJiraHistoryRange, type JiraHistoryRange } from "./analyst-jira-history";
 import { jiraActivityForAnalyst } from "./jira-analyst-activity";
@@ -49,7 +51,7 @@ function ticketFromRow(row: JiraTicketRow, participants: JiraParticipant[] = [])
     updatedAt: row.jiraUpdatedAt,
     resolutionAt: row.resolutionAt,
     participants,
-    link: row.link || `https://jira.example.test/browse/${row.key}`,
+    link: row.link || `https://jira.example.example.net/browse/${row.key}`,
   };
 }
 
@@ -103,28 +105,17 @@ export async function loadJiraCompletionHistory(usercode: string, requestedRange
   return { from, to, weeks };
 }
 
-export async function loadOpenMarketJiraSummary(marketId: string) {
+export async function loadOpenMarketJiraSummary(marketId: string, reference = new Date().toISOString().slice(0,10)) {
   const db = getDb();
-  const directory = await db.select({ usercode: globalUsers.usercode, name: globalUsers.name })
-    .from(globalUserMarkets)
-    .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
-    .where(and(
-      eq(globalUserMarkets.marketId, marketId),
-      eq(globalUsers.isActive, true),
-      or(eq(globalUsers.role, "chef-produit"), eq(globalUsers.role, "chef-marche")),
-    ));
-  const people = new Map(directory.map((person) => [person.usercode.toUpperCase(), person.name]));
-  if (!people.size) return null;
-  const query = `SELECT ${ticketColumns} FROM jira_tickets t
-    WHERE t.assignee_usercode IN (
-      SELECT u.jira_name FROM global_user_markets m
-      INNER JOIN global_users u ON u.id = m.user_id
-      WHERE m.market_id = ? AND u.is_active = 1 AND u.role IN ('chef-produit', 'chef-marche')
-    )`;
-  const tickets: JiraDetailedTicket[] = [];
-  for await (const rows of ticketPages<JiraTicketRow>(query, [marketId])) {
-    tickets.push(...rows.filter((row) => !isClosedJiraStatus(row.status))
-      .map((row) => ({ ...ticketFromRow(row), assigneeName: people.get(row.assigneeUserCode.toUpperCase()), marketId })));
-  }
-  return jiraSummaryFromDetailedTickets(tickets, "unknown");
+  const [directory, definitions] = await Promise.all([
+    db.select({ usercode: globalUsers.usercode, name: globalUsers.name }).from(globalUserMarkets).innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id)).where(and(eq(globalUserMarkets.marketId, marketId), eq(globalUsers.isActive, true))),
+    db.select().from(marketDefinitions).where(eq(marketDefinitions.isActive, true)),
+  ]);
+  const markets=definitions.map(m=>({id:m.id,shortLabel:m.shortCode,plannerTags:JSON.parse(m.plannerTags) as string[]}));
+  const market=markets.find(m=>m.id===marketId);if(!market)return null;
+  const people=new Map(directory.map(p=>[p.usercode.toUpperCase(),p.name]));
+  const tickets:JiraDetailedTicket[]=[];
+  for await(const rows of ticketPages<JiraTicketRow>(`SELECT ${ticketColumns} FROM jira_tickets t WHERE 1=1`,[]))tickets.push(...rows.map(row=>ticketFromRow(row)));
+  const relevant=selectMarketTickets(tickets,market,markets,people).filter(t=>!isAbandonedJiraStatus(t.status));
+  return {...jiraSummaryFromDetailedTickets(relevant.filter(t=>!isClosedJiraStatus(t.status)),"unknown"),resolutionMetrics:jiraMarketKpis(relevant,reference)};
 }

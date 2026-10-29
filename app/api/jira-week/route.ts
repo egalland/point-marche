@@ -1,7 +1,10 @@
+import { selectMarketTickets } from "../../../lib/jira-market-scope";
+import { jiraMarketKpis } from "../../../lib/jira-market-kpis";
+import { isIsoDate, isoWeekRange } from "../../../lib/iso-week";
 import { and, asc, eq, or, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { globalUserMarkets, globalUsers, jiraMarketWeeklySnapshots, jiraWeeklySnapshots, marketDefinitions } from "../../../db/schema";
-import { parseJiraAssigneeSummary, type JiraSummaryImport } from "../../../lib/jira-import";
+import { parseJiraAssigneeSummary, jiraSummaryFromDetailedTickets, isClosedJiraStatus, type JiraSummaryImport } from "../../../lib/jira-import";
 import { latestCompletedJiraBatch, loadOpenMarketJiraSummary } from "../../../lib/jira-registry-server";
 import { shouldPreferCentralJira } from "../../../lib/jira-source-priority";
 import { getEditorUser } from "../../simple-auth";
@@ -50,14 +53,14 @@ export async function GET(request: Request) {
       db.select({ marketId: globalUserMarkets.marketId, assignee: globalUsers.usercode })
         .from(globalUserMarkets)
         .innerJoin(globalUsers, eq(globalUserMarkets.userId, globalUsers.id))
-        .where(and(eq(globalUsers.isActive, true), or(eq(globalUsers.role, "chef-produit"), eq(globalUsers.role, "chef-marche"))))
+        .where(and(eq(globalUsers.isActive, true), sql`1=1`))
         .orderBy(asc(globalUserMarkets.marketId), asc(globalUsers.usercode)),
       latestCompletedJiraBatch(),
     ]);
     const centralUpdatedAt = batch?.completedAt ?? batch?.createdAt;
     const centralResponse = async (weeklyUpdatedAt?: string) => {
       if (!batch || !shouldPreferCentralJira(centralUpdatedAt, weeklyUpdatedAt, preferCentral)) return null;
-      const centralSummary = await loadOpenMarketJiraSummary(marketId);
+      const centralSummary = await loadOpenMarketJiraSummary(marketId, isIsoDate(url.searchParams.get("date")??"") ? url.searchParams.get("date")! : isoWeekRange(year,week).to);
       return centralSummary ? Response.json({
         snapshot: { year, week, rawText: "", summary: centralSummary, updatedAt: centralUpdatedAt, source: "central" },
         assignments: assignmentMap(assignments),
@@ -119,24 +122,16 @@ export async function POST(request: Request) {
       .where(and(
         eq(globalUserMarkets.marketId, marketId),
         eq(globalUsers.isActive, true),
-        or(eq(globalUsers.role, "chef-produit"), eq(globalUsers.role, "chef-marche")),
+        sql`1=1`,
       ));
     const directoryByUserCode = new Map(directory.map((person) => [person.usercode.toUpperCase(), person]));
-    if (!directoryByUserCode.size) return Response.json({ error: "Ajoute d’abord un chef de produit ou un chef de marché avec son USERCODE dans l’annuaire." }, { status: 409 });
-
-    const summary: JiraSummaryImport = {
-      ...parsed,
-      people: parsed.people.map((person) => {
-        const known = directoryByUserCode.get(person.assignee.toUpperCase());
-        return { ...person, displayName: known?.name, marketId: known ? marketId : undefined };
-      }),
-      detailedTickets: parsed.detailedTickets.map((ticket) => {
-        const known = directoryByUserCode.get(ticket.assigneeUserCode.toUpperCase());
-        return { ...ticket, assigneeName: known?.name, marketId: known ? marketId : undefined };
-      }),
-    };
-    const recognizedTickets = summary.detailedTickets.filter((ticket) => ticket.marketId === marketId);
-    if (!recognizedTickets.length) return Response.json({ error: "Aucun USERCODE de cet export ne correspond aux personnes du marché." }, { status: 409 });
+    const definitions=await db.select().from(marketDefinitions).where(eq(marketDefinitions.isActive,true));
+    const markets=definitions.map(m=>({id:m.id,shortCode:m.shortCode,plannerTags:JSON.parse(m.plannerTags) as string[]}));
+    const selectedMarket=markets.find(m=>m.id===marketId)!;
+    const recognizedTickets=selectMarketTickets(parsed.detailedTickets,selectedMarket,markets,new Map(directory.map(p=>[p.usercode.toUpperCase(),p.name])));
+    if (!recognizedTickets.length) return Response.json({ error: "Aucun ticket de cet export ne correspond aux spécialités ou à l’annuaire du marché." }, { status: 409 });
+    const reference=isoWeekRange(year,week).to;
+    const summary:JiraSummaryImport={...jiraSummaryFromDetailedTickets(recognizedTickets.filter(t=>!isClosedJiraStatus(t.status)),parsed.format),resolutionMetrics:jiraMarketKpis(recognizedTickets,reference)};
 
     const now = sql`CURRENT_TIMESTAMP`;
     await db.insert(jiraMarketWeeklySnapshots).values({

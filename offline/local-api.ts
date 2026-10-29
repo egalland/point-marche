@@ -1,3 +1,5 @@
+import { jiraMarketKpis } from "../lib/jira-market-kpis";
+import { selectMarketTickets } from "../lib/jira-market-scope";
 import { localPURCHASES } from "./purchaseData-api";
 import { guardLocalApi } from "./access-api";
 import { validFeedbackRecipients, parseFeedbackRequest, feedbackSummary, updateFeedbackStatus, type FeedbackRequest } from "../lib/feedback";
@@ -6,7 +8,7 @@ import { isGlobalRole, roleMailMode, roleUsesAutomaticJira, type GlobalDirectory
 import { canonicalJiraStatus, isAbandonedJiraStatus, isClosedJiraStatus, jiraSummaryFromDetailedTickets, type JiraDetailedTicket } from "../lib/jira-import";
 import { jiraActivityForAnalyst } from "../lib/jira-analyst-activity";
 import { jiraCompletionWeeks, validateJiraHistoryRange } from "../lib/analyst-jira-history";
-import { isIsoDate, isoWeekForDate, isoWeekParts } from "../lib/iso-week";
+import { isIsoDate, isoWeekRange, isoWeekForDate, isoWeekParts } from "../lib/iso-week";
 import { parsePlannerTasks } from "../lib/planner-import";
 import { recoverPlannerTasksFromPoints, mergePlannerTaskRegistry } from "../lib/planner-registry";
 import type { JiraCsvTicket } from "../lib/jira-csv";
@@ -83,7 +85,7 @@ function cleanTicket(value: unknown): JiraCsvTicket {
     summary: ticket.summary.slice(0, 4000), createdAt: ticket.createdAt || "", updatedAt: ticket.updatedAt || "", resolutionAt: ticket.resolutionAt || "",
     assigneeUserCode: /^[A-Z]\d{7}$/i.test(ticket.assigneeUserCode) ? ticket.assigneeUserCode.toUpperCase() : "",
     participants: Array.from(new Map(participants.map((person) => [person.usercode.toUpperCase(), { usercode: person.usercode.toUpperCase(), jiraUserId: clean(person.jiraUserId, 80) }])).values()),
-    link: /^https?:\/\//i.test(ticket.link) ? ticket.link : `https://jira.example.test/browse/${ticket.key}`,
+    link: /^https?:\/\//i.test(ticket.link) ? ticket.link : `https://jira.example.example.net/browse/${ticket.key}`,
   };
 }
 
@@ -277,13 +279,14 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
         const marketId = url.searchParams.get("marketId") ?? "";
         const year = Number(url.searchParams.get("year")); const week = Number(url.searchParams.get("week"));
         requirePeriod(year, week);
-        const people = data.users.filter((person) => roleUsesAutomaticJira(person.role));
+        const people = data.users;
         const assignments: Record<string, string[]> = {};
         people.forEach((person) => person.marketIds.forEach((market) => { (assignments[market] ??= []).push(person.usercode); }));
         if (!data.jiraUpdatedAt && !data.jiraTickets.length) return json({ snapshot: null, assignments });
         const names = new Map(people.filter((person) => person.marketIds.includes(marketId)).map((person) => [person.usercode.toUpperCase(), person.name]));
-        const tickets = data.jiraTickets.filter((ticket) => names.has(ticket.assigneeUserCode.toUpperCase()) && !isClosedJiraStatus(ticket.status)).map((ticket) => ({ ...ticket, assigneeName: names.get(ticket.assigneeUserCode.toUpperCase()), marketId }));
-        return json({ snapshot: { year, week, rawText: "", summary: jiraSummaryFromDetailedTickets(tickets, "unknown"), updatedAt: data.jiraUpdatedAt, source: "central" }, assignments });
+        const market = data.markets.find(m=>m.id===marketId);
+        const tickets = market ? selectMarketTickets(data.jiraTickets,market,data.markets,names).filter(t=>!isAbandonedJiraStatus(t.status)) : [];
+        return json({ snapshot: { year, week, rawText: "", summary: {...jiraSummaryFromDetailedTickets(tickets.filter(t=>!isClosedJiraStatus(t.status)), "unknown"), resolutionMetrics:jiraMarketKpis(tickets, isIsoDate(url.searchParams.get("date")??"") ? url.searchParams.get("date")! : isoWeekRange(year,week).to)}, updatedAt: data.jiraUpdatedAt, source: "central" }, assignments });
       }
 
       if (path === "/api/analyst-jira" && method === "GET") {

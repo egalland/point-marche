@@ -40,7 +40,7 @@ export function roleLabel(role: GlobalRole) {
 
 export function buildMarketJql(users: GlobalDirectoryUser[], marketId: string) {
   const usercodes = Array.from(new Set(users
-    .filter((user) => roleUsesAutomaticJira(user.role) && user.marketIds.includes(marketId) && /^[A-Z]\d{7}$/i.test(user.usercode))
+    .filter((user) => user.marketIds.includes(marketId) && /^[A-Z]\d{7}$/i.test(user.usercode))
     .map((user) => user.usercode.toUpperCase())))
     .sort();
   if (!usercodes.length) return "";

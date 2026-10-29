@@ -100,7 +100,7 @@ test('V51 édition sur place et menu sans modifier la disposition',()=>{
  canvasHooks={cursor:0,slots:[]};assert.ok(!treeNodes(freeCanvas.FreePointCanvas({...props,actions:undefined})).some(n=>n.props?.className==='v51-block-tools'));
 });
 
-const dossierUi = await bundled('features/market-pulse/dossier-board.tsx', '\nexport { DossierEditor };', [], interactiveReact);
+const dossierUi = await bundled('features/market-pulse/dossier-board.tsx', '', [], interactiveReact);
 test('editing a dossier keeps the rich editor inside its publication card', () => {
   canvasHooks = {cursor:0,slots:[]};
   const row = {id:'inline',title:'Dossier',status:'En cours',universe:'',reference:'',owner:'',action:'Texte',comment:'',deadline:'',progress:0};

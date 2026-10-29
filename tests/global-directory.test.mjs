@@ -37,8 +37,8 @@ test("builds the Jira query from valid USERCODEs of the selected market only", (
   const jql = directory.buildMarketJql(users, "market-a");
 
   assert.match(jql, /project = "JSD-Distribution Matériaux Bois Panneaux"/);
-  assert.match(jql, /assignee in \(A1234567, B7654321\)/);
-  assert.doesNotMatch(jql, /C1111111|D2222222|T0000004|T0000002|Nom Jira/);
+  assert.match(jql, /assignee in \(A1234567, B7654321, D2222222\)/);
+  assert.doesNotMatch(jql, /C1111111|T0000004|T0000002|Nom Jira/);
   assert.equal(directory.buildMarketJql(users, "unknown"), "");
 });
 

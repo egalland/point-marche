@@ -1,0 +1,79 @@
+/* Reading is the resting state. Editing controls appear only after activation. */
+.reading-point .app-header{min-height:62px;padding-top:8px;padding-bottom:8px;gap:16px;align-items:center}
+.reading-point .workspace-location>span{display:none}
+.reading-point .workspace-location strong{font-size:18px;white-space:nowrap}
+.reading-point .header-actions{flex:1;justify-content:flex-end;min-width:0}
+.reading-point .point-period-bar{flex:0 1 auto;display:flex;align-items:center;gap:12px;padding:0;margin:0;border:0;box-shadow:none;background:transparent;min-height:0}
+.reading-point .point-market-choice{gap:0;min-width:0;flex:0 0 230px;width:230px}
+.reading-point .point-market-choice>span{display:none}
+.reading-point .point-market-choice select{width:100%;height:36px;max-width:240px;padding:6px 28px 6px 10px;font-size:12px}
+.reading-point .point-week-choice{gap:2px;min-width:0}
+.reading-point .point-week-choice>button{min-height:34px;height:34px}
+.reading-point .point-week-current{gap:6px;padding:4px 8px}
+.reading-point .point-week-current strong{font-size:12px}
+.reading-point .point-week-current small{display:none}
+.reading-point .point-period-status{font-size:10px;white-space:nowrap}
+.reading-point .workspace-content{padding-top:10px}
+.reading-point .point-preparation{margin-top:0;margin-bottom:8px}
+.reading-point .preparation-overview{padding:8px 14px;gap:16px}
+.reading-point .preparation-overview>div:first-child{display:none}
+.reading-point .preparation-metrics{width:100%;display:flex;flex-wrap:wrap;gap:12px 24px}
+.reading-point .preparation-metrics article{display:flex;align-items:baseline;gap:6px;padding:0;background:none;border:0;min-width:0}
+.reading-point .preparation-metrics article strong{font-size:20px}
+.reading-point .preparation-metrics article span{font-size:11px}
+.reading-point .preparation-metrics article small{display:none}
+.reading-point .preparation-checklist{margin:4px 0 0}
+.reading-point .preparation-checklist>summary{padding:6px 12px;font-size:11px}
+.reading-point .point-sources-disclosure{margin:4px 0;font-size:11px}
+.reading-point .point-sources-disclosure>summary{padding:3px 12px}
+.reading-point .report-canvas{padding-top:0}
+.sidebar-reading-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 12px}
+.sidebar-reading-tools .appearance-control{flex-wrap:wrap;max-width:100%}
+.workspace-sidebar.is-compact .sidebar-reading-tools{flex-direction:column}
+.point-quiet-canvas .point-canvas-hint{display:flex;justify-content:flex-end;min-height:0;padding:0 4px;margin:0;height:28px}
+.point-quiet-canvas .point-canvas-hint button{font-size:11px;min-height:24px;padding:2px 6px;opacity:.5}
+.point-quiet-canvas .point-canvas-hint button:hover,.point-quiet-canvas .point-canvas-hint button:focus-visible{opacity:1}
+.point-quiet-canvas .v51-block:not(.selected):not(.editing){border-color:var(--line);box-shadow:none}
+.point-quiet-canvas .v51-block:not(.selected):not(.editing) .v73-resize{visibility:hidden;pointer-events:none}
+.point-quiet-canvas .v51-block:not(.selected):not(.editing) .v70-module-header{background:transparent;border-bottom-color:transparent;cursor:text}
+.point-quiet-canvas .v51-block:not(.selected):not(.editing) .v70-module-header strong{font-size:13px}
+.point-quiet-canvas .v51-block:not(.editing) .dossier-create-actions,.point-quiet-canvas .v51-block:not(.editing) .dossier-card-actions,.point-quiet-canvas .v51-block:not(.editing) .dossier-touch-order{display:none}
+.point-quiet-canvas .dossier-publications{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px}
+.point-quiet-canvas .dossier-publication{grid-column:span 6;min-width:0;margin:0}
+.point-quiet-canvas .dossier-width-half{grid-column:span 3}
+.point-quiet-canvas .dossier-width-third{grid-column:span 2}
+.dossier-templates{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 0}
+.dossier-templates span,.dossier-width-choice{font-size:12px}
+.dossier-width-choice{display:flex;align-items:center;gap:12px}
+.module-library-create{display:flex;flex-wrap:wrap;gap:8px}
+.point-free-text{padding:4px 10px;min-height:80px}
+.free-text-placeholder{color:var(--muted);font-size:13px;font-style:italic}
+.simulation-comparison .comparison-chart-wrap{width:100%;max-width:100%;overflow-x:auto}
+.simulation-comparison .comparison-chart-wrap svg{display:block;width:auto!important;min-width:0!important;max-width:100%;height:245px!important;max-height:245px;margin:0 auto}
+.jira-resolution{margin:14px 0;border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--surface)}
+.jira-resolution>header{display:flex;justify-content:space-between;gap:10px;margin-bottom:12px;font-size:13px}
+.jira-resolution small,.jira-resolution details{color:var(--muted);font-size:11px}
+.resolution-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.resolution-kpi-grid article{display:grid;gap:6px;padding:10px;border-left:2px solid var(--line);min-width:0}
+.resolution-kpi-grid article>span{font-size:11px;color:var(--muted)}
+.resolution-kpi-grid article>strong{font-size:24px;line-height:1.2;font-variant-numeric:tabular-nums}
+.resolution-kpi-grid .faster{border-color:#269078}.resolution-kpi-grid .slower{border-color:#c98753}
+.jira-resolution details{margin-top:12px}.jira-resolution details p{line-height:1.6}
+@media(max-width:1000px){.reading-point .point-period-status{display:none}.reading-point .point-market-choice select{max-width:180px}.resolution-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.reading-point .app-header{flex-wrap:wrap;padding-left:52px;gap:6px;min-height:96px}.reading-point .header-actions{width:100%;flex-basis:100%;justify-content:flex-start}.reading-point .point-period-bar{gap:6px;flex-wrap:wrap}.reading-point .point-market-choice select{max-width:170px}.reading-point .point-week-current{padding:2px 4px}.reading-point .point-week-current svg{display:none}.reading-point .preparation-metrics{gap:6px 14px}.point-quiet-canvas .dossier-width-half,.point-quiet-canvas .dossier-width-third{grid-column:span 6}.simulation-comparison .comparison-chart-wrap svg{max-width:none}.sidebar-reading-tools{max-width:100%}}
+@media print{.point-canvas-hint,.dossier-create-actions,.dossier-card-actions,.dossier-touch-order,.v70-module-actions,.v73-resize,.point-sources-disclosure,.preparation-checklist{display:none!important}.jira-resolution details{display:none}}
+
+@media(max-width:1000px){.reading-point .point-market-choice{flex-basis:180px;width:180px}}
+@media(max-width:760px){.reading-point .point-market-choice{flex-basis:160px;width:160px}.reading-point .point-week-choice{flex:none;width:auto}.reading-point .point-period-bar{position:static}.reading-point .point-period-status{display:none}}
+@media(max-width:760px){
+ .reading-point .app-header{padding:8px 12px;min-height:92px;gap:4px}
+ .reading-point .workspace-location{padding-left:44px}
+ .reading-point .header-actions{margin:0;width:100%}
+ .reading-point .point-period-bar{width:100%;flex-wrap:nowrap;gap:4px}
+ .reading-point .point-market-choice{flex:1 1 130px;width:auto}
+ .reading-point .point-market-choice select{max-width:100%;font-size:11px;padding-left:4px}
+ .reading-point .point-week-choice{flex:0 0 auto;width:auto;gap:0}
+ .reading-point .point-week-choice>button{min-width:24px;width:24px;padding:0}
+ .reading-point .point-week-choice>.point-week-current{width:auto;padding:2px 4px;flex:none}
+ .reading-point .point-week-current strong{font-size:11px}
+}

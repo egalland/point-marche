@@ -1,0 +1,11 @@
+import { jiraMarketKpis, type JiraResolutionMetrics, type ResolutionTicket } from '@/lib/jira-market-kpis';
+const days=(value:number|null)=>value===null?'—':new Intl.NumberFormat('fr-FR',{maximumFractionDigits:1}).format(value);
+export function JiraResolutionKpis({tickets,date,snapshot}:{tickets:ResolutionTicket[];date:string;snapshot?:JiraResolutionMetrics}){
+ const k=snapshot??jiraMarketKpis(tickets,date),month=new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(`${k.month}-01T12:00:00Z`));
+ return <section className="jira-resolution" aria-label="Délais de résolution en jours ouvrés"><header><strong>Résolution · {month}</strong><small>Au {k.asOf.split('-').reverse().join('/')}</small></header><div className="resolution-kpi-grid">
+ <article><span>Délai moyen</span><strong>{days(k.mean)} <small>j ouvrés</small></strong><small>{k.resolved} ticket(s) résolu(s) daté(s)</small></article>
+ <article><span>Délai médian</span><strong>{days(k.median)} <small>j ouvrés</small></strong><small>La moitié des délais sous ce repère</small></article>
+ <article className={k.delta===null?'':k.delta>0?'slower':'faster'}><span>Écart au mois précédent</span><strong>{k.delta===null?'—':`${k.delta>0?'+':''}${days(k.delta)}`} <small>j ouvrés</small></strong><small>{k.previous} complet : {days(k.previousMean)} j · {k.previousResolved} ticket(s)</small></article>
+ <article><span>Ancienneté moyenne du stock</span><strong>{days(k.openAge)} <small>j ouvrés</small></strong><small>{k.openDated} ticket(s) ouvert(s) daté(s)</small></article>
+ </div><details><summary>Méthode et couverture des données{k.missingDates>0?` · ${k.missingDates} ticket(s) fermé(s) non daté(s) ou incohérent(s)`:''}</summary><p>Du lendemain de la création à la résolution incluse, hors samedis, dimanches et jours fériés nationaux français. Les fermetures locales et jours fériés spécifiques ne sont pas déduits. Le mois du point est arrêté à sa date ; le mois précédent est complet. Seules les dates de résolution importées sont utilisées, jamais la dernière modification. Les tickets abandonnés, agrégés ou aux dates manquantes/incohérentes sont exclus des délais. Le stock reflète l’extraction importée, pas un historique reconstitué.</p></details></section>;
+}
