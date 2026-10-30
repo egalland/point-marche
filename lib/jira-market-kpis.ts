@@ -33,16 +33,16 @@ export function jiraResolutionSample(tickets:ResolutionTicket[],from:string,to:s
  const samples=completed.map(delayFor).filter((v):v is number=>v!==null),days=samples.reduce((n,v)=>n+v,0);
  return {mean:mean(samples),median:median(samples),sample:samples.length,days,completed:completed.length,excluded:completed.length-samples.length};
 }
-export function jiraMarketKpis(tickets:ResolutionTicket[],reference:string){
+export function jiraMarketKpis(tickets:ResolutionTicket[],reference:string,delayFor=(t:ResolutionTicket)=>workingDays(t.createdAt??'',t.resolutionAt??'')){
  const valid=isIsoDate(reference),month=reference.slice(0,7),previous=valid?addIsoDays(`${month}-01`,-1).slice(0,7):'';
  const unique=[...new Map(tickets.map((t,i)=>[t.key||`manual-${i}`,t])).values()].filter(t=>!isAbandonedJiraStatus(t.status)&&(t.count===undefined||t.count===1));
  const resolved=unique.filter(t=>isClosedJiraStatus(t.status)&&t.resolutionAt&&t.resolutionAt.slice(0,10)<=reference);
- const sample=(m:string)=>resolved.filter(t=>t.resolutionAt!.startsWith(m)).map(t=>workingDays(t.createdAt??'',t.resolutionAt!)).filter((d):d is number=>d!==null);
+ const sample=(m:string)=>resolved.filter(t=>t.resolutionAt!.startsWith(m)).map(delayFor).filter((d):d is number=>d!==null);
  const current=valid?sample(month):[],prior=valid?sample(previous):[];
  const ages=unique.filter(t=>!isClosedJiraStatus(t.status)).map(t=>workingDays(t.createdAt??'',reference)).filter((d):d is number=>d!==null);
  const avg=mean(current),prev=mean(prior);
- const range=valid?isoWeekForDate(reference):{from:'',to:''},weekly={from:range.from,to:reference,...jiraResolutionSample(unique,range.from,reference)};
- return {weekly,month,previous,asOf:reference,mean:avg,median:median(current),previousMean:prev,delta:avg===null||prev===null?null:avg-prev,resolved:current.length,previousResolved:prior.length,openAge:mean(ages),openDated:ages.length,missingDates:unique.filter(t=>isClosedJiraStatus(t.status)&&(!isIsoDate(t.resolutionAt?.slice(0,10)??'')||workingDays(t.createdAt??'',t.resolutionAt??'')===null)).length};
+ const range=valid?isoWeekForDate(reference):{from:'',to:''},weekly={from:range.from,to:reference,...jiraResolutionSample(unique,range.from,reference,delayFor)};
+ return {weekly,month,previous,asOf:reference,mean:avg,median:median(current),previousMean:prev,delta:avg===null||prev===null?null:avg-prev,resolved:current.length,previousResolved:prior.length,openAge:mean(ages),openDated:ages.length,missingDates:unique.filter(t=>isClosedJiraStatus(t.status)&&(!isIsoDate(t.resolutionAt?.slice(0,10)??'')||delayFor(t)===null)).length};
 }
 
 export type JiraResolutionMetrics = Omit<ReturnType<typeof jiraMarketKpis>,'weekly'> & {weekly?:ReturnType<typeof jiraMarketKpis>['weekly']};

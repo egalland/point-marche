@@ -133,3 +133,16 @@ export async function loadJiraAnalyticsTickets(){
  return result;
 }
 
+
+/** A cached KPI request hydrates at most two visible pages, never the whole registry. */
+export async function loadJiraAnalyticsTicketPage(keys:string[]){
+ const result:JiraDetailedTicket[]=[],db=getRawDb(),unique=[...new Set(keys)];
+ for(let offset=0;offset<unique.length;offset+=50){const part=unique.slice(offset,offset+50),slots=part.map(()=>'?').join(',');
+  const rows=(await db.prepare(`SELECT ${ticketColumns} FROM jira_tickets t WHERE t.ticket_key IN (${slots})`).bind(...part).all<JiraTicketRow>()).results;
+  const byKey=new Map(rows.map(r=>{const t=ticketFromRow(r);result.push(t);return [t.key,t] as const;}));let after='';
+  for(;;){const participants=(await db.prepare(`SELECT id,ticket_key,usercode,jira_user_id FROM jira_ticket_participants WHERE ticket_key IN (${slots}) AND id > ? ORDER BY id LIMIT 1000`).bind(...part,after).all<{id:string;ticket_key:string;usercode:string;jira_user_id:string}>()).results;
+   for(const p of participants)byKey.get(p.ticket_key)?.participants?.push({usercode:p.usercode,jiraUserId:p.jira_user_id});if(participants.length<1000)break;after=participants.at(-1)!.id;
+  }
+ }
+ return result;
+}

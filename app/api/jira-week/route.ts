@@ -1,3 +1,4 @@
+import {loadCachedMarketJiraSummary} from '../../../lib/jira-market-summary-server';
 import {marketJiraSummary} from "../../../lib/jira-point-activity";
 import {directoryUsersAt} from "../../../lib/directory-store";
 import { selectMarketTickets } from "../../../lib/jira-market-scope";
@@ -7,7 +8,7 @@ import { and, asc, eq, or, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { globalUserMarkets, globalUsers, jiraMarketWeeklySnapshots, jiraWeeklySnapshots, marketDefinitions } from "../../../db/schema";
 import { parseJiraAssigneeSummary, jiraSummaryFromDetailedTickets, isClosedJiraStatus, type JiraSummaryImport } from "../../../lib/jira-import";
-import { latestCompletedJiraBatch, loadOpenMarketJiraSummary } from "../../../lib/jira-registry-server";
+import { latestCompletedJiraBatch } from "../../../lib/jira-registry-server";
 import { shouldPreferCentralJira } from "../../../lib/jira-source-priority";
 import { getEditorUser } from "../../simple-auth";
 
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
     const centralUpdatedAt = batch?.completedAt ?? batch?.createdAt;
     const centralResponse = async (weeklyUpdatedAt?: string) => {
       if (!batch || !shouldPreferCentralJira(centralUpdatedAt, weeklyUpdatedAt, preferCentral)) return null;
-      const centralSummary = await loadOpenMarketJiraSummary(marketId, isIsoDate(url.searchParams.get("date")??"") ? url.searchParams.get("date")! : isoWeekRange(year,week).to);
+      const centralSummary = await loadCachedMarketJiraSummary(marketId, isIsoDate(url.searchParams.get("date")??"") ? url.searchParams.get("date")! : isoWeekRange(year,week).to);
       return centralSummary ? Response.json({
         snapshot: { year, week, rawText: "", summary: centralSummary, updatedAt: centralUpdatedAt, source: "central" },
         assignments: assignmentMap(assignments),

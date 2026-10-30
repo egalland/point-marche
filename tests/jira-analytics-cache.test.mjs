@@ -38,3 +38,12 @@ test('import-prepared stock states match the historical classifier including unc
   for(const date of ['2026-09-30','2026-10-01','2026-10-26','2026-10-30','2026-11-03'])assert.deepEqual(preparedJiraStock(prepared.facts[t.key],date),jiraStockState(t,date));
  }
 });
+
+test('portable market summaries reuse prepared facts, respect dates and invalidate on a new registry',()=>{
+ const session=new JiraAnalyticsSession(),data=[{...tickets[0],createdAt:'2026-10-23',resolutionAt:'2026-10-27'}];
+ const summary=session.marketSummary(data,[user],markets,'m','2026-10-30');assert.equal(summary.resolutionMetrics.weekly.mean,2);
+ assert.equal(session.marketSummary(data,[user],markets,'m','2026-10-30'),summary);
+ assert.equal(session.marketSummary(data,[user],markets,'m','2026-10-26').resolutionMetrics.weekly.sample,0);
+ const changed=session.marketSummary(data,[{...user,name:'Autre nom'}],markets,'m','2026-10-30');assert.equal(changed.detailedTickets[0].assigneeName,'Autre nom');
+ assert.equal(session.marketSummary([{...data[0],resolutionAt:'2026-10-29'}],[user],markets,'m','2026-10-30').resolutionMetrics.weekly.mean,4);
+});

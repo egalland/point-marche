@@ -23,3 +23,11 @@ test('manual detailed paste recognizes closed status, categories and resolution 
  const text='Clé de ticket\tID de ticket\tÉtat\tRésumé\tCréation\tPersonne assignée\tMise à jour\tCatégorie\tSous-catégorie\tRésolution\nTEST-1\t10001\tTerminé\tDemande tarif\t20/10/2026 10:00\tA1234567\t29/10/2026 10:00\tTarifs\tContrôle\t27/10/2026 10:00';
  const p=parseJiraAssigneeSummary(text);assert.equal(p.detailedTickets.length,1);assert.equal(p.detailedTickets[0].category,'Tarifs');assert.equal(p.detailedTickets[0].subcategory,'Contrôle');assert.equal(p.detailedTickets[0].updatedAt,'2026-10-29T10:00:00');assert.equal(p.detailedTickets[0].resolutionAt,'2026-10-27T10:00:00');
 });
+
+test('point summary promotes the completed count and exposes its list without opening the generic Jira modal',async()=>{
+ const {build}=await import('esbuild'),{createRequire}=await import('node:module');const React=await import('react'),{renderToStaticMarkup}=await import('react-dom/server');
+ const b=await build({entryPoints:['features/market-pulse/jira-point-summary.tsx'],bundle:true,platform:'node',format:'cjs',packages:'external',write:false});const module={exports:{}};new Function('require','module','exports',b.outputFiles[0].text)(createRequire(import.meta.url),module,module.exports);
+ const date='2026-10-30',data={meetingDate:date,jiraMode:'manual',jira:[{id:'one',key:'TEST-1',status:'Fini',summary:'Terminé visible',assignee:'Alex',createdAt:'2026-10-23',resolutionAt:'2026-10-27',lastActivity:'2026-10-29',count:1}],jiraAlertRules:[]};
+ const html=renderToStaticMarkup(React.createElement(module.exports.JiraPointSummary,{data,market:{id:'m',name:'Marché',jiraWarningDays:10,jiraCriticalDays:20},archive:[]}));assert.match(html,/completed-spotlight/);assert.match(html,/Terminés cette semaine<\/span><strong>1<\/strong>/);assert.match(html,/<summary>Voir les tickets terminés/);assert.match(html,/Terminé visible/);
+ const old=renderToStaticMarkup(React.createElement(module.exports.JiraPointSummary,{data:{...data,jiraMode:'automatic',jira:[]},market:{id:'m',name:'Marché'},archive:[]}));assert.match(old,/Actualise les données Jira du point/);assert.match(old,/Terminés cette semaine<\/span><strong>—<\/strong>/);
+});

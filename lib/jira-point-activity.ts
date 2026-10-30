@@ -1,6 +1,6 @@
 import {isIsoDate,isoWeekForDate} from './iso-week';
 import {isClosedJiraStatus,isAbandonedJiraStatus,jiraSummaryFromDetailedTickets,type JiraDetailedTicket,type JiraSummaryImport} from './jira-import';
-import {jiraMarketKpis} from './jira-market-kpis';
+import {jiraMarketKpis,type ResolutionTicket} from './jira-market-kpis';
 import {jiraRuleFor,type JiraAlertRule} from './jira-alert-rules';
 export type JiraWeekCoverage={from:string;to:string;asOf:string;fallbackCount:number;undatedClosed:number};
 type ActivityTicket={key?:string;status:string;resolutionAt?:string;updatedAt?:string;lastActivity?:string;createdAt?:string;category?:string;subcategory?:string;count?:number};
@@ -24,10 +24,10 @@ export function normalizeJiraWeekCoverage(v:unknown):JiraWeekCoverage|undefined{
  if(![x.fallbackCount,x.undatedClosed].every(n=>Number.isSafeInteger(n)&&n>=0))return undefined;
  return {from:x.from,to:x.to,asOf:x.asOf,fallbackCount:x.fallbackCount,undatedClosed:x.undatedClosed};
 }
-export function marketJiraSummary(tickets:JiraDetailedTicket[],reference:string,format:JiraSummaryImport['format']='unknown'):JiraSummaryImport{
+export function marketJiraSummary(tickets:JiraDetailedTicket[],reference:string,format:JiraSummaryImport['format']='unknown',delayFor?: (ticket:ResolutionTicket)=>number|null):JiraSummaryImport{
  const relevant=tickets.filter(t=>!isAbandonedJiraStatus(t.status));
  const open=relevant.filter(t=>!isClosedJiraStatus(t.status));const {completed,coverage}=jiraWeeklyActivity(relevant,reference);
- return {...jiraSummaryFromDetailedTickets(open,format),detailedTickets:[...open,...completed],weeklyCoverage:coverage,resolutionMetrics:jiraMarketKpis(relevant,reference)};
+ return {...jiraSummaryFromDetailedTickets(open,format),detailedTickets:[...open,...completed],weeklyCoverage:coverage,resolutionMetrics:jiraMarketKpis(relevant,reference,delayFor)};
 }
 export const jiraImpactLabels={unknown:'Non qualifié',low:'Limité',medium:'Modéré',high:'Fort'};
 export function jiraCategoryGroups<T extends ActivityTicket>(tickets:T[],rules:JiraAlertRule[]=[]){

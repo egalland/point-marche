@@ -1,3 +1,11 @@
+## V139 — 30 octobre 2026
+
+- Tickets terminés : compteur dans la première rangée du bloc Jira, liste accessible directement en dépliant « Voir les tickets terminés ».
+- Cache des synthèses du point marché par date, marché, import et annuaire, avec réutilisation des délais préparés.
+- Analyse Jira : lecture du résultat calculé avant le registre ; tri/pagination hydratent uniquement les deux pages visibles (100 tickets maximum).
+- Préparation volumineuse : identité de cache conservée même au-delà de la taille maximale du JSON source, pour réutiliser les résultats calculés.
+- Les points déjà enregistrés restent figés ; un changement de source n’entraîne aucune actualisation implicite.
+
 ## V138 — 30 octobre 2026
 
 - Mail : tableau compact des simulations par mois, avec fournisseur, état, variations disponibles et commentaire.

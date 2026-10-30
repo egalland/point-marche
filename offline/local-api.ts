@@ -312,10 +312,10 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
         const assignments: Record<string, string[]> = {};
         people.forEach((person) => person.marketIds.forEach((market) => { (assignments[market] ??= []).push(person.usercode); }));
         if (!data.jiraUpdatedAt && !data.jiraTickets.length) return json({ snapshot: null, assignments });
-        const names = new Map(people.filter((person) => person.marketIds.includes(marketId)).map((person) => [person.usercode.toUpperCase(), person.name]));
-        const market = data.markets.find(m=>m.id===marketId);
-        const tickets = market ? selectMarketTickets(data.jiraTickets,market,data.markets,names).filter(t=>!isAbandonedJiraStatus(t.status)) : [];
-        return json({ snapshot: { year, week, rawText: "", summary: marketJiraSummary(tickets,isIsoDate(url.searchParams.get("date")??"")?url.searchParams.get("date")!:isoWeekRange(year,week).to), updatedAt: data.jiraUpdatedAt, source: "central" }, assignments });
+        await prepareLocalAnalytics();
+        const reference=isIsoDate(url.searchParams.get("date")??"")?url.searchParams.get("date")!:isoWeekRange(year,week).to;
+        const summary=jiraAnalytics.marketSummary(data.jiraTickets,data.users,activeMarkets(data),marketId,reference)??marketJiraSummary([],reference);
+        return json({ snapshot: { year, week, rawText: "", summary, updatedAt: data.jiraUpdatedAt, source: "central" }, assignments });
       }
 
       if((path === "/api/analyst-activity" || path === "/api/jira-activity") && method === "GET"){ const q=parseJiraStatsQuery(url); await prepareLocalAnalytics(url.searchParams.get('refresh')==='1'); if(path === "/api/jira-activity")q.scope="registry"; return json({report:jiraAnalytics.report(data.jiraTickets,data.users,activeMarkets(data),q),updatedAt:data.jiraUpdatedAt,hasSource:!!data.jiraUpdatedAt||data.jiraTickets.length>0}); }

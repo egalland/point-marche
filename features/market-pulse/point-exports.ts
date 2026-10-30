@@ -1,3 +1,4 @@
+import {jiraWeeklyActivity} from '../../lib/jira-point-activity';
 import {simulationMailHtml,simulationComparisonMailHtml} from '../../lib/point-mail-simulations';
 import {jiraPointActivityHtml} from "../../lib/jira-point-activity-html";
 import {latestSupplierVariations} from "@/lib/supplier-variations";
@@ -132,7 +133,8 @@ function buildFreeExport(data:PointData,modules:Record<PointModule,boolean>,sect
 
 function jiraSummaryExport(data:PointData,market:Market,archive:PointRecord[]){
  const stats=jiraDashboardStats(data,market,archive),known=data.jiraMode==='manual'||!!data.sourceFreshness?.jira||data.jira.length>0;
- return `<section class="jira-point-summary"><p>${escapeHtml(market.name)} · ${stats.delta===null?'Premier point':`${stats.delta>0?'+':''}${stats.delta} ticket(s) depuis le point précédent`}</p><div class="jira-summary-counts">${[[stats.currentVolume,'Tickets ouverts'],[stats.attentionCount,'À surveiller'],[stats.criticalCount,'Critiques']].map(([value,label])=>`<article><span>${label}</span><strong>${known?value:'—'}</strong></article>`).join('')}</div>${jiraPointActivityHtml(data.jira,data.meetingDate,data.jiraWeekly,!!data.jiraWeekly||data.jiraMode==='manual',data.jiraAlertRules)}${resolutionKpiHtml(data.jira,data.meetingDate,data.jiraMode==='automatic'?data.jiraResolution:undefined)}</section>`;
+ const weekly=jiraWeeklyActivity(data.jira,data.jiraWeekly?.asOf??data.meetingDate),completedKnown=data.jiraMode==='manual'||!!data.jiraWeekly;
+ return `<section class="jira-point-summary"><p>${escapeHtml(market.name)} · ${stats.delta===null?'Premier point':`${stats.delta>0?'+':''}${stats.delta} ticket(s) depuis le point précédent`}</p><div class="jira-summary-counts">${[[stats.currentVolume,'Tickets ouverts',known],[weekly.count,'Terminés cette semaine',completedKnown],[stats.attentionCount,'À surveiller',known],[stats.criticalCount,'Critiques',known]].map(([value,label,available])=>`<article><span>${label}</span><strong>${available?value:'—'}</strong></article>`).join('')}</div>${jiraPointActivityHtml(data.jira,data.meetingDate,data.jiraWeekly,!!data.jiraWeekly||data.jiraMode==='manual',data.jiraAlertRules)}${resolutionKpiHtml(data.jira,data.meetingDate,data.jiraMode==='automatic'?data.jiraResolution:undefined)}</section>`;
 }
 
 function simulationPeriodData(data:PointData){const periods=data.preferences.simulationPeriods;if(!periods)return data;const labels=periods.map(p=>new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(p+'-01T12:00:00Z')));return {...data,operations:data.operations.filter(op=>periods.includes(op.month)||labels.some(l=>l.toLowerCase()===op.month.toLowerCase()))};}

@@ -10,13 +10,13 @@ function fixture(t, legacyPolicy) {
   for (const name of readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()) sqlite.exec(readFileSync(new URL(name,migrations),'utf8'));
   sqlite.exec("INSERT OR IGNORE INTO market_definitions (id,name,short_code) VALUES ('shared-test','Marché test','TEST')");
   if(legacyPolicy){sqlite.exec("CREATE TABLE app_access_policy (id INTEGER PRIMARY KEY, value TEXT NOT NULL)");sqlite.prepare("INSERT INTO app_access_policy (id,value) VALUES (1,?)").run(JSON.stringify(legacyPolicy));}
-  const queries=[];
+  const queries=[],trace=[];
   const DB = {
     async exec(query){sqlite.exec(query);},
     prepare(query) {
       queries.push(query);
       const statement = sqlite.prepare(query); let values = [];
-      return {bind(...params){values=params;return this;},async first(column){const row=statement.get(...values);return column?row?.[column]??null:row??null;},async all(){return {results:statement.all(...values)};},async raw(){return statement.all(...values).map(row=>Object.values(row));},async run(){return statement.run(...values);}};
+      return {bind(...params){trace.push({query,params});values=params;return this;},async first(column){const row=statement.get(...values);return column?row?.[column]??null:row??null;},async all(){return {results:statement.all(...values)};},async raw(){return statement.all(...values).map(row=>Object.values(row));},async run(){return statement.run(...values);}};
     },
     async batch(statements){sqlite.exec('BEGIN');try{const result=[];for(const statement of statements) result.push(await statement.all());sqlite.exec('COMMIT');return result;}catch(error){sqlite.exec('ROLLBACK');throw error;}}
   };
@@ -27,7 +27,7 @@ function fixture(t, legacyPolicy) {
     const response=await worker.fetch(new Request('https://test.invalid'+path,{method,headers:{'content-type':'application/json','X-Market-USERCODE':usercode,'X-Market-View':view,...(cookie?{cookie}:{})},...(body?{body:JSON.stringify(body)}:{})}),env,ctx);
     return {status:response.status,body:await response.json()};
   };
-  request.sqlite=sqlite;request.queries=queries;request.cold=()=>{env.DB={...DB};};return request;
+  request.sqlite=sqlite;request.queries=queries;request.trace=trace;request.cold=()=>{env.DB={...DB};};return request;
 }
 
 test('built Worker permits shared directory, Planner and validation with a declared USERCODE and without a login cookie',async t=>{
@@ -168,4 +168,39 @@ test('durable Jira analytics survives cold requests, reuses selections for sorti
  db.exec("UPDATE app_jira_analytics_cache SET payload='broken JSON' WHERE cache_key='source' AND part=0");request.cold();
  const recovered=await request(url);assert.equal(recovered.status,200);assert.equal(recovered.body.report.a.total,123);assert.equal(recovered.body.analytics.persisted,true);
  assert.ok(db.prepare('SELECT COUNT(DISTINCT cache_key) AS n FROM app_jira_analytics_cache').get().n<=13,'fixed cache slots bound storage');
+});
+
+test('point market Jira summary survives cold requests without rereading the registry and refreshes with dates, directory and import',async t=>{
+ const request=fixture(t),db=request.sqlite;
+ db.exec("INSERT INTO jira_import_batches(id,status,completed_at) VALUES ('point-cache','completed','2026-10-30T08:00:00Z')");
+ db.exec("INSERT INTO global_users(id,name,email,jira_name,role) VALUES ('point-person','Alex','alex@example.test','A1234567','analyste-tarif-referentiel')");
+ db.exec("INSERT INTO global_user_markets(id,user_id,market_id) VALUES ('point-link','point-person','shared-test')");
+ const insert=db.prepare('INSERT INTO jira_tickets(ticket_key,status,summary,jira_created_at,jira_updated_at,resolution_at,assignee_usercode) VALUES (?,?,?,?,?,?,?)');
+ insert.run('TEST-1','Fini','TEST - Terminé','2026-10-23','2026-10-29','2026-10-27','A1234567');insert.run('TEST-2','En cours','TEST - Ouvert','2026-10-23','2026-10-29','','A1234567');
+ const url='/api/jira-week?marketId=shared-test&year=2026&week=44&date=2026-10-30&preferCentral=1';
+ const first=await request(url);assert.equal(first.status,200,JSON.stringify(first.body));assert.equal(first.body.snapshot.summary.resolutionMetrics.weekly.mean,2);assert.equal(first.body.snapshot.summary.detailedTickets.length,2);
+ const cached=db.prepare("SELECT COUNT(*) AS n FROM app_jira_analytics_cache WHERE cache_key LIKE 'point:%' AND part=-1").get();assert.equal(cached.n,1);
+ request.cold();request.queries.length=0;request.trace.length=0;
+ const cold=await request(url);assert.deepEqual(cold.body,first.body);
+ assert.equal(request.queries.some(sql=>/FROM jira_tickets t WHERE 1=1/.test(sql)),false);
+ assert.equal(request.trace.some(({query,params})=>/SELECT part,payload/.test(query)&&params[0]==='source'),false,'a point cache hit must not read the full source JSON');
+ const earlier=await request(url.replace('date=2026-10-30','date=2026-10-26'));assert.equal(earlier.body.snapshot.summary.resolutionMetrics.weekly.sample,0);
+ db.exec("UPDATE global_users SET name='Alex actualisé' WHERE id='point-person'");
+ const changed=await request(url);assert.equal(changed.body.snapshot.summary.detailedTickets[0].assigneeName,'Alex actualisé');
+ insert.run('TEST-3','Fini','TEST - Nouveau','2026-10-23','2026-10-29','2026-10-29','A1234567');db.exec("INSERT INTO jira_import_batches(id,status,completed_at) VALUES ('point-next','completed','2026-10-30T09:00:00Z')");
+ const imported=await request(url);assert.equal(imported.body.snapshot.summary.resolutionMetrics.weekly.sample,2);assert.equal(imported.body.snapshot.summary.resolutionMetrics.weekly.mean,3);
+});
+
+test('large Jira source still reuses calculated reports and hydrates only visible rows on a cold sort',async t=>{
+ const request=fixture(t),db=request.sqlite;
+ db.exec("INSERT INTO jira_import_batches(id,status,completed_at) VALUES ('large-cache','completed','2026-10-30T08:00:00Z')");
+ const insert=db.prepare('INSERT INTO jira_tickets(ticket_key,status,summary,jira_created_at,jira_updated_at,resolution_at,category) VALUES (?,?,?,?,?,?,?)');
+ db.exec('BEGIN');for(let i=0;i<2000;i++)insert.run('TEST-'+i,'Fini','TEST - '+'.'.repeat(4000),'2026-10-23','2026-10-29','2026-10-27','Tarifs');db.exec('COMMIT');
+ const url='/api/jira-activity?from=2026-10-26&to=2026-10-30&compareFrom=2026-10-19&compareTo=2026-10-25';
+ const first=await request(url);assert.equal(first.status,200,JSON.stringify(first.body));assert.equal(first.body.report.a.total,2000);assert.equal(first.body.report.a.resolution.mean,2);assert.equal(first.body.analytics.persisted,false,'fixture exceeds the source JSON size bound');
+ request.cold();request.queries.length=0;request.trace.length=0;
+ const sorted=await request(url+'&sort=key&direction=asc&page=1');assert.equal(sorted.status,200,JSON.stringify(sorted.body));assert.equal(sorted.body.analytics.selectionCached,true);assert.equal(sorted.body.report.a.rows.length,50);assert.equal(sorted.body.report.a.rows[0].key,'TEST-50');assert.deepEqual(sorted.body.report.timeline,first.body.report.timeline);
+ assert.equal(request.queries.some(sql=>/FROM jira_tickets t WHERE 1=1/.test(sql)),false);
+ assert.equal(request.trace.some(({query,params})=>/SELECT part,payload/.test(query)&&params[0]==='source'),false);
+ const pages=request.trace.filter(({query})=>/FROM jira_tickets t WHERE t.ticket_key IN/.test(query));assert.equal(pages.length,1);assert.equal(pages[0].params.length,50);
 });
