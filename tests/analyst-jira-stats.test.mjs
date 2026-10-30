@@ -75,3 +75,16 @@ test('resolution KPIs use true completion dates independent of activity basis, w
   const r=buildAnalystJiraStats(data,users,markets,{...query(),basis});assert.equal(r.a.resolution.mean,2);assert.equal(r.a.resolution.median,2);assert.equal(r.a.resolution.sample,1);assert.equal(r.a.resolution.completed,3);assert.equal(r.a.resolution.excluded,2);assert.equal(r.a.resolution.missingCreation,1);assert.equal(r.a.resolution.invalidOrder,1);assert.equal(r.a.resolution.missingResolution,1);assert.equal(r.a.resolution.invalidResolution,1);assert.equal(r.b.resolution.mean,null);
  }
 });
+
+test('weekly resolution cohorts use actual finish dates, valid working-day samples and deduplicated multi-market unions',()=>{
+ const multiUsers=[{...users[0],marketIds:['m','other']}],multiMarkets=[{id:'m',shortCode:'TEST'},{id:'other',shortCode:'MEN'},{id:'third',shortCode:'PAN'}];
+ const base={...ticket,summary:'Sans spécialité',participants:[],assigneeUserCode:'A1234567'};
+ const data=[{...base,key:'TEST-100',createdAt:'2026-10-26',resolutionAt:'2026-10-26'}, {...base,key:'TEST-101',createdAt:'2026-10-19',resolutionAt:'2026-11-02'}, {...base,key:'TEST-102',createdAt:'2026-10-19',resolutionAt:'2026-11-03'}, {...base,key:'TEST-103',createdAt:'2026-10-19',resolutionAt:'2026-11-04'}, {...base,key:'TEST-104',createdAt:'',resolutionAt:'2026-11-04'}, {...base,key:'TEST-105',summary:'PAN - Hors sélection',resolutionAt:'2026-11-03'}, {...base,key:'TEST-106',resolutionAt:'',updatedAt:'2026-11-03'}];
+ const q={...query('&markets=m,other,m'),scope:'registry',basis:'created',a:{from:'2026-10-26',to:'2026-11-08'},b:{from:'2026-10-12',to:'2026-10-25'}};
+ const r=buildAnalystJiraStats([...data,data[0]],multiUsers,multiMarkets,q),[one,two]=r.timeline.a;
+ assert.deepEqual(q.marketIds,['m','other']);assert.equal(one.resolution.sample,1);assert.equal(one.resolution.mean,0);assert.equal(two.resolution.sample,3);assert.equal(two.resolution.excluded,1);assert.equal(two.resolution.days,33);assert.equal(two.resolution.mean,11);
+ assert.equal(r.a.resolution.sample,4);assert.equal(r.a.resolution.mean,8.25);assert.notEqual(r.a.resolution.mean,(one.resolution.mean+two.resolution.mean)/2);
+ assert.deepEqual(two.markets.map(m=>m.id),['m','other']);for(const market of two.markets)assert.equal(market.resolution.sample,3);
+ assert.equal(r.b.resolution.mean,null);assert.equal(r.timeline.b[0].resolution.mean,null);
+ assert.equal(buildAnalystJiraStats(data,multiUsers,multiMarkets,{...q,marketIds:['third']}).a.resolution.sample,1);
+});

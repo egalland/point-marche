@@ -13,12 +13,12 @@ export function JiraActivityPie({title,items,referenceItems,onFilter}:{title:str
  return <article className="jira-interactive-distribution"><InteractiveChart title={title} categories={categories} series={series} initialFormat="donut" formats={['donut','pie','bar']} onFilter={onFilter?index=>onFilter(labels[index]):undefined} filterLabel="Appliquer ce filtre"/></article>;
 }
 type Range={from:string;to:string};
-export function AnalystJiraStatsPanel({registryScope=false,rangeA,rangeB,comparisonEnabled=false,onSelectRange,marketId,analystIds,analysts}:{registryScope?:boolean;rangeA:Range;rangeB:Range;comparisonEnabled?:boolean;onSelectRange?:(range:Range,reference:boolean)=>void;marketId:string;analystIds:string[];analysts:{id:string;name:string}[]}){
+export function AnalystJiraStatsPanel({registryScope=false,rangeA,rangeB,comparisonEnabled=false,onSelectRange,marketId,marketIds=[],analystIds,analysts}:{registryScope?:boolean;rangeA:Range;rangeB:Range;comparisonEnabled?:boolean;onSelectRange?:(range:Range,reference:boolean)=>void;marketId:string;marketIds?:string[];analystIds:string[];analysts:{id:string;name:string}[]}){
  const [filters,setFilters]=useState({category:'all',subcategory:'all',status:'all',basis:'activity',involvement:'both',sort:'date',direction:'desc'}),[page,setPage]=useState(0),[selectedPeriod,setPeriod]=useState<'a'|'b'>('a'),[reload,setReload]=useState(0);
  const [timelineByMarket,setTimelineByMarket]=useState(true);
  const period=comparisonEnabled?selectedPeriod:'a';
  const reference=comparisonEnabled?rangeB:rangeA;
- const key=useMemo(()=>{const p=new URLSearchParams({from:rangeA.from,to:rangeA.to,compareFrom:reference.from,compareTo:reference.to,marketId,analysts:analystIds.join(','),...filters,detailPeriod:period,page:String(page)});return p.toString();},[rangeA.from,rangeA.to,reference.from,reference.to,marketId,analystIds.join(','),filters,page,period]);
+ const key=useMemo(()=>{const p=new URLSearchParams({from:rangeA.from,to:rangeA.to,compareFrom:reference.from,compareTo:reference.to,marketId,markets:marketIds.join(','),analysts:analystIds.join(','),...filters,detailPeriod:period,page:String(page)});return p.toString();},[rangeA.from,rangeA.to,reference.from,reference.to,marketId,marketIds.join(','),analystIds.join(','),filters,page,period]);
  const [state,setState]=useState<{key:string;report?:AnalystJiraStats;error?:string;updatedAt?:string;hasSource?:boolean}>({key:''});
  const endpoint=registryScope?'/api/jira-activity':'/api/analyst-activity';
  const requestKey=endpoint+key+':'+reload;

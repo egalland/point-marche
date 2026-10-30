@@ -1,3 +1,11 @@
+## V135 — 30 octobre 2026
+
+- Sélection de plusieurs marchés pour les analyses Jira, avec total global dédupliqué.
+- Moyenne de résolution par semaine et marché en jours ouvrés, accompagnée des nombres de tickets datés et exclus.
+- Graphiques de volume et de délai séparés, mêmes semaines et mêmes couleurs ; valeur de synthèse affichable ou masquable.
+- La moyenne de la période utilise les tickets de la sélection, sans moyenne de moyennes hebdomadaires.
+- Délai de la semaine dans la synthèse Jira du point marché et les exports ; anciens instantanés conservés jusqu’à actualisation explicite.
+
 ## V134 — 30 octobre 2026
 
 - Graphiques Jira interactifs : curseur de lecture, valeurs au survol ou au clavier, épinglage, surbrillance et légendes pour masquer des séries.

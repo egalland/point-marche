@@ -61,3 +61,16 @@ test('fast working-day count matches daily enumeration across leap years, Easter
   const from=`${year}-${String(month).padStart(2,'0')}-15`,d=new Date(from+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+span);const to=d.toISOString().slice(0,10);assert.equal(workingDays(from,to),slow(from,to),`${from} ${to}`);
  }
 });
+
+test('point weekly resolution crosses month boundaries, excludes bad dates and survives snapshot normalization and both exports',async()=>{
+ const {normalizeResolutionMetrics}=await load('lib/jira-market-kpis.ts');const {createElement}=require('react'),{renderToStaticMarkup}=require('react-dom/server'),{JiraPointSummary}=await load('features/market-pulse/jira-point-summary.tsx');
+ const tickets=[{key:'TEST-700',status:'Fini',createdAt:'2026-10-23',resolutionAt:'2026-10-27'},{key:'TEST-701',status:'Fini',createdAt:'2026-10-23',resolutionAt:'2026-11-01'},{key:'TEST-702',status:'Fini',createdAt:'',resolutionAt:'2026-10-28'},{key:'TEST-703',status:'Abandonnée',createdAt:'2026-01-01',resolutionAt:'2026-10-28'},{key:'TEST-704',status:'Fini',createdAt:'2026-10-23',resolutionAt:'2026-11-02'}];
+ const k=jiraMarketKpis(tickets,'2026-11-01');assert.equal(k.weekly.mean,3.5);assert.equal(k.weekly.sample,2);assert.equal(k.weekly.excluded,1);assert.equal(k.weekly.from,'2026-10-26');assert.equal(k.mean,5);
+ const data=initialData();data.meetingDate='2026-11-01';data.jiraMode='automatic';data.jiraResolution=k;
+ const restored=normalizePointData(JSON.parse(JSON.stringify(data)),defaultMarkets[0].id);assert.deepEqual(restored.jiraResolution.weekly,k.weekly);
+ const source=JSON.stringify(restored);jiraMarketKpis([],'2026-12-01');assert.equal(JSON.stringify(restored),source);
+ const ui=renderToStaticMarkup(createElement(JiraPointSummary,{data:restored,market:defaultMarkets[0],archive:[]}));assert.match(ui,/Résolution · semaine/);assert.match(ui,/3,5/);
+ for(const html of [buildMailHtml(restored,defaultMarkets[0],[]),buildInteractiveHtml(restored,defaultMarkets[0],[])]){assert.match(html,/Délai moyen de résolution · cette semaine/);assert.match(html,/3,5 j ouvrés/);}
+ const old={...k};delete old.weekly;assert.equal(normalizeResolutionMetrics(old).weekly,undefined);
+ assert.equal(normalizeResolutionMetrics({...k,weekly:{...k.weekly,mean:99}}).weekly,undefined);
+});

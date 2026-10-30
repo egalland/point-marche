@@ -1,4 +1,4 @@
-import { isIsoDate, addIsoDays } from "./iso-week";
+import { isIsoDate, addIsoDays, isoWeekForDate } from "./iso-week";
 import { isClosedJiraStatus, isAbandonedJiraStatus } from "./jira-import";
 export type ResolutionTicket = { key?: string; status: string; createdAt?: string; resolutionAt?: string; count?: number };
 function easter(year: number) {
@@ -25,6 +25,14 @@ export function workingDays(from:string,to:string):number|null {
 }
 const mean=(v:number[])=>v.length?v.reduce((a,b)=>a+b,0)/v.length:null;
 const median=(v:number[])=>{if(!v.length)return null;const s=[...v].sort((a,b)=>a-b),m=Math.floor(s.length/2);return s.length%2?s[m]:(s[m-1]+s[m])/2;};
+/** True completion cohort: no updated-date fallback, no average of weekly averages. */
+export function jiraResolutionSample(tickets:ResolutionTicket[],from:string,to:string,delayFor=(t:ResolutionTicket)=>workingDays(t.createdAt??'',t.resolutionAt??'')){
+ if(!isIsoDate(from)||!isIsoDate(to)||from>to)return {mean:null,median:null,sample:0,days:0,completed:0,excluded:0};
+ const closed=[...new Map(tickets.map((t,i)=>[t.key||`manual-${i}`,t])).values()].filter(t=>isClosedJiraStatus(t.status)&&!isAbandonedJiraStatus(t.status)&&(t.count===undefined||t.count===1));
+ const completed=closed.filter(t=>isIsoDate(t.resolutionAt?.slice(0,10)??'')&&t.resolutionAt!.slice(0,10)>=from&&t.resolutionAt!.slice(0,10)<=to);
+ const samples=completed.map(delayFor).filter((v):v is number=>v!==null),days=samples.reduce((n,v)=>n+v,0);
+ return {mean:mean(samples),median:median(samples),sample:samples.length,days,completed:completed.length,excluded:completed.length-samples.length};
+}
 export function jiraMarketKpis(tickets:ResolutionTicket[],reference:string){
  const valid=isIsoDate(reference),month=reference.slice(0,7),previous=valid?addIsoDays(`${month}-01`,-1).slice(0,7):'';
  const unique=[...new Map(tickets.map((t,i)=>[t.key||`manual-${i}`,t])).values()].filter(t=>!isAbandonedJiraStatus(t.status)&&(t.count===undefined||t.count===1));
@@ -33,19 +41,24 @@ export function jiraMarketKpis(tickets:ResolutionTicket[],reference:string){
  const current=valid?sample(month):[],prior=valid?sample(previous):[];
  const ages=unique.filter(t=>!isClosedJiraStatus(t.status)).map(t=>workingDays(t.createdAt??'',reference)).filter((d):d is number=>d!==null);
  const avg=mean(current),prev=mean(prior);
- return {month,previous,asOf:reference,mean:avg,median:median(current),previousMean:prev,delta:avg===null||prev===null?null:avg-prev,resolved:current.length,previousResolved:prior.length,openAge:mean(ages),openDated:ages.length,missingDates:unique.filter(t=>isClosedJiraStatus(t.status)&&(!isIsoDate(t.resolutionAt?.slice(0,10)??'')||workingDays(t.createdAt??'',t.resolutionAt??'')===null)).length};
+ const range=valid?isoWeekForDate(reference):{from:'',to:''},weekly={from:range.from,to:reference,...jiraResolutionSample(unique,range.from,reference)};
+ return {weekly,month,previous,asOf:reference,mean:avg,median:median(current),previousMean:prev,delta:avg===null||prev===null?null:avg-prev,resolved:current.length,previousResolved:prior.length,openAge:mean(ages),openDated:ages.length,missingDates:unique.filter(t=>isClosedJiraStatus(t.status)&&(!isIsoDate(t.resolutionAt?.slice(0,10)??'')||workingDays(t.createdAt??'',t.resolutionAt??'')===null)).length};
 }
 
-export type JiraResolutionMetrics = ReturnType<typeof jiraMarketKpis>;
+export type JiraResolutionMetrics = Omit<ReturnType<typeof jiraMarketKpis>,'weekly'> & {weekly?:ReturnType<typeof jiraMarketKpis>['weekly']};
 export function normalizeResolutionMetrics(value:unknown):JiraResolutionMetrics|undefined {
  if(!value||typeof value!=='object')return undefined;
  const v=value as Record<string,unknown>;
  if(typeof v.asOf!=='string'||!isIsoDate(v.asOf)||v.month!==v.asOf.slice(0,7)||typeof v.previous!=='string'||!/^\d{4}-\d{2}$/.test(v.previous))return undefined;
  for(const field of ['mean','median','previousMean','delta','openAge'])if(v[field]!==null&&(typeof v[field]!=='number'||!Number.isFinite(v[field])))return undefined;
  for(const field of ['resolved','previousResolved','openDated','missingDates'])if(typeof v[field]!=='number'||!Number.isSafeInteger(v[field])||Number(v[field])<0)return undefined;
- return Object.fromEntries(['month','previous','asOf','mean','median','previousMean','delta','resolved','previousResolved','openAge','openDated','missingDates'].map(key=>[key,v[key]])) as JiraResolutionMetrics;
+ const w=v.weekly as Record<string,unknown>|undefined;
+ let weekly:JiraResolutionMetrics['weekly'];
+ if(w&&typeof w==='object'&&w.from===isoWeekForDate(v.asOf).from&&w.to===v.asOf&&['mean','median'].every(k=>w[k]===null||(typeof w[k]==='number'&&Number.isFinite(w[k])&&Number(w[k])>=0))&&['sample','days','completed','excluded'].every(k=>typeof w[k]==='number'&&Number.isSafeInteger(w[k])&&Number(w[k])>=0)&&Number(w.sample)+Number(w.excluded)===w.completed&&(Number(w.sample)===0?w.mean===null&&w.median===null&&w.days===0:typeof w.mean==='number'&&w.median!==null&&Math.abs(w.mean-Number(w.days)/Number(w.sample))<1e-8))weekly={from:String(w.from),to:String(w.to),mean:w.mean as number|null,median:w.median as number|null,sample:Number(w.sample),days:Number(w.days),completed:Number(w.completed),excluded:Number(w.excluded)};
+ return {...Object.fromEntries(['month','previous','asOf','mean','median','previousMean','delta','resolved','previousResolved','openAge','openDated','missingDates'].map(key=>[key,v[key]])),...(weekly?{weekly}:{})} as JiraResolutionMetrics;
 }
 export function resolutionKpiHtml(tickets:ResolutionTicket[],date:string,snapshot?:JiraResolutionMetrics){
  const k=snapshot??jiraMarketKpis(tickets,date),n=(v:number|null)=>v===null?'—':new Intl.NumberFormat('fr-FR',{maximumFractionDigits:1}).format(v);
- return `<section class="resolution-export"><h3>Résolution · ${k.month} · au ${k.asOf}</h3><table style="width:100%;border-collapse:collapse"><tr>${[['Délai moyen',n(k.mean)],['Médiane',n(k.median)],['Écart au mois précédent',n(k.delta)],['Ancienneté du stock',n(k.openAge)]].map(([label,value])=>`<td style="padding:10px;border:1px solid #dce5e2"><small>${label}</small><br><strong>${value} j ouvrés</strong></td>`).join('')}</tr></table><p>${k.resolved} ticket(s) résolu(s) daté(s) ce mois, ${k.previousResolved} le mois précédent complet (${n(k.previousMean)} j). ${k.missingDates} ticket(s) fermé(s) exclu(s) pour dates absentes ou incohérentes. Hors weekends et jours fériés nationaux français, création exclue et résolution incluse. Mois courant arrêté à la date du point. Le stock reflète l’extraction importée.</p></section>`;
+ const weekly=k.weekly;
+ return `<section class="resolution-export">${weekly?`<h3>Délai moyen de résolution · cette semaine</h3><p><strong style="font-size:22px">${n(weekly.mean)} j ouvrés</strong> · ${weekly.sample} ticket(s) avec dates valides, du ${weekly.from} au ${weekly.to}. Médiane : ${n(weekly.median)} j ; ${weekly.excluded} ticket(s) exclu(s).</p>`:'<p>Délai de cette semaine non enregistré : actualiser explicitement les données Jira du point.</p>'}<h3>Résolution · ${k.month} · au ${k.asOf}</h3><table style="width:100%;border-collapse:collapse"><tr>${[['Délai moyen',n(k.mean)],['Médiane',n(k.median)],['Écart au mois précédent',n(k.delta)],['Ancienneté du stock',n(k.openAge)]].map(([label,value])=>`<td style="padding:10px;border:1px solid #dce5e2"><small>${label}</small><br><strong>${value} j ouvrés</strong></td>`).join('')}</tr></table><p>${k.resolved} ticket(s) résolu(s) daté(s) ce mois, ${k.previousResolved} le mois précédent complet (${n(k.previousMean)} j). ${k.missingDates} ticket(s) fermé(s) exclu(s) pour dates absentes ou incohérentes. Hors weekends et jours fériés nationaux français, création exclue et résolution incluse. Mois courant arrêté à la date du point. Le stock reflète l’extraction importée.</p></section>`;
 }

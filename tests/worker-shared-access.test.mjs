@@ -128,12 +128,14 @@ test('built Worker global Jira page includes unassigned tickets and refreshes ca
 test('Jira CSV Terminée reaches hosted registry and working-day KPIs through the complete import workflow',async t=>{
  const request=fixture(t);
  const {moduleUrl}=await import('./helpers/module-url.mjs');const {parseJiraCsv}=await import(moduleUrl('../../lib/jira-csv.ts'));
- const parsed=parseJiraCsv('Clé de ticket;État;Résumé;Création;Mise à jour;Terminée\nTEST-700;Fini;Date fin réelle;23/10/2026;29/10/2026;27/10/2026');
+ const parsed=parseJiraCsv('Clé de ticket;État;Résumé;Création;Mise à jour;Terminée\nTEST-700;Fini;TEST - Date fin réelle;23/10/2026;29/10/2026;27/10/2026');
  const start=await request('/api/jira-imports','POST',{action:'start',filename:'fixture.csv',rowCount:1});assert.equal(start.status,201,JSON.stringify(start.body));
  const importId=start.body.batch.id;
  const chunk=await request('/api/jira-imports','POST',{action:'chunk',importId,tickets:parsed.tickets});assert.equal(chunk.status,200,JSON.stringify(chunk.body));
  const finish=await request('/api/jira-imports','POST',{action:'finish',importId});assert.equal(finish.status,200,JSON.stringify(finish.body));
  const stats=await request('/api/jira-activity?from=2026-10-26&to=2026-10-29&compareFrom=2026-10-19&compareTo=2026-10-22&basis=stock');assert.equal(stats.status,200,JSON.stringify(stats.body));
  assert.equal(stats.body.report.a.resolution.sample,1);assert.equal(stats.body.report.a.resolution.mean,2);assert.equal(stats.body.report.a.resolution.missingResolution,0);assert.equal(stats.body.report.b.resolution.mean,null);
+ assert.equal(stats.body.report.timeline.a[0].resolution.mean,2);assert.equal(stats.body.report.timeline.a[0].resolution.sample,1);
+ const weekly=await request('/api/jira-week?marketId=shared-test&year=2026&week=44&date=2026-10-29&preferCentral=1');assert.equal(weekly.status,200,JSON.stringify(weekly.body));assert.equal(weekly.body.snapshot.summary.resolutionMetrics.weekly.mean,2);assert.equal(weekly.body.snapshot.summary.resolutionMetrics.weekly.sample,1);
  assert.equal(request.sqlite.prepare("SELECT resolution_at FROM jira_tickets WHERE ticket_key='TEST-700'").get().resolution_at,'2026-10-27T00:00:00');
 });

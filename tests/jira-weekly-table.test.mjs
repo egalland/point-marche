@@ -9,3 +9,10 @@ test('interactive market chart has distinct colors, format choices and keeps num
 test('reference keeps true dates and missing weeks as gaps, with a separate week-filter action',()=>{
  const s=html(true);assert.equal((s.match(/stroke-dasharray="6 5"/g)||[]).length,4);assert.match(s,/05\/10\/2026 → 11\/10\/2026/);assert.match(s,/Utiliser cette semaine/);assert.doesNotMatch(s,/ic-inspector-actions/);assert.doesNotMatch(s,/NaN|Infinity/);
 });
+
+test('weekly headline is weighted by valid ticket samples and weekly market table exposes working days and exclusions',()=>{
+ const cohort=(sample,days)=>({mean:sample?days/sample:null,median:null,sample,days,completed:sample,excluded:0});
+ const augmented={a:timeline.a.map((w,i)=>({...w,resolution:cohort(i?3:1,i?30:0),markets:w.markets.map(m=>({...m,resolution:cohort(i?3:1,i?30:0)}))})),b:timeline.b.map(w=>({...w,resolution:cohort(0,0),markets:w.markets.map(m=>({...m,resolution:cohort(0,0)}))}))};
+ const html=renderToStaticMarkup(createElement(JiraWeeklyTimeline,{timeline:augmented,comparisonEnabled:true,stock:false,byMarket:true,onByMarketChange:()=>{}}));
+ assert.match(html,/7,5/);assert.match(html,/4 ticket\(s\) avec dates valides/);assert.match(html,/Délai moyen · j ouvrés/);assert.match(html,/Échantillon \/ exclus/);assert.match(html,/Mettre en avant un indicateur/);assert.match(html,/Délai moyen de résolution par marché/);
+});
