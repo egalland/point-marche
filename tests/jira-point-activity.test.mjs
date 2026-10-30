@@ -17,7 +17,7 @@ test('point keeps open totals separate from weekly completed details and freezes
  const market={...defaultMarkets[0],id:'test'};const data=initialData('test',market);data.meetingDate='2026-10-29';data.jiraMode='automatic';data.jira=jiraTicketsFromSummary(summary,['A1234567'],'test');data.jiraWeekly=summary.weeklyCoverage;data.jiraResolution=summary.resolutionMetrics;data.jiraAlertRules=[{id:'r',category:'Tarifs',subcategory:'',warningDays:2,criticalDays:5,priority:'normal',enabled:true,impact:'high',implication:'Contrôler <les agences>'}];
  data.preferences.jiraPresentation={...data.preferences.jiraPresentation,view:'completed',showComment:true,showCategories:true,showCategorySummary:true};
  const saved=normalizePointData(JSON.parse(JSON.stringify(data)),'test');assert.equal(saved.jira.length,3);assert.equal(jiraDashboardStats(saved,market,[]).currentVolume,1);assert.equal(jiraCategoryGroups(saved.jira,saved.jiraAlertRules)[0].impact,'high');
- for(const html of [buildMailHtml(saved,market,[]),buildInteractiveHtml(saved,market,[])]){assert.match(html,/Terminés de la semaine/);assert.match(html,/2 ticket\(s\)/);assert.match(html,/TEST-1/);assert.match(html,/TEST-3/);assert.match(html,/Tarifs \/ Contrôle/);assert.match(html,/Contrôler &lt;les agences&gt;/);}
+ for(const html of [buildMailHtml(saved,market,[]),buildInteractiveHtml(saved,market,[])]){assert.match(html,/Terminés de la semaine/);assert.match(html,/2 ticket\(s\)/);assert.match(html,/TEST-1/);assert.match(html,/TEST-3/);assert.match(html,/Tarifs \/ Contrôle/);assert.match(html,/Tickets ouverts par catégorie/);}
  const next=marketJiraSummary([],'2026-10-29');assert.equal(next.tickets,0);assert.equal(saved.jira.length,3);
 });
 test('manual detailed paste recognizes closed status, categories and resolution columns',()=>{
@@ -25,11 +25,11 @@ test('manual detailed paste recognizes closed status, categories and resolution 
  const p=parseJiraAssigneeSummary(text);assert.equal(p.detailedTickets.length,1);assert.equal(p.detailedTickets[0].category,'Tarifs');assert.equal(p.detailedTickets[0].subcategory,'Contrôle');assert.equal(p.detailedTickets[0].updatedAt,'2026-10-29T10:00:00');assert.equal(p.detailedTickets[0].resolutionAt,'2026-10-27T10:00:00');
 });
 
-test('point summary promotes the completed count and exposes its list without opening the generic Jira modal',async()=>{
+test('point summary presents fixed counters and only the configured optional list',async()=>{
  const {build}=await import('esbuild'),{createRequire}=await import('node:module');const React=await import('react'),{renderToStaticMarkup}=await import('react-dom/server');
  const b=await build({entryPoints:['features/market-pulse/jira-point-summary.tsx'],bundle:true,platform:'node',format:'cjs',packages:'external',write:false});const module={exports:{}};new Function('require','module','exports',b.outputFiles[0].text)(createRequire(import.meta.url),module,module.exports);
  const date='2026-10-30',data={meetingDate:date,jiraMode:'manual',jira:[{id:'one',key:'TEST-1',status:'Fini',summary:'Terminé visible',assignee:'Alex',createdAt:'2026-10-23',resolutionAt:'2026-10-27',lastActivity:'2026-10-29',count:1}],jiraAlertRules:[]};
- const html=renderToStaticMarkup(React.createElement(module.exports.JiraPointSummary,{data,market:{id:'m',name:'Marché',jiraWarningDays:10,jiraCriticalDays:20},archive:[]}));assert.match(html,/completed-spotlight/);assert.match(html,/Terminés cette semaine<\/span><strong>1<\/strong>/);assert.match(html,/Vue des tickets Jira/);assert.doesNotMatch(html,/class="jira-block-list"/);
+ const html=renderToStaticMarkup(React.createElement(module.exports.JiraPointSummary,{data,market:{id:'m',name:'Marché',jiraWarningDays:10,jiraCriticalDays:20},archive:[]}));assert.match(html,/completed-spotlight/);assert.match(html,/Terminés cette semaine<\/span><strong>1<\/strong>/);assert.doesNotMatch(html,/<select|<button|jira-view-pages/);assert.doesNotMatch(html,/class="jira-block-list"/);
  const shown=renderToStaticMarkup(React.createElement(module.exports.JiraPointSummary,{data:{...data,preferences:{jiraPresentation:{view:'completed'}}},market:{id:'m',name:'Marché'},archive:[]}));assert.match(shown,/Terminé visible/);
  const old=renderToStaticMarkup(React.createElement(module.exports.JiraPointSummary,{data:{...data,jiraMode:'automatic',jira:[]},market:{id:'m',name:'Marché'},archive:[]}));assert.match(old,/Actualise les données Jira du point/);assert.match(old,/Terminés cette semaine<\/span><strong>—<\/strong>/);
 });

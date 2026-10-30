@@ -11,5 +11,5 @@ test('editing renders content in the block; details stay closed until explicitly
 test('Jira summary shows counts and delays without exposing the person list in the default block',()=>{
  const data=model.initialData();data.meetingDate='2026-10-28';data.jira=[{id:'test',key:'TEST-1',summary:'CONFIDENTIAL_DETAIL_FIXTURE',status:'En cours',assignee:'PERSON_FIXTURE',lastActivity:'2026-10-01',createdAt:'2026-09-01',link:'',comment:'',priority:''}];
  const html=renderToStaticMarkup(createElement(JiraPointSummary,{data,market:model.defaultMarkets[0],archive:[]}));
- assert.match(html,/Tickets ouverts/);assert.match(html,/Délai moyen/);assert.match(html,/Détails des tickets/);assert.doesNotMatch(html,/PERSON_FIXTURE|CONFIDENTIAL_DETAIL_FIXTURE/);
+ assert.match(html,/Tickets ouverts/);assert.match(html,/Délai moyen/);assert.doesNotMatch(html,/<select|<button|PERSON_FIXTURE|CONFIDENTIAL_DETAIL_FIXTURE/);
 });

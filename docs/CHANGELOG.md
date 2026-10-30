@@ -1,3 +1,12 @@
+## V141 — 30 octobre 2026
+
+- Présentation Jira fixe : suppression des sélecteurs, filtres, compteurs cliquables et pagination côté lecteur.
+- Menu « Présentation Jira » : propositions de synthèse seule, évolution ou catégories, combinables et ajustables.
+- Graphique facultatif des terminés sur 3 ou 4 semaines, avec délai moyen en jours ouvrés et nombre de tickets datés sous chaque semaine.
+- Historique préparé sur le périmètre complet de l’import, puis figé avec le point ; aucune récupération implicite pour un ancien point.
+- Répartition graphique des tickets ouverts par catégorie. Liste courte facultative avec limite explicite.
+- Mail et HTML alignés sur la présentation choisie, sans radar ou filtres Jira supplémentaires.
+
 ## V140 — 30 octobre 2026
 
 - Bloc Jira unifié : trois indicateurs par défaut, sans juxtaposition systématique des détails mensuels et répartitions.

@@ -1,0 +1,18 @@
+import {escapeRichText as esc} from './point-rich-content';
+import {isoWeekForDate} from './iso-week';
+import {isClosedJiraStatus,isAbandonedJiraStatus} from './jira-import';
+import {jiraItemCount,type JiraTicket} from '../features/market-pulse/point-model';
+import type {JiraTrendWeek} from './jira-market-kpis';
+export const jiraPresentationNumber=(v:number|null)=>v===null?'—':v.toLocaleString('fr-FR',{maximumFractionDigits:1});
+/** Static, labelled HTML charts: identical story in the point, email and standalone HTML. */
+export function jiraTrendChartHtml(trend:JiraTrendWeek[]|undefined,weeks:number,showResolution:boolean){
+ if(!trend?.length)return '<section class="jira-presentation-chart"><h3>Évolution des tickets terminés</h3><p>Historique non enregistré dans ce point. Actualise explicitement ses données Jira pour le préparer.</p></section>';
+ const rows=trend.slice(-weeks),max=Math.max(1,...rows.map(w=>w.completed)),n=jiraPresentationNumber;
+ return `<section class="jira-presentation-chart"><h3>Terminés · ${rows.length} dernières semaines</h3><table role="presentation" width="100%" style="table-layout:fixed;text-align:center;border-spacing:8px 0"><tbody><tr>${rows.map(w=>`<td style="vertical-align:bottom;padding:0 4px"><strong style="display:block;font-size:17px;margin-bottom:5px">${n(w.completed)}</strong><div style="height:${Math.max(2,Math.round(w.completed/max*64))}px;background:#249a85;border-radius:5px 5px 0 0;margin:0 auto;width:65%"></div></td>`).join('')}</tr><tr>${rows.map(w=>`<td style="padding:7px 2px 3px;font-size:11px"><b>S${isoWeekForDate(w.from).week}</b><br><span style="font-size:10px;opacity:.7">${w.from.slice(8,10)}/${w.from.slice(5,7)}–${w.to.slice(8,10)}/${w.to.slice(5,7)}</span></td>`).join('')}</tr>${showResolution?`<tr>${rows.map(w=>`<td style="padding:7px 2px;border-top:1px solid #80968e40;font-size:12px"><b>${n(w.mean)} j</b><br><span style="font-size:10px;opacity:.7">${w.sample} daté(s)</span></td>`).join('')}</tr>`:''}</tbody></table><p class="jira-chart-caption">${showResolution?'Délai moyen en jours ouvrés ; dates de création et résolution valides. ':''}Dernière semaine arrêtée au ${esc(rows.at(-1)!.to)}. Dates de résolution uniquement.</p></section>`;
+}
+export function jiraCategoryChartHtml(tickets:JiraTicket[],known:boolean){
+ const groups=new Map<string,number>();for(const t of tickets){if(isClosedJiraStatus(t.status)||isAbandonedJiraStatus(t.status))continue;const category=t.category?.trim()||'Non renseignée';groups.set(category,(groups.get(category)??0)+jiraItemCount(t));}
+ const sorted=[...groups].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'fr')),rows=sorted.slice(0,5);if(sorted.length>5)rows.push(['Autres catégories',sorted.slice(5).reduce((n,g)=>n+g[1],0)]);
+ const max=Math.max(1,...rows.map(r=>r[1])),total=sorted.reduce((n,r)=>n+r[1],0);
+ return `<section class="jira-presentation-chart"><h3>Tickets ouverts par catégorie</h3>${!known?'<p>Données Jira non enregistrées.</p>':!total?'<p>Aucun ticket ouvert.</p>':`<table width="100%" style="border-collapse:collapse"><tbody>${rows.map(([label,count])=>`<tr><td style="padding:5px 10px 5px 0;font-size:12px;overflow-wrap:anywhere;width:42%">${esc(label)}</td><td style="padding:5px 0;width:44%"><div style="height:6px;width:${Math.max(1,count/max*100)}%;background:#249a85;border-radius:4px"></div></td><td style="text-align:right;padding-left:8px;font-size:12px"><b>${count}</b></td></tr>`).join('')}</tbody></table><p class="jira-chart-caption">${total} ticket(s) ouverts · ${sorted.length} catégorie(s). ${sorted.length>5?'Les autres catégories sont regroupées.':''}</p>`}</section>`;
+}

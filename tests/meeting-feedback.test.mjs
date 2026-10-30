@@ -69,7 +69,8 @@ test("standalone market and analyst pages respect saved block order and widths",
   assert.deepEqual([...html.matchAll(/data-module="([a-z]+)"/g)].map((match) => match[1]), data.preferences.moduleOrder);
   assert.match(html, /data-module="promotions"[^>]*style="--columns:2"/);
   assert.match(html, /--point-scale:1\.25;--space:24px/);
-  assert.match(html, /height:0%/);
+  assert.doesNotMatch(html, /NaN|Infinity|Radar Jira interactif/);
+  assert.match(html, /Tickets ouverts/);
   const analystData = point.initialAnalystPoint(analyst);
   analystData.preferences.order = ["dossiers", "overview", "planner", "jira", "cycle20"];
   analystData.preferences.widths.dossiers = "two-thirds";
