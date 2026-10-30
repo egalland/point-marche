@@ -1,3 +1,9 @@
+## V143 — 30 octobre 2026
+
+- Liste de statuts Jira à cocher dans Présentation Jira → Liste courte facultative.
+- Plusieurs statuts sélectionnables simultanément ; Tous les statuts rétablit la liste complète du point.
+- Choix conservés avec le point et repris dans les exports ; les KPI et graphiques restent indépendants des critères de liste.
+
 ## V142 — 30 octobre 2026
 
 - Colonne Type de ticket reconnue dans les imports CSV et collages, conservée dans le registre et les points.
