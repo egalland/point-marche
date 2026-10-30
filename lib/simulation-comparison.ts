@@ -1,3 +1,4 @@
+import {matchesPlannerMarket} from './planner-market-tags';
 import type { PlannerTask } from "./planner-import";
 import { supplierKeyForTask } from "./supplier-variations";
 export type ComparisonMetric = "count" | "variation" | "weighted";
@@ -31,9 +32,8 @@ function measure(tasks: PlannerTask[], metric: ComparisonMetric) {
 }
 export function buildSimulationComparison(tasks: PlannerTask[], markets: ComparisonMarket[], config: ComparisonConfig, sourceUpdatedAt = ""): ComparisonSnapshot {
   const market = markets.find((m) => m.id === config.marketId);
-  const tags = new Set((market?.plannerTags ?? []).map((t) => t.toLocaleLowerCase("fr")));
   // A simulation is a distinct Planner task, never a checklist step.
-  const distinct = [...new Map(tasks.map((t) => [t.externalId, t])).values()].filter((t) => t.workflowState !== "stopped" && (config.marketId === "all" || market && t.labels.some((l) => tags.has(l.toLocaleLowerCase("fr")))) && (config.supplierKey === "all" || supplierKeyForTask(t) === config.supplierKey));
+  const distinct = [...new Map(tasks.map((t) => [t.externalId, t])).values()].filter((t) => t.workflowState !== "stopped" && (config.marketId === "all" || market && matchesPlannerMarket(t.labels,market.plannerTags)) && (config.supplierKey === "all" || supplierKeyForTask(t) === config.supplierKey));
   const a = months(config.fromA, config.toA); const b = months(config.fromB, config.toB);
   const listA = distinct.filter((t) => a.includes(t.effectiveMonth)); const listB = distinct.filter((t) => b.includes(t.effectiveMonth));
   const buckets = Array.from({ length: Math.max(a.length, b.length) }, (_, i) => {

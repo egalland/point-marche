@@ -1,4 +1,6 @@
 "use client";
+import {matchesPlannerMarket} from '../../lib/planner-market-tags';
+
 import { clientCan } from "../../lib/access-client";
 import {PURCHASESDashboard} from "./purchaseData-dashboard";
 
@@ -250,7 +252,7 @@ export function SupplierVariationDashboard({ tasks, markets, registry }: { tasks
   const market = markets.find((item) => item.id === marketId);
   const filtered = useMemo(() => allPoints.filter((point) => {
     if (point.period < from.slice(0, 7) || point.period > to.slice(0, 7)) return false;
-    if (market && !market.plannerTags.some((tag) => point.labels.includes(tag.toUpperCase()))) return false;
+    if (market && !matchesPlannerMarket(point.labels,market.plannerTags)) return false;
     return supplierKey === "all" || point.supplierKey === supplierKey;
   }), [allPoints, from, market, supplierKey, to]);
   const suppliers = useMemo(() => Array.from(new Map(allPoints.map((point) => [point.supplierKey, { key: point.supplierKey, label: point.supplierLabel, code: point.supplierCode }])).values()).sort((left, right) => left.label.localeCompare(right.label, "fr")), [allPoints]);

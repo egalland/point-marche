@@ -1,3 +1,4 @@
+import {matchesPlannerMarket} from '../../lib/planner-market-tags';
 import {normalizeJiraWeekCoverage,type JiraWeekCoverage} from "../../lib/jira-point-activity";
 import {directoryPersonAt,type DirectoryAssignment} from "../../lib/directory-profiles";
 import {normalizeSimulationPresentation,type SimulationPresentation} from "@/lib/simulation-presentation";
@@ -285,8 +286,7 @@ export function applyDirectoryMail(data: PointData, marketId: string, users: Glo
 }
 
 export function plannerTaskMatchesMarket(task: PlannerTask, market: Market) {
-  const labels = new Set(task.labels.map((label) => label.toLocaleUpperCase("fr-FR")));
-  return market.plannerTags.some((tag) => labels.has(tag.toLocaleUpperCase("fr-FR")));
+  return matchesPlannerMarket(task.labels,market.plannerTags);
 }
 
 export function plannerTaskToOperation(task: PlannerTask, allTasks: PlannerTask[], previous?: CommercialOperation): CommercialOperation {

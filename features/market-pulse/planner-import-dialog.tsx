@@ -1,4 +1,6 @@
 "use client";
+import {matchesPlannerMarket} from '../../lib/planner-market-tags';
+
 import { useAccess } from "./access-panel";
 import { LoadingStatus } from "@/components/loading-status";
 
@@ -14,10 +16,6 @@ type Props = {
   onImport: (rawText: string) => Promise<{ imported: number; message: string }>;
 };
 
-function normalized(value: string) {
-  return value.trim().toLocaleUpperCase("fr-FR");
-}
-
 export function PlannerImportDialog({ markets, onImport }: Props) {
   const { can } = useAccess();
   const [open, setOpen] = useState(false);
@@ -27,7 +25,7 @@ export function PlannerImportDialog({ markets, onImport }: Props) {
   const parsed = useMemo(() => parsePlannerTasks(rawText), [rawText]);
   const mapped = useMemo(() => parsed.tasks.map((task) => ({
     task,
-    markets: markets.filter((market) => market.plannerTags.some((tag) => task.labels.map(normalized).includes(normalized(tag)))),
+    markets: markets.filter((market) => matchesPlannerMarket(task.labels,market.plannerTags)),
   })), [markets, parsed.tasks]);
   const unmatched = mapped.filter((item) => !item.markets.length).length;
   const globalVariations = parsed.tasks.filter((task) => task.metrics.globalVariation !== null).length;

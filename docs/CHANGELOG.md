@@ -1,3 +1,9 @@
+## V137 — 30 octobre 2026
+
+- Dans les marchés, un code seul (MEN) reconnaît l’étiquette MEN et les variantes MEN-AA, MEN-BB, etc. Une étiquette complète reste exacte.
+- Même règle pour le point marché, l’aperçu d’import Planner, les comparaisons, les variations fournisseurs et l’activité analystes.
+- Les étiquettes importées restent intactes. Les paramètres des marchés restent à modifier par l’administrateur ; aucun point enregistré n’est actualisé automatiquement.
+
 ## V136 — 30 octobre 2026
 
 - Dates d’activité, statuts, délais ouvrés et spécialités préparés une fois par import ; JSON privé conservé côté site, cache dérivé inclus dans le classeur portable.

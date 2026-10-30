@@ -1,3 +1,4 @@
+import {matchesPlannerMarket} from './planner-market-tags';
 import { type PlannerTask, type PlannerTaskMetrics } from "./planner-import";
 import { supplierLabelFromTask, supplierSeriesForTask } from "./supplier-variations";
 import { usesManualSource } from "./point-source-mode";
@@ -104,12 +105,12 @@ export function enrichMarketPointFromPlanner(payload: unknown, tasks: PlannerTas
   if (!enriched) return payload;
   const meetingDate = text(enriched.meetingDate);
   const currentMonth = /^\d{4}-\d{2}-\d{2}$/.test(meetingDate) ? meetingDate.slice(0, 7) : "";
-  const tags = new Set(marketTags.map((tag) => tag.trim().toUpperCase()).filter(Boolean));
-  if (!currentMonth || !tags.size) return enriched;
+  const tags = marketTags.filter(tag=>tag.trim());
+  if (!currentMonth || !tags.length) return enriched;
   const months = new Set([currentMonth, nextMonth(currentMonth)]);
   const operations = Array.isArray(enriched.operations) ? [...enriched.operations] : [];
   const existing = new Set(operations.map(plannerExternalId).filter(Boolean));
-  const relevant = tasks.filter((task) => task.registrySource !== "point-recovery" && months.has(task.effectiveMonth) && task.labels.some((label) => tags.has(label.trim().toUpperCase())));
+  const relevant = tasks.filter((task) => task.registrySource !== "point-recovery" && months.has(task.effectiveMonth) && matchesPlannerMarket(task.labels,tags));
   relevant.forEach((task) => {
     if (!existing.has(task.externalId)) { operations.push(pointOperation(task, tasks)); existing.add(task.externalId); }
   });

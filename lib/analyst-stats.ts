@@ -1,3 +1,4 @@
+import {matchesPlannerMarket} from './planner-market-tags';
 import { milestoneKind, elapsedCalendarDays, simulationMilestones, hasTemplateTracking } from "./simulation-lifecycle";
 import type { GlobalDirectoryUser } from "./global-directory";
 import type { PlannerChecklistItem, PlannerSpecialty, PlannerTask } from "./planner-import";
@@ -113,8 +114,7 @@ function matchAnalyst(label: string, users: GlobalDirectoryUser[]) {
 }
 
 function marketIdsForTask(task: PlannerTask, markets: AnalystStatsMarket[]) {
-  const labels = new Set(task.labels.map((label) => normalized(label)));
-  return markets.filter((market) => market.plannerTags.some((tag) => labels.has(normalized(tag)))).map((market) => market.id);
+  return markets.filter((market) => matchesPlannerMarket(task.labels,market.plannerTags)).map((market) => market.id);
 }
 
 export function plannerContributions(tasks: PlannerTask[], users: GlobalDirectoryUser[], markets: AnalystStatsMarket[]) {
