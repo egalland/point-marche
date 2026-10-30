@@ -69,8 +69,8 @@ test('point weekly resolution crosses month boundaries, excludes bad dates and s
  const data=initialData();data.meetingDate='2026-11-01';data.jiraMode='automatic';data.jiraResolution=k;
  const restored=normalizePointData(JSON.parse(JSON.stringify(data)),defaultMarkets[0].id);assert.deepEqual(restored.jiraResolution.weekly,k.weekly);
  const source=JSON.stringify(restored);jiraMarketKpis([],'2026-12-01');assert.equal(JSON.stringify(restored),source);
- const ui=renderToStaticMarkup(createElement(JiraPointSummary,{data:restored,market:defaultMarkets[0],archive:[]}));assert.match(ui,/Résolution · semaine/);assert.match(ui,/3,5/);
- for(const html of [buildMailHtml(restored,defaultMarkets[0],[]),buildInteractiveHtml(restored,defaultMarkets[0],[])]){assert.match(html,/Délai moyen de résolution · cette semaine/);assert.match(html,/3,5 j ouvrés/);}
+ const ui=renderToStaticMarkup(createElement(JiraPointSummary,{data:restored,market:defaultMarkets[0],archive:[]}));assert.match(ui,/Délai moyen · semaine/);assert.match(ui,/3,5/);
+ for(const html of [buildMailHtml(restored,defaultMarkets[0],[]),buildInteractiveHtml(restored,defaultMarkets[0],[])]){assert.match(html,/Délai moyen · semaine/);assert.match(html,/3,5 j ouvrés/);}
  const old={...k};delete old.weekly;assert.equal(normalizeResolutionMetrics(old).weekly,undefined);
  assert.equal(normalizeResolutionMetrics({...k,weekly:{...k.weekly,mean:99}}).weekly,undefined);
 });

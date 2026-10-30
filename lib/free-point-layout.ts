@@ -21,7 +21,7 @@ export function changeRect(rect: BlockRect, dx: number, dy: number, resize: bool
 }
 export function initialRects(ids: string[], widths: Record<string,string>): Record<string,BlockRect> {
  const result:Record<string,BlockRect>={};let x=0,y=0,rowHeight=0;
- for(const id of ids){const span=widths[id]==='quarter'?1:widths[id]==='half'?2:widths[id]==='three-quarters'||widths[id]==='two-thirds'?3:4;const width=span*300;if(x+width>1200){x=0;y+=rowHeight+24;rowHeight=0;}const height=id==='jira'?520:id==='dossiers'?600:480;result[id]=normalizeRect({x,y,width:width-(span===4?0:12),height});x+=width;rowHeight=Math.max(rowHeight,height);}
+ for(const id of ids){const span=widths[id]==='quarter'?1:widths[id]==='half'?2:widths[id]==='three-quarters'||widths[id]==='two-thirds'?3:4;const width=span*300;if(x+width>1200){x=0;y+=rowHeight+24;rowHeight=0;}const height=id==='jira'?300:id==='dossiers'?600:480;result[id]=normalizeRect({x,y,width:width-(span===4?0:12),height});x+=width;rowHeight=Math.max(rowHeight,height);}
  return result;
 }
 

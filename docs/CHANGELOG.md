@@ -1,3 +1,11 @@
+## V140 — 30 octobre 2026
+
+- Bloc Jira unifié : trois indicateurs par défaut, sans juxtaposition systématique des détails mensuels et répartitions.
+- Vues configurables : résumé, ouverts, terminés de la semaine, fermés présents, vigilance, critiques, tous les tickets du point.
+- Regroupement par personne, catégorie ou statut ; filtres, champs complémentaires, limite de lignes et KPI optionnels.
+- Configuration au clic droit ou via le menu du bloc, avec réglage de la source et actualisation explicite ; aucune requête Jira lors d’un simple changement de vue.
+- Options conservées dans les points et copies, reprises dans les exports. Les tickets absents d’un ancien instantané restent absents jusqu’à actualisation explicite.
+
 ## V139 — 30 octobre 2026
 
 - Tickets terminés : compteur dans la première rangée du bloc Jira, liste accessible directement en dépliant « Voir les tickets terminés ».

@@ -1,3 +1,4 @@
+import {normalizeJiraBlockPresentation,type JiraBlockPresentation} from '../../lib/jira-block-settings';
 import {matchesPlannerMarket} from '../../lib/planner-market-tags';
 import {normalizeJiraWeekCoverage,type JiraWeekCoverage} from "../../lib/jira-point-activity";
 import {directoryPersonAt,type DirectoryAssignment} from "../../lib/directory-profiles";
@@ -35,7 +36,7 @@ export type FontScale = "compact" | "standard" | "large";
 export type Density = "compact" | "comfortable" | "airy";
 export type PointModule = "jira" | "dossiers" | "operations" | "promotions" | "alerts" | "comparison" | "simulationComparison" | "purchaseData";
 export type ModuleVisibility = Record<PointModule, boolean>;
-export type PointPreferences = { simulationPresentation?:SimulationPresentation; simulationPeriods?:string[]; summary?:PointSummarySettings; freeLayout?: FreeLayout; fontScale: FontScale; fontScalePercent: number; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
+export type PointPreferences = { jiraPresentation?:JiraBlockPresentation; simulationPresentation?:SimulationPresentation; simulationPeriods?:string[]; summary?:PointSummarySettings; freeLayout?: FreeLayout; fontScale: FontScale; fontScalePercent: number; density: Density; readModules: ModuleVisibility; mailModules: ModuleVisibility; htmlModules: ModuleVisibility; moduleOrder: PointModule[]; moduleWidths: Record<PointModule, ModuleWidth> };
 export type CarryoverFields = { sourceId?: string; carriedFromYear?: number; carriedFromWeek?: number };
 export type Dossier = RichDossier & CarryoverFields;
 export type PlannerPointSource = { labels?: string[]; checklist?: PlannerTask["checklist"]; externalId: string; metrics: PlannerTask["metrics"]; supplierLabel?: string; variationHistory?: SupplierVariationPoint[] };
@@ -88,8 +89,8 @@ export const pointModules: { id: PointModule; label: string; detail: string }[] 
 export const allModulesVisible = (): ModuleVisibility => ({ jira: true, dossiers: true, operations: true, promotions: true, alerts: true, comparison: false, purchaseData: false, simulationComparison: false });
 export const defaultModuleOrder: PointModule[] = ["jira", "dossiers", "operations", "promotions", "alerts", "comparison", "simulationComparison", "purchaseData"];
 export const defaultModuleWidths: Record<PointModule, ModuleWidth> = { jira: "full", dossiers: "full", operations: "full", promotions: "full", alerts: "half", comparison: "full", purchaseData: "full", simulationComparison: "full" };
-export const defaultPreferences = (): PointPreferences => ({ fontScale: "standard", fontScalePercent: 100, density: "comfortable", readModules: allModulesVisible(), mailModules: allModulesVisible(), htmlModules: allModulesVisible(), moduleOrder: [...defaultModuleOrder], moduleWidths: { ...defaultModuleWidths } });
-export const copyPreferences = (preferences: PointPreferences): PointPreferences => ({ ...preferences, freeLayout: preferences.freeLayout ? structuredClone(preferences.freeLayout) : undefined, readModules: { ...preferences.readModules }, mailModules: { ...preferences.mailModules }, htmlModules: { ...preferences.htmlModules }, moduleOrder: [...preferences.moduleOrder], moduleWidths: { ...preferences.moduleWidths } });
+export const defaultPreferences = (): PointPreferences => ({ jiraPresentation:normalizeJiraBlockPresentation(undefined), fontScale: "standard", fontScalePercent: 100, density: "comfortable", readModules: allModulesVisible(), mailModules: allModulesVisible(), htmlModules: allModulesVisible(), moduleOrder: [...defaultModuleOrder], moduleWidths: { ...defaultModuleWidths } });
+export const copyPreferences = (preferences: PointPreferences): PointPreferences => ({ ...preferences, jiraPresentation:normalizeJiraBlockPresentation(preferences.jiraPresentation), freeLayout: preferences.freeLayout ? structuredClone(preferences.freeLayout) : undefined, readModules: { ...preferences.readModules }, mailModules: { ...preferences.mailModules }, htmlModules: { ...preferences.htmlModules }, moduleOrder: [...preferences.moduleOrder], moduleWidths: { ...preferences.moduleWidths } });
 export const emptyPlannerRegistry = (): PlannerRegistrySummary => ({ imported: 0, archiveCandidates: 0, recovered: 0, enriched: 0, usableVariations: 0, withoutVariation: 0, withoutMonth: 0 });
 export const emptyDirectoryDraft = (): DirectoryDraft => ({ name: "", email: "", usercode: "", plannerAlias: "", role: "chef-produit", marketIds: [] });
 export const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -199,6 +200,7 @@ export function normalizePointData(value: unknown, marketId: string, marketOverr
     jiraMode: normalizeSourceMode(source.jiraMode), plannerMode: normalizeSourceMode(source.plannerMode), marketComparison: normalizeMarketComparison(source.marketComparison),
     preferences: {
       summary: normalizePointSummary(sourcePreferences.summary),
+      jiraPresentation:normalizeJiraBlockPresentation(sourcePreferences.jiraPresentation),
       simulationPresentation:normalizeSimulationPresentation(sourcePreferences.simulationPresentation),
       simulationPeriods: Array.isArray(sourcePreferences.simulationPeriods)?[...new Set(sourcePreferences.simulationPeriods.filter((p:string)=>/^\d{4}-(0[1-9]|1[0-2])$/.test(p)))].slice(0,24):undefined,
       freeLayout: (() => { const layout = normalizeFreeLayout(sourcePreferences.freeLayout); return {...layout, copies: layout.copies.map(c => ({...c, html: sanitizePointHtml(c.html)}))}; })(),

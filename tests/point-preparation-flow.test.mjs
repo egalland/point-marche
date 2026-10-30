@@ -39,6 +39,7 @@ test('prepare a complete point: imports, market filtering, correction, save, reo
  assert.ok(weekly.snapshot);
  data.jira=m.jiraTicketsFromSummary(weekly.snapshot.summary,['A1234567'],market.id,[]);
  assert.equal(data.jira.length,1);
+ data.preferences.jiraPresentation={...data.preferences.jiraPresentation,view:'open',showComment:true};
  data.jira[0].pointOverride={comment:'Correction locale à conserver'};data.jira[0].comment='Correction locale à conserver';
  data.jira=m.jiraTicketsFromSummary(weekly.snapshot.summary,['A1234567'],market.id,data.jira);
  assert.equal(data.jira[0].comment,'Correction locale à conserver');

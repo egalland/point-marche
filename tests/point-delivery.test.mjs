@@ -12,6 +12,7 @@ const config={...purchaseData.defaultPURCHASES(),from:'2026-10-01',to:'2026-10-3
 const rows=[row,{...row,id:'2',line:'2',extracted:'2026-10-08'},{...row,id:'3',supplier:'HORS',extracted:'2025-01-01',gap:999}];
 Object.assign(config,{specialties:['TEST'],pointPeriod:'custom'});config.report=point.createPURCHASESPointReport(rows,config);data.purchaseDataConfigs=[config];
 data.jira=[{id:'J1',key:'TEST-1',summary:'Contrôler le dossier',status:'En cours',priority:'',assignee:'Camille Exemple',lastActivity:'2026-10-01',link:'https://jira.example.test/browse/TEST-1',comment:'Relancer jeudi'}];
+data.preferences.jiraPresentation={...data.preferences.jiraPresentation,view:'open',showComment:true};
 data.preferences.readModules.purchaseData=true;data.preferences.mailModules.purchaseData=true;data.preferences.htmlModules.purchaseData=true;
 data.preferences.freeLayout={mode:'windows',blocks:{purchaseData:{x:0,y:0,width:588,height:480},jira:{x:600,y:0,width:600,height:840}},titles:{purchaseData:'Achats à suivre'},copies:[]};
 test('PURCHASES : même périmètre, mêmes priorités dans le rapport et les exports',()=>{assert.equal(config.report.summary.lines,2);const fullReport=purchaseData.createPURCHASESReport(rows,config);assert.equal(fullReport.priorities.suppliers[0].lines,2);assert.equal(fullReport.priorities.articles[0].weeks,2);const html=purchaseData.purchaseDataExport([{...config,report:fullReport,snapshot:rows}],true);assert.match(html,/Fournisseur exemple/);assert.doesNotMatch(html,/HORS|999|<details/);assert.match(html,/Articles récurrents/);});
