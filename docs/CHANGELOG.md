@@ -1,3 +1,10 @@
+## V138 — 30 octobre 2026
+
+- Mail : tableau compact des simulations par mois, avec fournisseur, état, variations disponibles et commentaire.
+- Les moyennes sélectionnées restent visibles ; les détails d’étapes, historiques et données complémentaires sont réservés à l’export HTML interactif.
+- Comparatif des simulations limité aux valeurs des deux périodes et à l’écart ; comparaison des marchés en tableau sans graphique.
+- Structure en tableaux et styles intégrés pour la messagerie ; largeur maximale de 900 px. Les dossiers, leur mise en forme et leurs images restent conservés.
+
 ## V137 — 30 octobre 2026
 
 - Dans les marchés, un code seul (MEN) reconnaît l’étiquette MEN et les variantes MEN-AA, MEN-BB, etc. Une étiquette complète reste exacte.
