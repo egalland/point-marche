@@ -18,7 +18,7 @@ const filePattern = /^point-sync-[a-f0-9-]{36}\.json$/;
 export function workspaceParts(data: WorkspaceData): PartMap {
   const result: PartMap = new Map();
   result.set('meta', { id: data.id, name: data.name, createdAt: data.createdAt, ...(data.source ? { source: data.source } : {}) });
-  result.set('jira', { jiraTickets: data.jiraTickets, jiraImports: data.jiraImports, jiraUpdatedAt: data.jiraUpdatedAt });
+  result.set('jira', { jiraTickets: data.jiraTickets, jiraImports: data.jiraImports, jiraUpdatedAt: data.jiraUpdatedAt, jiraAnalytics: data.jiraAnalytics??null });
   result.set('planner', { plannerTasks: data.plannerTasks, plannerUpdatedAt: data.plannerUpdatedAt });
   for (const kind of ['markets', 'users', 'points', 'analystPoints', 'drafts'] as const) {
     for (const row of data[kind]) {

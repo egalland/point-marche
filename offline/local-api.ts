@@ -1,4 +1,6 @@
-import {parseJiraStatsQuery,buildAnalystJiraStats} from "../lib/analyst-jira-stats";
+import {prepareJiraAnalytics,jiraAnalyticsDigest,JIRA_ANALYTICS_VERSION} from '../lib/jira-analytics-source';
+import {JiraAnalyticsSession} from '../lib/jira-analytics-cache';
+import {parseJiraStatsQuery} from "../lib/analyst-jira-stats";
 import {marketJiraSummary} from "../lib/jira-point-activity";
 import {builtinJobRoles,directoryPersonAt,validateAssignments,legacyAssignment,parseJobRole,type JobRole} from "../lib/directory-profiles";
 import { jiraMarketKpis } from "../lib/jira-market-kpis";
@@ -106,6 +108,18 @@ export function createLocalApi(store: WorkspaceStore): AppTransport { return gua
 
 function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
   const staging = new Map<string, Map<string, JiraCsvTicket>>();
+  const jiraAnalytics = new JiraAnalyticsSession();
+  let analyticsTickets:WorkspaceData['jiraTickets']|undefined;
+  async function prepareLocalAnalytics(refresh=false){
+    const current=store.read();if(!refresh&&analyticsTickets===current.jiraTickets)return;
+    const sourceHash=await jiraAnalyticsDigest(current.jiraTickets),saved=current.jiraAnalytics;
+    const reusable=!refresh&&saved?.version===JIRA_ANALYTICS_VERSION&&saved.sourceHash===sourceHash&&saved.facts&&typeof saved.facts==='object'&&current.jiraTickets.every(t=>{const f=saved.facts[t.key];return !f||typeof f.closed==='boolean'&&(f.delay===null||Number.isSafeInteger(f.delay)&&f.delay>=0)&&typeof f.activity==='string'&&typeof f.fallback==='boolean'&&typeof f.specialty==='string'&&f.stock&&typeof f.stock.created==='string'&&typeof f.stock.resolved==='string'&&typeof f.stock.issue==='string'&&typeof f.stock.afterIssue==='string'&&typeof f.stock.closed==='boolean';});
+    let prepared;
+    if(reusable){const tickets=current.jiraTickets.filter(t=>!isAbandonedJiraStatus(t.status));prepared=tickets.every(t=>saved.facts[t.key])?{tickets,facts:saved.facts}:prepareJiraAnalytics(current.jiraTickets);}
+    else prepared=prepareJiraAnalytics(current.jiraTickets);
+    jiraAnalytics.prime(current.jiraTickets,prepared);analyticsTickets=current.jiraTickets;
+    if(!reusable)store.update(data=>({...data,jiraAnalytics:{version:JIRA_ANALYTICS_VERSION,sourceHash,facts:prepared.facts}}));
+  }
   return async (input, init) => {
     try {
       if (init?.signal?.aborted) throw new DOMException("Requête annulée", "AbortError");
@@ -277,6 +291,7 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
             const updatedAt = now();
             const changes = { status: "completed", completedAt: updatedAt, ticketCount: tickets.size, participantCount: Array.from(tickets.values()).reduce((sum, ticket) => sum + ticket.participants.length, 0), rejectedCount: Math.max(0, Number(body.rejectedCount) || 0), repairedTextCount: Math.max(0, Number(body.repairedTextCount) || 0), unknownUserCodeCount: Math.max(0, Number(body.unknownUserCodeCount) || 0) };
             store.update((current) => ({ ...current, jiraTickets: Array.from(registry.values()), jiraUpdatedAt: updatedAt, jiraImports: current.jiraImports.map((batch) => batch.id === importId ? { ...batch, ...changes } : batch) }));
+            await prepareLocalAnalytics();
             staging.delete(importId);
             return json({ batch: store.read().jiraImports.find((batch) => batch.id === importId) });
           }
@@ -303,7 +318,7 @@ function createUnguardedLocalApi(store: WorkspaceStore): AppTransport {
         return json({ snapshot: { year, week, rawText: "", summary: marketJiraSummary(tickets,isIsoDate(url.searchParams.get("date")??"")?url.searchParams.get("date")!:isoWeekRange(year,week).to), updatedAt: data.jiraUpdatedAt, source: "central" }, assignments });
       }
 
-      if((path === "/api/analyst-activity" || path === "/api/jira-activity") && method === "GET"){ const q=parseJiraStatsQuery(url); if(path === "/api/jira-activity")q.scope="registry"; return json({report:buildAnalystJiraStats(data.jiraTickets,data.users,data.markets,q),updatedAt:data.jiraUpdatedAt,hasSource:!!data.jiraUpdatedAt||data.jiraTickets.length>0}); }
+      if((path === "/api/analyst-activity" || path === "/api/jira-activity") && method === "GET"){ const q=parseJiraStatsQuery(url); await prepareLocalAnalytics(url.searchParams.get('refresh')==='1'); if(path === "/api/jira-activity")q.scope="registry"; return json({report:jiraAnalytics.report(data.jiraTickets,data.users,activeMarkets(data),q),updatedAt:data.jiraUpdatedAt,hasSource:!!data.jiraUpdatedAt||data.jiraTickets.length>0}); }
       if (path === "/api/analyst-jira" && method === "GET") {
         const analystId = url.searchParams.get("analystId") ?? "";
         const person = data.users.find((user) => user.id === analystId && (user.role === "analyste-tarif-referentiel"||Boolean(user.assignments?.some(a=>a.role==="analyste-tarif-referentiel"))));

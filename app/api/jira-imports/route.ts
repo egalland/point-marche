@@ -1,3 +1,4 @@
+import {storedJiraAnalytics,jiraRegistryRevision,jiraAnalyticsCacheDb} from '../../../lib/jira-analytics-server';
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { jiraImportBatches, jiraImportParticipants, jiraImportTickets, jiraTicketParticipants, jiraTickets } from "../../../db/schema";
@@ -185,7 +186,9 @@ export async function POST(request: Request) {
       ]);
       const integrityError = jiraImportCountError({ tickets: body.expectedTicketCount, participants: body.expectedParticipantCount }, { tickets: Number(tickets?.count ?? 0), participants: Number(participants?.count ?? 0) });
       if (integrityError) return Response.json({ error: integrityError }, { status: 409 });
+      let cacheAvailable=true;try{await jiraAnalyticsCacheDb();}catch{cacheAvailable=false;}
       await raw.batch([
+        ...(cacheAvailable?[raw.prepare("INSERT INTO app_jira_analytics_cache(cache_key,part,revision,payload) VALUES ('registry',-1,'registry',?) ON CONFLICT(cache_key,part) DO UPDATE SET payload=excluded.payload").bind(crypto.randomUUID())]:[]),
         raw.prepare(`INSERT INTO jira_tickets (ticket_key, internal_id, status, summary, category, subcategory, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, last_import_id, imported_at)
           SELECT ticket_key, internal_id, status, summary, category, subcategory, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, import_id, CURRENT_TIMESTAMP
           FROM jira_import_tickets WHERE import_id = ?
@@ -199,13 +202,16 @@ export async function POST(request: Request) {
         raw.prepare(`UPDATE jira_import_batches SET status = 'completed',
           ticket_count = (SELECT count(*) FROM jira_import_tickets WHERE import_id = ?),
           participant_count = (SELECT count(*) FROM jira_import_participants WHERE import_id = ?),
-          rejected_count = ?, repaired_text_count = ?, unknown_usercode_count = ?, completed_at = CURRENT_TIMESTAMP
-          WHERE id = ? AND status = 'uploading'`).bind(importId, importId, rejectedCount, repairedTextCount, unknownUserCodeCount, importId),
+          rejected_count = ?, repaired_text_count = ?, unknown_usercode_count = ?, completed_at = ?
+          WHERE id = ? AND status = 'uploading'`).bind(importId, importId, rejectedCount, repairedTextCount, unknownUserCodeCount, new Date().toISOString(), importId),
         raw.prepare(`DELETE FROM jira_import_participants WHERE import_id = ?`).bind(importId),
         raw.prepare(`DELETE FROM jira_import_tickets WHERE import_id = ?`).bind(importId),
       ]);
       const [saved] = await db.select().from(jiraImportBatches).where(eq(jiraImportBatches.id, importId)).limit(1);
-      return Response.json({ batch: serializeBatch(saved) });
+      // Cache failure must never turn a committed import into a reported failed import.
+      let analyticsReady=false;
+      try{analyticsReady=(await storedJiraAnalytics(await jiraRegistryRevision(saved),true)).persisted;}catch{}
+      return Response.json({ batch: serializeBatch(saved),analyticsReady });
     }
 
     if (action === "fail") {

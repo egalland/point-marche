@@ -425,3 +425,16 @@ test('offline global Jira analysis includes tickets without an analyst and prese
  const response=await api(path);assert.equal(response.status,200);assert.equal((await response.json()).report.a.total,1);
  assert.equal((await guardedApi(store)(path,{headers:{'X-Market-USERCODE':'U1234567'}})).status,403);
 });
+
+test('portable Jira preparation is saved with the workbook and renewed after an import without touching saved points',async()=>{
+ const data=fixture();data.jiraTickets=[ticket('TEST-1',{createdAt:'2026-10-23',resolutionAt:'2026-10-27',updatedAt:'2026-10-29'})];
+ data.points=[{id:'saved-point',marketId:'market-local',year:2026,week:44,meetingDate:'2026-10-29',pointName:'Conservé',themeColor:'mint',data:{meetingDate:'2026-10-29',pointName:'Texte figé'},createdAt:'2026-10-29'}];
+ const store=new WorkspaceStore(data),api=createLocalApi(store),url='/api/jira-activity?from=2026-10-26&to=2026-10-30&compareFrom=2026-10-19&compareTo=2026-10-25';
+ const first=await call(api,url);assert.equal(first.status,200);assert.equal(first.report.a.resolution.mean,2);
+ const cached=JSON.parse(JSON.stringify(store.read().jiraAnalytics));assert.equal(cached.facts['TEST-1'].delay,2);
+ const reopened=await decodeWorkspace(await encodeWorkspace(store.snapshot()));assert.deepEqual(reopened.jiraAnalytics,cached);
+ const fresh=new WorkspaceStore(reopened),again=createLocalApi(fresh);assert.equal((await call(again,url)).report.a.resolution.mean,2);assert.deepEqual(fresh.read().jiraAnalytics,cached);
+ const saved=structuredClone(fresh.read().points);
+ const result=await importTickets(again,[ticket('TEST-1',{createdAt:'2026-10-23T00:00:00',resolutionAt:'2026-10-29T00:00:00',updatedAt:'2026-10-29T00:00:00'})]);assert.equal(result.status,200);
+ assert.notEqual(fresh.read().jiraAnalytics.sourceHash,cached.sourceHash);assert.equal(fresh.read().jiraAnalytics.facts['TEST-1'].delay,4);assert.equal((await call(again,url)).report.a.resolution.mean,4);assert.deepEqual(fresh.read().points,saved);
+});

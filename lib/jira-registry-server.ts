@@ -133,16 +133,3 @@ export async function loadJiraAnalyticsTickets(){
  return result;
 }
 
-// Bounded, short-lived isolate cache. Never retain request-bound I/O promises.
-// A new completed import changes the revision; explicit refresh always bypasses it.
-const analyticsCaches=new WeakMap<object,{revision:string;expires:number;tickets:JiraDetailedTicket[]}>();
-export async function loadCachedJiraAnalyticsTickets(revision:string,refresh=false){
- const db=getRawDb(),cached=analyticsCaches.get(db);
- if(!refresh&&cached?.revision===revision&&cached.expires>Date.now())return cached.tickets;
- analyticsCaches.delete(db);
- const tickets=await loadJiraAnalyticsTickets();
- if(tickets.length<=20000&&tickets.reduce((n,t)=>n+(t.participants?.length??0),0)<=100000){
-  analyticsCaches.set(db,{revision,expires:Date.now()+15000,tickets});
- }
- return tickets;
-}

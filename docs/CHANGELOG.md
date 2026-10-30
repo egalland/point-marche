@@ -1,3 +1,11 @@
+## V136 — 30 octobre 2026
+
+- Dates d’activité, statuts, délais ouvrés et spécialités préparés une fois par import ; JSON privé conservé côté site, cache dérivé inclus dans le classeur portable.
+- Résultats de sélection mémorisés, indépendamment du tri, de la page ou de la période du tableau détaillé.
+- Nouvel import et actualisation forcée renouvellent la préparation ; annuaire et marchés font partie de l’identité des résultats.
+- Frise indexée par semaine, avec ensembles d’affectations réutilisés sur les périodes stables de l’annuaire.
+- Stockage du cache borné ; un cache manquant ou inexploitable est reconstruit sans modifier les points enregistrés.
+
 ## V135 — 30 octobre 2026
 
 - Sélection de plusieurs marchés pour les analyses Jira, avec total global dédupliqué.

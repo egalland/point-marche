@@ -24,6 +24,7 @@ export type WorkspaceData = {
   markets: LocalMarket[]; users: GlobalDirectoryUser[]; points: LocalPoint[];
   analystPoints: AnalystPointRecord[]; plannerTasks: PlannerTask[]; plannerUpdatedAt: string;
   jiraTickets: JiraCsvTicket[]; jiraImports: LocalJiraBatch[]; jiraUpdatedAt: string;
+  jiraAnalytics?: {version:number;sourceHash:string;facts:import('../lib/jira-analytics-source').PreparedJiraAnalytics['facts']};
   drafts: LocalDraft[]; preferences: Record<string, string>;
   source?: {
     exportedAt: string; siteUrl?: string; version?: number; notes?: string[];

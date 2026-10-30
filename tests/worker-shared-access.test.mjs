@@ -10,9 +10,11 @@ function fixture(t, legacyPolicy) {
   for (const name of readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()) sqlite.exec(readFileSync(new URL(name,migrations),'utf8'));
   sqlite.exec("INSERT OR IGNORE INTO market_definitions (id,name,short_code) VALUES ('shared-test','Marché test','TEST')");
   if(legacyPolicy){sqlite.exec("CREATE TABLE app_access_policy (id INTEGER PRIMARY KEY, value TEXT NOT NULL)");sqlite.prepare("INSERT INTO app_access_policy (id,value) VALUES (1,?)").run(JSON.stringify(legacyPolicy));}
+  const queries=[];
   const DB = {
     async exec(query){sqlite.exec(query);},
     prepare(query) {
+      queries.push(query);
       const statement = sqlite.prepare(query); let values = [];
       return {bind(...params){values=params;return this;},async first(column){const row=statement.get(...values);return column?row?.[column]??null:row??null;},async all(){return {results:statement.all(...values)};},async raw(){return statement.all(...values).map(row=>Object.values(row));},async run(){return statement.run(...values);}};
     },
@@ -25,7 +27,7 @@ function fixture(t, legacyPolicy) {
     const response=await worker.fetch(new Request('https://test.invalid'+path,{method,headers:{'content-type':'application/json','X-Market-USERCODE':usercode,'X-Market-View':view,...(cookie?{cookie}:{})},...(body?{body:JSON.stringify(body)}:{})}),env,ctx);
     return {status:response.status,body:await response.json()};
   };
-  request.sqlite=sqlite;return request;
+  request.sqlite=sqlite;request.queries=queries;request.cold=()=>{env.DB={...DB};};return request;
 }
 
 test('built Worker permits shared directory, Planner and validation with a declared USERCODE and without a login cookie',async t=>{
@@ -132,10 +134,38 @@ test('Jira CSV Terminée reaches hosted registry and working-day KPIs through th
  const start=await request('/api/jira-imports','POST',{action:'start',filename:'fixture.csv',rowCount:1});assert.equal(start.status,201,JSON.stringify(start.body));
  const importId=start.body.batch.id;
  const chunk=await request('/api/jira-imports','POST',{action:'chunk',importId,tickets:parsed.tickets});assert.equal(chunk.status,200,JSON.stringify(chunk.body));
- const finish=await request('/api/jira-imports','POST',{action:'finish',importId});assert.equal(finish.status,200,JSON.stringify(finish.body));
+ const finish=await request('/api/jira-imports','POST',{action:'finish',importId});assert.equal(finish.status,200,JSON.stringify(finish.body));assert.equal(finish.body.analyticsReady,true);
  const stats=await request('/api/jira-activity?from=2026-10-26&to=2026-10-29&compareFrom=2026-10-19&compareTo=2026-10-22&basis=stock');assert.equal(stats.status,200,JSON.stringify(stats.body));
  assert.equal(stats.body.report.a.resolution.sample,1);assert.equal(stats.body.report.a.resolution.mean,2);assert.equal(stats.body.report.a.resolution.missingResolution,0);assert.equal(stats.body.report.b.resolution.mean,null);
  assert.equal(stats.body.report.timeline.a[0].resolution.mean,2);assert.equal(stats.body.report.timeline.a[0].resolution.sample,1);
  const weekly=await request('/api/jira-week?marketId=shared-test&year=2026&week=44&date=2026-10-29&preferCentral=1');assert.equal(weekly.status,200,JSON.stringify(weekly.body));assert.equal(weekly.body.snapshot.summary.resolutionMetrics.weekly.mean,2);assert.equal(weekly.body.snapshot.summary.resolutionMetrics.weekly.sample,1);
  assert.equal(request.sqlite.prepare("SELECT resolution_at FROM jira_tickets WHERE ticket_key='TEST-700'").get().resolution_at,'2026-10-27T00:00:00');
+});
+
+test('durable Jira analytics survives cold requests, reuses selections for sorting/paging and invalidates directory and import revisions',async t=>{
+ const request=fixture(t),db=request.sqlite;
+ db.exec("INSERT INTO jira_import_batches(id,status,completed_at) VALUES ('cache-batch','completed','2026-10-30T09:00:00Z')");
+ const insert=db.prepare('INSERT INTO jira_tickets(ticket_key,status,summary,jira_created_at,jira_updated_at,resolution_at,assignee_usercode,category) VALUES (?,?,?,?,?,?,?,?)');
+ for(let i=0;i<121;i++)insert.run('TEST-'+i,'Fini','TEST - Contrôle','2026-10-23','2026-10-29','2026-10-27','A1234567',i%2?'Tarifs':'Autre');
+ db.exec("INSERT INTO global_users(id,name,email,jira_name,role) VALUES ('cache-person','Alex','alex@example.test','A1234567','analyste-tarif-referentiel')");
+ const url='/api/jira-activity?from=2026-10-26&to=2026-10-30&compareFrom=2026-10-19&compareTo=2026-10-25';
+ const first=await request(url);assert.equal(first.status,200,JSON.stringify(first.body));assert.equal(first.body.analytics.persisted,true);assert.equal(first.body.analytics.selectionCached,false);assert.equal(first.body.report.a.resolution.mean,2);
+ const token=db.prepare("SELECT revision FROM app_jira_analytics_cache WHERE cache_key='source' AND part=0").get().revision;
+ request.queries.length=0;request.cold();
+ const sorted=await request(url+'&sort=key&direction=asc&page=2');assert.equal(sorted.body.analytics.selectionCached,true);assert.equal(sorted.body.report.a.rows.length,21);assert.equal(sorted.body.report.a.rows[0].key,'TEST-100');assert.deepEqual(sorted.body.report.timeline,first.body.report.timeline);assert.deepEqual(sorted.body.report.a.resolution,first.body.report.a.resolution);
+ assert.equal(request.queries.some(q=>/FROM jira_tickets t WHERE 1=1/.test(q)),false,'cold cache must not reread the ticket registry');
+ const filtered=await request(url+'&category=Tarifs');assert.equal(filtered.body.analytics.selectionCached,false);assert.equal(filtered.body.report.a.total,60);assert.equal(db.prepare("SELECT revision FROM app_jira_analytics_cache WHERE cache_key='source' AND part=0").get().revision,token,'a new filter reuses the import preparation');
+ assert.equal((await request(url+'&category=Tarifs&detailPeriod=b')).body.analytics.selectionCached,true);
+ db.exec("UPDATE global_users SET name='Alex renommé' WHERE id='cache-person'");
+ const renamed=await request(url);assert.equal(renamed.body.analytics.selectionCached,false);assert.equal(renamed.body.report.a.rows[0].analyst,'Alex renommé');
+ db.exec("UPDATE market_definitions SET short_code='NOUVEAU' WHERE id='shared-test'");
+ assert.equal((await request(url)).body.analytics.selectionCached,false);
+ insert.run('TEST-999','Fini','TEST - Ajout','2026-10-23','2026-10-29','2026-10-29','A1234567','Tarifs');
+ assert.equal((await request(url+'&refresh=1')).body.report.a.total,122);
+ insert.run('TEST-998','Fini','TEST - Import suivant','2026-10-23','2026-10-29','2026-10-29','A1234567','Tarifs');
+ db.exec("INSERT INTO jira_import_batches(id,status,completed_at) VALUES ('cache-next','completed','2026-10-30T10:00:00Z')");
+ const imported=await request(url);assert.equal(imported.body.report.a.total,123);assert.equal(imported.body.analytics.selectionCached,false);
+ db.exec("UPDATE app_jira_analytics_cache SET payload='broken JSON' WHERE cache_key='source' AND part=0");request.cold();
+ const recovered=await request(url);assert.equal(recovered.status,200);assert.equal(recovered.body.report.a.total,123);assert.equal(recovered.body.analytics.persisted,true);
+ assert.ok(db.prepare('SELECT COUNT(DISTINCT cache_key) AS n FROM app_jira_analytics_cache').get().n<=13,'fixed cache slots bound storage');
 });
