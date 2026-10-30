@@ -1,0 +1,14 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {build} from 'esbuild';import {createRequire} from 'node:module';import {createElement} from 'react';import {renderToStaticMarkup} from 'react-dom/server';
+const require=createRequire(import.meta.url);async function load(file){const b=await build({entryPoints:[file],bundle:true,platform:'node',packages:'external',format:'cjs',write:false});const m={exports:{}};new Function('require','module','exports',b.outputFiles[0].text)(require,m,m.exports);return m.exports;}
+const {chartDomain,chartSegments,chartSummary}=await load('lib/interactive-chart.ts');const {InteractiveChart}=await load('components/interactive-chart.tsx');
+test('chart geometry keeps negative and zero values, breaks missing periods and respects a stock snapshot instead of adding weeks',()=>{
+ const base={id:'a',label:'A',color:'#123456',values:[-2,0,null,4]};const domain=chartDomain([base]);assert.ok(domain.min<-2);assert.ok(domain.max>4);assert.deepEqual(chartSegments(base.values,i=>i,n=>n),[['0,-2','1,0'],['3,4']]);assert.equal(chartSummary({...base,summary:0}),0);assert.equal(chartSummary(base),2);assert.deepEqual(chartDomain([{...base,values:[null]}]),{min:0,max:1});
+});
+test('distribution supports a missing primary sample, visible miniature reference, and no false data',()=>{
+ const s=renderToStaticMarkup(createElement(InteractiveChart,{title:'Répartition',categories:[{key:'a',label:'Articles'}],series:[{id:'p',label:'Période',color:'#123',values:[0]},{id:'p:reference',label:'Référence',color:'#123',reference:true,values:[5]}],initialFormat:'donut',formats:['donut','pie','bar']}));
+ assert.match(s,/ic-pie-reference/);assert.match(s,/>5<\/text>/);assert.match(s,/>0<\/text>/);assert.doesNotMatch(s,/NaN|Infinity/);assert.match(s,/Bâtons/);
+});
+test('supplier detail is rendered from saved simulation data and does not require live registry data',async()=>{
+ const {SimulationSupplierDialog}=await load('features/market-pulse/simulation-supplier-dialog.tsx');const item={id:'s',name:'Simulation',month:'Octobre 2026',state:'Faite',steps:[],summary:'Commentaire figé',plannerSource:{externalId:'1',supplierLabel:'Fournisseur sauvegardé',metrics:{supplierCode:'A9999',globalVariation:0,weightedVariation:-2,purchases12m:1000},variationHistory:[{taskId:'a',period:'2026-08',taskName:'Simulation août',supplierCode:'A9999',globalVariation:0,weightedVariation:-2},{taskId:'b',period:'2026-09',taskName:'Simulation septembre',supplierCode:'A9999',globalVariation:3,weightedVariation:1}]}};
+ const s=renderToStaticMarkup(createElement(SimulationSupplierDialog,{item,onClose(){}}));assert.match(s,/role="dialog"/);assert.match(s,/Fournisseur sauvegardé/);assert.match(s,/A9999/);assert.match(s,/Commentaire figé/);assert.match(s,/2026-08/);assert.match(s,/2026-09/);assert.doesNotMatch(s,/NaN|Infinity/);
+});

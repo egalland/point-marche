@@ -1,3 +1,11 @@
+## V134 — 30 octobre 2026
+
+- Graphiques Jira interactifs : curseur de lecture, valeurs au survol ou au clavier, épinglage, surbrillance et légendes pour masquer des séries.
+- Choix de courbes, aires, bâtons, anneaux ou camemberts selon le type de données ; zoom local sur les dernières périodes.
+- Un clic sur la courbe épingle une valeur. Le filtre de semaine s’applique uniquement avec un bouton explicite.
+- Répartitions des tickets interactives et comparaison principale/référence conservée ; les changements de format ne relisent pas le registre.
+- Fiche fournisseur depuis le nom ou la courbe d’une simulation, avec indicateurs et historique du point sauvegardé.
+
 ## V133 — 29 octobre 2026
 
 - Distribution finale des comparaisons Jira et des dates de fin, avec contrôle des fichiers de démonstration avant compilation.
