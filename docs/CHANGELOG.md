@@ -1,3 +1,11 @@
+## V142 — 30 octobre 2026
+
+- Colonne Type de ticket reconnue dans les imports CSV et collages, conservée dans le registre et les points.
+- Sélection de types applicable à toute la présentation, avec délais pondérés et historiques préparés par type.
+- Options regroupées : types, indicateurs et graphiques, liste courte facultative ; nombre de lignes et catégories par champs de saisie.
+- Retrait des commandes de création de personnes et de synthèses manuelles Jira ; anciennes données conservées.
+- Édition du bloc recentrée sur les commentaires et règles d’alerte. Exports alignés sur le périmètre enregistré.
+
 ## V141 — 30 octobre 2026
 
 - Présentation Jira fixe : suppression des sélecteurs, filtres, compteurs cliquables et pagination côté lecteur.

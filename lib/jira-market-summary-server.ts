@@ -16,7 +16,7 @@ export async function loadCachedMarketJiraSummary(marketId:string,reference:stri
   const revision=await jiraRegistryRevision(batch),db=await jiraAnalyticsCacheDb();
   let head=await jiraCacheHeader(db,'source'),source;
   if(head?.revision!==`${JIRA_ANALYTICS_VERSION}:${revision}`){source=await storedJiraAnalytics(revision);head=await jiraCacheHeader(db,'source');}
-  const identity=await jiraAnalyticsDigest([2,revision,head?.token??source?.token,reference,marketId,users,markets]);
+  const identity=await jiraAnalyticsDigest([3,revision,head?.token??source?.token,reference,marketId,users,markets]);
   const slot='point:'+String(parseInt(identity.slice(0,8),16)%16),cached=await readJiraCache<JiraSummaryImport>(db,slot,identity);
   if(cached)return cached;
   source??=await storedJiraAnalytics(revision);

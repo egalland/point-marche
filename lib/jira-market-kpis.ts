@@ -69,8 +69,8 @@ export function jiraMarketKpis(tickets:ResolutionTicket[],reference:string,delay
  return {weekly,trend:jiraRecentWeeks(tickets,reference,delayFor),month,previous,asOf:reference,mean:avg,median:median(current),previousMean:prev,delta:avg===null||prev===null?null:avg-prev,resolved:current.length,previousResolved:prior.length,openAge:mean(ages),openDated:ages.length,missingDates:unique.filter(t=>isClosedJiraStatus(t.status)&&(!isIsoDate(t.resolutionAt?.slice(0,10)??'')||delayFor(t)===null)).length};
 }
 
-export type JiraResolutionMetrics = Omit<ReturnType<typeof jiraMarketKpis>,'weekly'|'trend'> & {weekly?:ReturnType<typeof jiraMarketKpis>['weekly'];trend?:JiraTrendWeek[]};
-export function normalizeResolutionMetrics(value:unknown):JiraResolutionMetrics|undefined {
+export type JiraResolutionMetrics = Omit<ReturnType<typeof jiraMarketKpis>,'weekly'|'trend'> & {weekly?:ReturnType<typeof jiraMarketKpis>['weekly'];trend?:JiraTrendWeek[];byType?:Record<string,JiraResolutionMetrics>};
+export function normalizeResolutionMetrics(value:unknown,includeTypes=true):JiraResolutionMetrics|undefined {
  if(!value||typeof value!=='object')return undefined;
  const v=value as Record<string,unknown>;
  if(typeof v.asOf!=='string'||!isIsoDate(v.asOf)||v.month!==v.asOf.slice(0,7)||typeof v.previous!=='string'||!/^\d{4}-\d{2}$/.test(v.previous))return undefined;
@@ -79,7 +79,8 @@ export function normalizeResolutionMetrics(value:unknown):JiraResolutionMetrics|
  const w=v.weekly as Record<string,unknown>|undefined;
  let weekly:JiraResolutionMetrics['weekly'];
  if(w&&typeof w==='object'&&w.from===isoWeekForDate(v.asOf).from&&w.to===v.asOf&&['mean','median'].every(k=>w[k]===null||(typeof w[k]==='number'&&Number.isFinite(w[k])&&Number(w[k])>=0))&&['sample','days','completed','excluded'].every(k=>typeof w[k]==='number'&&Number.isSafeInteger(w[k])&&Number(w[k])>=0)&&Number(w.sample)+Number(w.excluded)===w.completed&&(Number(w.sample)===0?w.mean===null&&w.median===null&&w.days===0:typeof w.mean==='number'&&w.median!==null&&Math.abs(w.mean-Number(w.days)/Number(w.sample))<1e-8))weekly={from:String(w.from),to:String(w.to),mean:w.mean as number|null,median:w.median as number|null,sample:Number(w.sample),days:Number(w.days),completed:Number(w.completed),excluded:Number(w.excluded)};
- return {...Object.fromEntries(['month','previous','asOf','mean','median','previousMean','delta','resolved','previousResolved','openAge','openDated','missingDates'].map(key=>[key,v[key]])),...(weekly?{weekly}:{}),...(normalizeTrend(v.trend,v.asOf)?{trend:normalizeTrend(v.trend,v.asOf)}:{})} as JiraResolutionMetrics;
+ const byType=includeTypes&&v.byType&&typeof v.byType==='object'?Object.fromEntries(Object.entries(v.byType).slice(0,100).flatMap(([key,value])=>{const metrics=normalizeResolutionMetrics(value,false);return metrics&&metrics.asOf===v.asOf?[[key,metrics]]:[];})):undefined;
+ return {...(byType?{byType}:{}),...Object.fromEntries(['month','previous','asOf','mean','median','previousMean','delta','resolved','previousResolved','openAge','openDated','missingDates'].map(key=>[key,v[key]])),...(weekly?{weekly}:{}),...(normalizeTrend(v.trend,v.asOf)?{trend:normalizeTrend(v.trend,v.asOf)}:{})} as JiraResolutionMetrics;
 }
 export function resolutionKpiHtml(tickets:ResolutionTicket[],date:string,snapshot?:JiraResolutionMetrics){
  const k=snapshot??jiraMarketKpis(tickets,date),n=(v:number|null)=>v===null?'—':new Intl.NumberFormat('fr-FR',{maximumFractionDigits:1}).format(v);

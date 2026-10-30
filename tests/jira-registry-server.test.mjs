@@ -213,8 +213,9 @@ test("aligns custom history to complete ISO weeks at the year boundary", async (
 test("keeps category and subcategory after migration and registry reads", async (t) => {
   const db = fixture(t);
   db.ticket("GLOBAL-CAT", "En cours", "A1234567");
-  db.sqlite.prepare("UPDATE jira_tickets SET category = ?, subcategory = ? WHERE ticket_key = ?").run("Flux", "Validation chef de marché", "GLOBAL-CAT");
+  db.sqlite.prepare("UPDATE jira_tickets SET issue_type = ?, category = ?, subcategory = ? WHERE ticket_key = ?").run("Incident", "Flux", "Validation chef de marché", "GLOBAL-CAT");
   const activity = await db.run(() => loadJiraActivityForAnalyst("A1234567", 2026, 35));
+  assert.equal(activity.open[0].issueType, "Incident");
   assert.equal(activity.open[0].category, "Flux");
   assert.equal(activity.open[0].subcategory, "Validation chef de marché");
 });

@@ -1,0 +1,9 @@
+import type {JiraResolutionMetrics} from './jira-market-kpis';
+/** Combine counts and weighted means only; a median cannot be combined from medians. */
+export function combineJiraTypeMetrics(source:JiraResolutionMetrics,types:string[]):JiraResolutionMetrics|undefined{
+ if(!source.byType)return undefined;
+ const rows=[...new Set(types)].map(t=>Object.hasOwn(source.byType!,t)?source.byType![t]:undefined).filter((r):r is JiraResolutionMetrics=>!!r),sum=(key:'resolved'|'previousResolved'|'openDated'|'missingDates')=>rows.reduce((n,r)=>n+r[key],0);
+ const weighted=(value:'mean'|'previousMean'|'openAge',count:'resolved'|'previousResolved'|'openDated')=>{const valid=rows.filter(r=>r[value]!==null&&r[count]>0),n=valid.reduce((n,r)=>n+r[count],0);return n?valid.reduce((n,r)=>n+r[value]!*r[count],0)/n:null;};
+ const mean=weighted('mean','resolved'),previousMean=weighted('previousMean','previousResolved');
+ return {...source,byType:undefined,mean,previousMean,median:null,delta:mean===null||previousMean===null?null:mean-previousMean,resolved:sum('resolved'),previousResolved:sum('previousResolved'),openDated:sum('openDated'),openAge:weighted('openAge','openDated'),missingDates:sum('missingDates'),weekly:source.weekly?(()=>{const weeks=rows.flatMap(r=>r.weekly?[r.weekly]:[]),sample=weeks.reduce((n,r)=>n+r.sample,0),days=weeks.reduce((n,r)=>n+r.days,0);return {...source.weekly!,sample,days,mean:sample?days/sample:null,median:null,completed:weeks.reduce((n,r)=>n+r.completed,0),excluded:weeks.reduce((n,r)=>n+r.excluded,0)};})():undefined,trend:source.trend?.map((w,i)=>{const weeks=rows.flatMap(r=>r.trend?.[i]?[r.trend[i]]:[]),sample=weeks.reduce((n,r)=>n+r.sample,0);return {...w,completed:weeks.reduce((n,r)=>n+r.completed,0),sample,excluded:weeks.reduce((n,r)=>n+r.excluded,0),mean:sample?weeks.reduce((n,r)=>n+(r.mean??0)*r.sample,0)/sample:null};})};
+}

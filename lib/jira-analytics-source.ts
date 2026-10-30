@@ -7,7 +7,7 @@ import {ticketSpecialty} from './jira-market-scope';
 /** Only import-dependent facts live here. Directory memberships remain date-dependent. */
 export type JiraTicketFacts={closed:boolean;delay:number|null;activity:string;fallback:boolean;specialty:string;stock:{created:string;resolved:string;issue:string;afterIssue:string;closed:boolean}};
 export type PreparedJiraAnalytics={tickets:JiraDetailedTicket[];facts:Record<string,JiraTicketFacts>};
-export const JIRA_ANALYTICS_VERSION=1;
+export const JIRA_ANALYTICS_VERSION=2;
 export function prepareJiraAnalytics(input:JiraDetailedTicket[]):PreparedJiraAnalytics{
  const tickets=[...new Map(input.map(t=>[t.key,t])).values()].filter(t=>!isAbandonedJiraStatus(t.status));
  const facts:Record<string,JiraTicketFacts>=Object.create(null);

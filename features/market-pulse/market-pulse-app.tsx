@@ -1,4 +1,5 @@
 "use client";
+import {JiraPointSummary} from "./jira-point-summary";
 import {DirectoryPeriods} from "./directory-periods";
 import {directoryPersonAt} from "@/lib/directory-profiles";
 import { PromotionBoard } from "./promotion-board";
@@ -452,27 +453,6 @@ function MarketPulseWorkspace() {
   const addDossier = () => { const id = uid(); setData((current) => ({ ...current, dossiers: [...current.dossiers, { id, title: "", universe: "", reference: "", status: "En cours", owner: "", action: "", deadline: "", progress: 0, comment: "" }] })); return id; };
   const addOperation = (month = calendarMonthLabel(monthStart(data.meetingDate))) => setData((current) => ({ ...current, operations: [...current.operations, { id: uid(), kind: "simulation", name: "Nouvelle simulation", month, state: "À faire", summary: "", steps: [] }] }));
   const addPromotion = () => setData((current) => ({ ...current, promotions: [...current.promotions, { id: uid(), name: "Nouvelle promotion", period: calendarMonthLabel(monthStart(current.meetingDate)), purchaseNote: "", salesState: "À préparer", action: "", comment: "", purchaseStart:"",purchaseEnd:"",saleStart:"",saleEnd:"",actions:[] }] }));
-  const addJira = () => setData((current) => {
-    const existing = new Set(current.jira.map((item) => item.assignee));
-    let suffix = 1;
-    let assignee = "Nouvelle personne";
-    while (existing.has(assignee)) assignee = `Nouvelle personne ${++suffix}`;
-    return { ...current, jira: [...current.jira, { id: uid(), key: "", summary: "Synthèse manuelle", status: "À faire", priority: "", assignee, lastActivity: "", link: "", comment: "Saisie manuelle", count: 1 }] };
-  });
-  const renameJiraPerson = (assignee: string, nextName: string) => setData((current) => ({ ...current, jira: current.jira.map((item) => (item.assignee.trim() || "Non assigné") === assignee ? { ...item, assignee: nextName } : item) }));
-  const removeJiraPerson = (assignee: string) => setData((current) => ({ ...current, jira: current.jira.filter((item) => (item.assignee.trim() || "Non assigné") !== assignee) }));
-  const setJiraPersonCount = (assignee: string, status: string, value: number) => setData((current) => {
-    const count = Math.max(0, Math.round(value || 0));
-    const isPerson = (item: JiraTicket) => (item.assignee.trim() || "Non assigné") === assignee;
-    const matches = current.jira.filter((item) => isPerson(item) && item.status === status);
-    if (!count) return { ...current, jira: current.jira.filter((item) => !(isPerson(item) && item.status === status)) };
-    if (matches.length) {
-      const keptId = matches[0].id;
-      return { ...current, jira: current.jira.filter((item) => !(isPerson(item) && item.status === status) || item.id === keptId).map((item) => item.id === keptId ? { ...item, count, key: "", internalId: undefined, summary: "Synthèse manuelle", createdAt: "", lastActivity: "", link: "", comment: "Saisie manuelle" } : item) };
-    }
-    return { ...current, jira: [...current.jira, { id: uid(), key: "", summary: "Synthèse manuelle", status, priority: "", assignee, lastActivity: "", link: "", comment: "Saisie manuelle", count }] };
-  });
-
   const synchronizePlannerPoint = (tasks = plannerTasks) => {
     if (data.plannerMode === "manual") { setToast("Le point est en saisie manuelle. Repasse en import automatique pour le synchroniser."); return 0; }
     const relevant = plannerTasksForPoint(tasks, market, data.meetingDate,data.preferences.simulationPeriods);
@@ -1021,12 +1001,8 @@ function MarketPulseWorkspace() {
     {section === "promotions" && <section className="editor-section"><SectionTitle eyebrow="Suivi commercial" title="Promotions" detail="Périodes d’achat et de vente, étapes et commentaires."/><PromotionBoard items={data.promotions} editing onUpdate={updatePromotion} onAdd={addPromotion} onRemove={id=>setData(current=>({...current,promotions:current.promotions.filter(item=>item.id!==id)}))}/></section>}
 
     {section === "jira" && <section className="editor-section">
-      <SectionTitle eyebrow="Activité Jira" title="Tickets ouverts du marché" detail={`Les tickets sont récupérés automatiquement depuis le centre d’import global pour les chefs de produit et chefs de marché de ${market.name}. Seules les personnes ayant des tickets apparaissent.`} action={<button className="primary-button" onClick={addJira}><Icon name="plus"/> Ajouter une synthèse</button>}/>
-      <SourceModeControl label="Tickets Jira" mode={data.jiraMode} onChange={(mode) => { void setSourceMode("jira", mode); }} busy={sourceChanging !== null}/>
-      <div className="jira-import-note"><Icon name={data.jiraMode === "manual" ? "edit" : "check"}/><div><strong>{data.jiraMode === "manual" ? "Saisie manuelle pour ce point" : "Alimenté par le centre d’import global"}</strong><span>{data.jiraMode === "manual" ? "Modifie les totaux par personne et statut ci-dessous. Ils restent propres à ce point, même après un nouvel import." : "Un seul import Jira met à jour tous les points marché. Le rattachement utilise le USERCODE, le marché et le rôle enregistrés dans l’annuaire."}</span></div></div>
-      <JiraVolumePulse data={data} archive={archive} market={market}/>
-      <div className="surface jira-alert-settings"><div><span><Icon name="alert" size={16}/> Alertes sur la dernière modification</span><strong>Seuils propres à {market.name}</strong><small>Ces repères signalent une absence d’activité ; ils ne mesurent pas le temps de résolution.</small></div><label><span>À surveiller après</span><div><input type="number" min="1" max="364" value={market.jiraWarningDays} onChange={(event) => { const warning = Math.max(1, Math.min(364, Number(event.target.value) || 1)); updateMarketDraft(marketId, { jiraWarningDays: warning, jiraCriticalDays: Math.max(warning + 1, market.jiraCriticalDays) }); }}/><b>jours</b></div></label><label><span>Critique après</span><div><input type="number" min={market.jiraWarningDays + 1} max="365" value={market.jiraCriticalDays} onChange={(event) => updateMarketDraft(marketId, { jiraCriticalDays: Math.max(market.jiraWarningDays + 1, Math.min(365, Number(event.target.value) || market.jiraWarningDays + 1)) })}/><b>jours</b></div></label><button className="secondary-button" disabled={Boolean(marketSavingId)} onClick={() => saveMarket(marketId)}><Icon name="check" size={15}/> {marketSavingId === marketId ? "Enregistrement…" : "Enregistrer les seuils"}</button></div>
-      <div className="surface data-table-wrap jira-summary-wrap"><table className="data-table jira-person-table"><thead><tr><th>Personne</th>{JIRA_SUMMARY_STATUSES.map((status) => <th key={status}>{status}</th>)}<th>Total</th><th/></tr></thead><tbody>{jiraPeople.map((person) => <tr key={person.assignee}><th scope="row"><input disabled={data.jiraMode !== "manual"} value={person.assignee} aria-label={`Personne ${person.assignee}`} onChange={(event) => renameJiraPerson(person.assignee, event.target.value)}/></th>{JIRA_SUMMARY_STATUSES.map((status) => { const statusItems = person.items.filter((item) => item.status === status); const count = statusItems.reduce((sum, item) => sum + jiraItemCount(item), 0); const link = statusItems.find((item) => item.link)?.link; return <td key={status}><div className="jira-count-cell"><input disabled={data.jiraMode !== "manual"} type="number" min="0" value={count} aria-label={`${status} pour ${person.assignee}`} onChange={(event) => setJiraPersonCount(person.assignee, status, Number(event.target.value))}/>{link && <a href={link} target="_blank" rel="noreferrer" title={`Ouvrir le filtre « ${status} »`} aria-label={`Ouvrir le filtre ${status} de ${person.assignee}`}>↗</a>}</div></td>; })}<td className="jira-person-total"><strong>{person.total}</strong><small>{jiraStatusSummary(person.items)}</small></td><td><button disabled={data.jiraMode !== "manual"} className="icon-button subtle" aria-label={`Supprimer ${person.assignee}`} onClick={() => removeJiraPerson(person.assignee)}><Icon name="trash" size={15}/></button></td></tr>)}</tbody></table>{!jiraPeople.length && <div className="table-empty">Aucun ticket Jira dans le registre global pour ce marché. Tu peux ajouter une synthèse manuelle si nécessaire.</div>}</div>
+      <SectionTitle eyebrow="Activité Jira" title="Tickets du marché" detail="Les tickets et leurs responsables proviennent du centre d’import. Le point conserve son instantané jusqu’à actualisation explicite."/>
+      <JiraPointSummary data={data} market={market} archive={archive}/>
       {jiraActivityRows.length > 0 && <div className="surface data-table-wrap jira-ticket-detail-wrap"><div className="jira-detail-heading"><div><span>Détail des tickets</span><strong>Priorité visuelle par dernière modification</strong></div><small>Création affichée à titre de contexte uniquement.</small></div><table className="data-table jira-ticket-table"><thead><tr><th>Ticket</th><th>État</th><th>Résumé</th><th>Personne</th><th>Création</th><th>Dernière modification</th><th>Signal</th></tr></thead><tbody>{jiraActivityRows.map(({ item, inactivity }) => { const signal = inactivity === null ? "neutral" : inactivity >= market.jiraCriticalDays ? "critical" : inactivity >= market.jiraWarningDays ? "warning" : "fresh"; return <tr id={`jira-${item.id}`} className={`jira-ticket-${signal}`} key={item.id}><td>{item.link ? <a href={item.link} target="_blank" rel="noreferrer">{item.key} ↗</a> : <strong>{item.key}</strong>}{item.internalId && <small>ID {item.internalId}</small>}</td><td><span className={`report-pill tone-${toneForStatus(item.status)}`}>{item.status}</span></td><td><strong>{item.summary || "Sans résumé"}</strong></td><td><strong>{item.assignee || "Non assigné"}</strong>{item.assigneeUserCode && <small>{item.assigneeUserCode}</small>}</td><td>{item.createdAt ? dateLabel(item.createdAt.slice(0, 10)) : "—"}</td><td>{item.lastActivity ? dateLabel(item.lastActivity.slice(0, 10)) : "—"}</td><td><span className={`jira-activity-signal ${signal}`}>{inactivity === null ? "Non daté" : inactivity === 0 ? "Aujourd’hui" : `${inactivity} j sans activité`}</span></td></tr>; })}</tbody></table></div>}
     </section>}
 
@@ -1067,7 +1043,6 @@ function MarketPulseWorkspace() {
     removePromotion: (id) => setData((current) => ({ ...current, promotions: current.promotions.filter((item) => item.id !== id) })),
     updateJira,
     resetJira: resetJiraOverride,
-    addJira,
     setSourceMode: (source, mode) => { void setSourceMode(source, mode); },
     insertModule: insertCanvasModule,
     hideModule: hideCanvasModule,

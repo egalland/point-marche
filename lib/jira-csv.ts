@@ -159,6 +159,7 @@ export function parseJiraCsv(value: string): JiraCsvParseResult {
   const idIndex = column(headers, [/^id de ticket$/, /^ticket id$/, /^issue id$/, /^id$/]);
   const statusIndex = column(headers, [/^etat$/, /^statut$/, /^status$/]);
   const summaryIndex = column(headers, [/^resume$/, /^summary$/]);
+  const issueTypeIndex = column(headers, [/^(type|type de ticket|type de demande|type de probleme|issue type|ticket type)$/]);
   const categoryIndex = column(headers, [/^(?:champs? personnalises? )?categorie$/, /^custom field category$/, /^category$/]);
   const subcategoryIndex = column(headers, [/^(?:champs? personnalises? )?sous categorie$/, /^souscategorie$/, /^sub category$/, /^subcategory$/, /^custom field subcategory$/, /^custom field sub category$/]);
   const createdIndex = column(headers, [/^creation$/, /^creee?$/, /^date de creation$/, /^created$/]);
@@ -192,6 +193,7 @@ export function parseJiraCsv(value: string): JiraCsvParseResult {
     const assigneeMatch = (cells[assigneeIndex] ?? "").match(/[A-Z]\d{7}/i);
     const ticket: JiraCsvTicket = {
       key,
+      issueType: issueTypeIndex >= 0 ? (cells[issueTypeIndex] ?? "").trim() : "",
       category: categoryIndex >= 0 ? (cells[categoryIndex] ?? "").trim() : "",
       subcategory: subcategoryIndex >= 0 ? (cells[subcategoryIndex] ?? "").trim() : "",
       internalId: idIndex >= 0 ? (cells[idIndex] ?? "").trim() : "",

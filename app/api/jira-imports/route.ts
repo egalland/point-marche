@@ -47,6 +47,7 @@ function cleanTicket(value: unknown): JiraCsvTicket | null {
     internalId: cleanText(source.internalId, 60),
     status: cleanText(source.status, 120),
     summary: cleanText(source.summary, 4000),
+    issueType: cleanText(source.issueType, 240),
     category: cleanText(source.category, 240),
     subcategory: cleanText(source.subcategory, 240),
     createdAt,
@@ -134,6 +135,7 @@ export async function POST(request: Request) {
         internalId: ticket.internalId,
         status: ticket.status,
         summary: ticket.summary,
+        issueType: ticket.issueType ?? "",
         category: ticket.category ?? "",
         subcategory: ticket.subcategory ?? "",
         jiraCreatedAt: ticket.createdAt,
@@ -156,6 +158,7 @@ export async function POST(request: Request) {
             internalId: sql`excluded.internal_id`,
             status: sql`excluded.status`,
             summary: sql`excluded.summary`,
+            issueType: sql`excluded.issue_type`,
             category: sql`excluded.category`,
             subcategory: sql`excluded.subcategory`,
             jiraCreatedAt: sql`excluded.jira_created_at`,
@@ -189,10 +192,10 @@ export async function POST(request: Request) {
       let cacheAvailable=true;try{await jiraAnalyticsCacheDb();}catch{cacheAvailable=false;}
       await raw.batch([
         ...(cacheAvailable?[raw.prepare("INSERT INTO app_jira_analytics_cache(cache_key,part,revision,payload) VALUES ('registry',-1,'registry',?) ON CONFLICT(cache_key,part) DO UPDATE SET payload=excluded.payload").bind(crypto.randomUUID())]:[]),
-        raw.prepare(`INSERT INTO jira_tickets (ticket_key, internal_id, status, summary, category, subcategory, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, last_import_id, imported_at)
-          SELECT ticket_key, internal_id, status, summary, category, subcategory, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, import_id, CURRENT_TIMESTAMP
+        raw.prepare(`INSERT INTO jira_tickets (ticket_key, internal_id, status, summary, issue_type, category, subcategory, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, last_import_id, imported_at)
+          SELECT ticket_key, internal_id, status, summary, issue_type, category, subcategory, jira_created_at, assignee_usercode, jira_updated_at, resolution_at, link, import_id, CURRENT_TIMESTAMP
           FROM jira_import_tickets WHERE import_id = ?
-          ON CONFLICT(ticket_key) DO UPDATE SET internal_id = excluded.internal_id, status = excluded.status, summary = excluded.summary, category = excluded.category, subcategory = excluded.subcategory,
+          ON CONFLICT(ticket_key) DO UPDATE SET internal_id = excluded.internal_id, status = excluded.status, summary = excluded.summary, issue_type = excluded.issue_type, category = excluded.category, subcategory = excluded.subcategory,
           jira_created_at = excluded.jira_created_at, assignee_usercode = excluded.assignee_usercode, jira_updated_at = excluded.jira_updated_at,
           resolution_at = excluded.resolution_at, link = excluded.link, last_import_id = excluded.last_import_id, imported_at = CURRENT_TIMESTAMP`).bind(importId),
         raw.prepare(`DELETE FROM jira_ticket_participants WHERE ticket_key IN (SELECT ticket_key FROM jira_import_tickets WHERE import_id = ?)`).bind(importId),

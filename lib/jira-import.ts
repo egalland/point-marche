@@ -19,6 +19,7 @@ export type JiraDetailedTicket = {
   createdAt: string;
   assigneeUserCode: string;
   assigneeName?: string;
+  issueType?: string;
   category?: string;
   subcategory?: string;
   marketId?: string;
@@ -167,6 +168,7 @@ function detailedTicket(cells: string[], headers:string[] = []): JiraDetailedTic
     internalId: internalIdIndex >= 0 ? clean[internalIdIndex] : "",
     status: canonicalJiraStatus(clean[statusIndex]),
     summary: headerIndex(/^(resume|summary)$/)>=0?clean[headerIndex(/^(resume|summary)$/)]:clean.slice(statusIndex + 1, createdIndex).filter(Boolean).join(" "),
+    issueType: clean[headerIndex(/^(type|type de ticket|type de demande|type de probleme|issue type|ticket type)$/)]??"",
     category: clean[headerIndex(/^(?:(?:champs? personnalises?|custom field) )?(categorie|category)$/)]??"",
     subcategory: clean[headerIndex(/^(?:(?:champs? personnalises?|custom field) )?(sous categorie|subcategory|sub category)$/)]??"",
     resolutionAt: headers.flatMap((h,i)=>/^(resolution|date de resolution|resolved|resolved at|resolution date|resolue?|terminee?|terminee? le|date terminee?|date de fin|date de cloture|cloturee?|completed|completed at|completion date|done)$/.test(h)?[jiraDate(clean[i]??"")]:[]).find(Boolean)??"",

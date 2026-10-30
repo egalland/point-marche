@@ -27,7 +27,9 @@ export function normalizeJiraWeekCoverage(v:unknown):JiraWeekCoverage|undefined{
 export function marketJiraSummary(tickets:JiraDetailedTicket[],reference:string,format:JiraSummaryImport['format']='unknown',delayFor?: (ticket:ResolutionTicket)=>number|null):JiraSummaryImport{
  const relevant=tickets.filter(t=>!isAbandonedJiraStatus(t.status));
  const open=relevant.filter(t=>!isClosedJiraStatus(t.status));const {completed,coverage}=jiraWeeklyActivity(relevant,reference);
- return {...jiraSummaryFromDetailedTickets(open,format),detailedTickets:[...open,...completed],weeklyCoverage:coverage,resolutionMetrics:jiraMarketKpis(relevant,reference,delayFor)};
+ const groups=new Map<string,JiraDetailedTicket[]>();for(const t of relevant){const type=t.issueType?.trim()||'Non renseigné';const rows=groups.get(type)??[];rows.push(t);groups.set(type,rows);}
+ const resolutionMetrics={...jiraMarketKpis(relevant,reference,delayFor),byType:Object.fromEntries([...groups].map(([type,rows])=>[type,jiraMarketKpis(rows,reference,delayFor)]))};
+ return {...jiraSummaryFromDetailedTickets(open,format),detailedTickets:[...open,...completed],weeklyCoverage:coverage,resolutionMetrics};
 }
 export const jiraImpactLabels={unknown:'Non qualifié',low:'Limité',medium:'Modéré',high:'Fort'};
 export function jiraCategoryGroups<T extends ActivityTicket>(tickets:T[],rules:JiraAlertRule[]=[]){
